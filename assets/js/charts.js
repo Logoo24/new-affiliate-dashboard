@@ -151,6 +151,9 @@
         cfg.series.forEach(function (s) { t += d[s.key] || 0; });
         if (t > max) max = t;
       });
+      /* Keep the target inside the plot — a reference line drawn off the top
+         of the chart is worse than no reference line. */
+      if (cfg.targetLine && cfg.targetLine.value > max) max = cfg.targetLine.value;
       var yMax = niceCeil(max || 1);
 
       var svg = el('svg', {
@@ -241,6 +244,14 @@
           if (cfg.series.length > 1) {
             rows.push({ color: null, label: 'Total', value: fmtInt(stackTotal) });
           }
+          if (cfg.targetLine) {
+            var tv = cfg.targetLine.value;
+            rows.push({ color: null, label: 'Target', value: fmtInt(Math.round(tv)) });
+            rows.push({
+              color: null, label: stackTotal >= tv ? 'Over target' : 'Under target',
+              value: (stackTotal >= tv ? '+' : '') + fmtInt(Math.round(stackTotal - tv))
+            });
+          }
           tip.show(tooltipRows(fmtDayFull(d.date), rows), cx, padT + plotH / 2);
           hover.setAttribute('x', padL + band * i);
           hover.setAttribute('width', Math.max(band, 1));
@@ -252,6 +263,25 @@
         });
         svg.appendChild(hit);
       });
+
+      /* --- target reference line --------------------------------------- */
+      /* Dashed ON PURPOSE. The no-dashing rule applies to gridlines and axes,
+         where dashing falsely implies a threshold. Here it IS a threshold, so
+         the dash is what separates it from the grid it crosses. */
+      if (cfg.targetLine && cfg.targetLine.value > 0) {
+        var ty = padT + plotH - (cfg.targetLine.value / yMax) * plotH;
+        svg.appendChild(el('line', {
+          x1: padL, x2: padL + plotW, y1: ty, y2: ty,
+          stroke: cssVar('--ink-2'), 'stroke-width': 1.5,
+          'stroke-dasharray': '5 4', 'stroke-linecap': 'round'
+        }));
+        var tlbl = el('text', {
+          x: padL + plotW, y: ty - 6, 'text-anchor': 'end',
+          fill: cssVar('--ink-2'), 'font-size': 10.5, 'font-weight': 650
+        });
+        tlbl.textContent = cfg.targetLine.label;
+        svg.appendChild(tlbl);
+      }
 
       /* hover wash sits behind the hit rects but above the bars' background */
       var hover = el('rect', {
@@ -421,6 +451,7 @@
     var head = '<thead><tr><th>Day</th>';
     cfg.series.forEach(function (s) { head += '<th class="num">' + s.label + '</th>'; });
     if (cfg.series.length > 1) head += '<th class="num">Total</th>';
+    if (cfg.targetLine) head += '<th class="num">Target</th><th class="num">Vs target</th>';
     head += '</tr></thead>';
 
     var body = '<tbody>';
@@ -432,6 +463,12 @@
         body += '<td class="num">' + fmtInt(v) + '</td>';
       });
       if (cfg.series.length > 1) body += '<td class="num">' + fmtInt(total) + '</td>';
+      if (cfg.targetLine) {
+        var tv = Math.round(cfg.targetLine.value);
+        var diff = total - tv;
+        body += '<td class="num">' + fmtInt(tv) + '</td>' +
+                '<td class="num">' + (diff >= 0 ? '+' : '') + fmtInt(diff) + '</td>';
+      }
       body += '</tr>';
     });
     body += '</tbody>';

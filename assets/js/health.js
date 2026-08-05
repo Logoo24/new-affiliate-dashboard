@@ -120,7 +120,14 @@
     var econParts = [
       { key: 'margin',  label: 'Margin vs 45% floor', weight: 0.35, internal: true,
         score: norm(internal.marginPct, 0.25, 0.60) },
-      { key: 'phrate',  label: 'Priority/Hot conversion', weight: 0.30,
+      /* Deliberately always the ACCEPTED-lead basis, for every partner type.
+         The RevShare overview reports conversion against all submitted leads
+         because that is how they are paid — but the tier thresholds below are
+         calibrated on the accepted basis, and scoring RevShare partners on
+         the lower all-leads rate would push them a tier down for no reason
+         other than a change of denominator. Labelled so the two pages read as
+         two different questions rather than a contradiction. */
+      { key: 'phrate',  label: 'Priority/Hot conversion (of accepted)', weight: 0.30,
         score: norm(m.priorityHotRate, 0.04, 0.18),
         display: pct(m.priorityHotRate) },
       { key: 'points',  label: 'Sold-type points per paid lead', weight: 0.20,

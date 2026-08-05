@@ -47,12 +47,23 @@
 
       <div class="tiles" id="tiles"></div>
 
+      <section class="card" id="targets-card" style="display:none">
+        <div class="card-head">
+          <div>
+            <h2>This month's targets</h2>
+            <p class="sub" id="targets-sub"></p>
+          </div>
+        </div>
+        <div class="card-body" id="targets-body"></div>
+        <div class="card-foot" id="targets-foot"></div>
+      </section>
+
       <div class="grid-2">
         <section class="card">
           <div class="card-head">
             <div>
               <h2>Leads by day</h2>
-              <p class="sub">Submitted leads, split by whether they were accepted.</p>
+              <p class="sub">Submitted leads, split by whether they were accepted, against your daily target.</p>
             </div>
             <div class="spacer"></div>
             <div id="toggle-volume"></div>
@@ -158,41 +169,52 @@
      arrived; outcomes to the day it sold; rates to the trailing matured
      cohort. Mixing these up is what makes a 7-day view report zero sales.
      See the comment above queryLeadsBySold() in data.js. */
+  var isRev = state.partnerType === 'revshare';
+
+  /* A RevShare partner is paid on ANY sale, accepted or rejected, so their
+     conversion rate is measured against every lead submitted. A CPL partner
+     is paid per accepted lead, so theirs is measured against accepted. */
+  var mOpts = { rateBasis: isRev ? 'all' : 'paid' };
+
   var scope = {
     partnerType: state.partnerType,
     campaignId: state.campaignId, subid: state.subid
   };
 
   var rows = D.queryLeads(Object.assign({ from: state.range.from, to: state.range.to }, scope));
-  var m = D.computeMetrics(rows);
+  var m = D.computeMetrics(rows, null, mOpts);
 
   var soldRows = D.queryLeadsBySold(Object.assign({ from: state.range.from, to: state.range.to }, scope));
-  var sm = D.computeMetrics(soldRows);
+  var sm = D.computeMetrics(soldRows, null, mOpts);
 
-  var coh = D.cohort(scope);
+  var coh = D.cohort(Object.assign({ rateBasis: mOpts.rateBasis }, scope));
 
   var prior = D.priorWindow(state.range);
   var priorRows = D.queryLeads(Object.assign({ from: prior.from, to: prior.to }, scope));
-  var pm = D.computeMetrics(priorRows);
+  var pm = D.computeMetrics(priorRows, null, mOpts);
   var priorSold = D.queryLeadsBySold(Object.assign({ from: prior.from, to: prior.to }, scope));
-  var psm = D.computeMetrics(priorSold);
+  var psm = D.computeMetrics(priorSold, null, mOpts);
+
+  var targets = D.targetProgress(Object.assign({ rateBasis: mOpts.rateBasis, cplRate: 16 }, scope));
 
   /* ---- context notice: make the visibility difference visible ---------- */
   var ctxHost = document.getElementById('ctx-notice');
-  if (state.partnerType === 'cpl') {
+  if (!isRev) {
     ctxHost.innerHTML =
       '<div class="notice notice-info"><span class="ico">◆</span><div>' +
-      '<strong>Viewing as a flat/tiered CPL partner.</strong> Sold status is shown; ' +
-      'sale price and revenue share are not — those columns are not in this partner type\'s ' +
-      'query projection at all, so they cannot render here or appear in a CSV export. ' +
-      'Switch the selector in the header to see the RevShare view.' +
+      '<strong>Viewing as a flat/tiered CPL partner.</strong> You are paid per accepted lead, ' +
+      'so acceptance rate is the number that drives your invoice. Rejected leads show their ' +
+      'reason and nothing further — no sale price, no revenue share, and no outcome data of ' +
+      'any kind. Switch the selector in the header to see the RevShare view.' +
       '</div></div>';
   } else {
     ctxHost.innerHTML =
       '<div class="notice notice-info"><span class="ico">◆</span><div>' +
-      '<strong>Viewing as a RevShare partner.</strong> Earnings are included because this ' +
-      'partner is paid on outcomes. Margin, our cost, buyer name, CSR name and call result ' +
-      'are withheld from every partner type, RevShare included.' +
+      '<strong>Viewing as a RevShare partner.</strong> You earn 40% of any lead that sells, ' +
+      '<strong>whether we accepted it or not</strong> — so acceptance rate here is a quality ' +
+      'signal to optimise against, not a payment gate. Rates are measured against every lead ' +
+      'you send, not just the accepted ones. Margin, our cost, buyer name, CSR name and call ' +
+      'result are withheld from every partner type, RevShare included.' +
       '</div></div>';
   }
 
@@ -206,17 +228,26 @@
       ' reached Priority or Hot' +
     '</div>' +
     A.deltaHtml(sm.soldPriorityHot, psm.soldPriorityHot, { periodLabel: 'period' }) +
+    (isRev && sm.rejectedSoldPriorityHot
+      ? '<div style="font-size:12px;color:var(--ink-2);margin-top:6px">' +
+        '<strong>' + A.fmtInt(sm.rejectedSoldPriorityHot) + '</strong> of those came from leads ' +
+        'we did not accept — you are paid on them all the same.</div>'
+      : '') +
     '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' +
       '<span style="font-size:12px;color:var(--ink-muted)">Conversion rate, trailing 30-day matured cohort</span><br>' +
       '<span style="font-size:20px;font-weight:650">' + A.fmtPct(coh.metrics.priorityHotRate, 1) + '</span> ' +
-      '<span style="font-size:12px;color:var(--ink-2)">of ' + A.fmtInt(coh.metrics.maturePaid) +
-      ' matured paid leads</span>' +
+      '<span style="font-size:12px;color:var(--ink-2)">of ' + A.fmtInt(coh.metrics.rateDenominator) +
+      (isRev ? ' matured leads submitted' : ' matured paid leads') + '</span>' +
     '</div>';
-  document.getElementById('hero-note').textContent =
-    'Priority leads carry 10 points and Hot 8; Auction and Marketplace score negative. ' +
-    'The count moves with the date range. The rate does not — a conversion rate needs leads ' +
-    'that have finished cooking, so it is always measured on the trailing 30 days. It is the ' +
-    'same figure the health score is built on.';
+  document.getElementById('hero-note').textContent = isRev
+    ? 'Priority leads carry 10 points and Hot 8; Auction and Marketplace score negative. ' +
+      'Because you earn on any sale, this rate is measured against every lead you send — not ' +
+      'just the accepted ones. The count moves with the date range; the rate does not, since ' +
+      'it needs leads that have finished cooking.'
+    : 'Priority leads carry 10 points and Hot 8; Auction and Marketplace score negative. ' +
+      'Of the leads we accepted and paid you for, this is the share that reached the two ' +
+      'outcomes that pay for the campaign. The count moves with the date range; the rate does ' +
+      'not, since it needs leads that have finished cooking.';
 
   /* ---- tiles ---------------------------------------------------------- */
   var tiles = [
@@ -225,14 +256,22 @@
       sub: 'Raw posts in window',
       delta: A.deltaHtml(m.raw, pm.raw, {})
     },
-    {
-      label: 'Accepted (paid)', value: A.fmtInt(m.paid),
-      sub: A.fmtInt(m.free) + ' rejected',
-      delta: A.deltaHtml(m.paid, pm.paid, {})
-    },
+    /* Same two numbers, different job. For CPL this is the invoice. For
+       RevShare it is a quality signal — they are paid either way. */
+    isRev
+      ? {
+          label: 'Accepted', value: A.fmtInt(m.paid),
+          sub: A.fmtInt(m.free) + ' not accepted — still earn if they sell',
+          delta: A.deltaHtml(m.paid, pm.paid, {})
+        }
+      : {
+          label: 'Accepted (paid)', value: A.fmtInt(m.paid),
+          sub: A.fmtInt(m.free) + ' rejected',
+          delta: A.deltaHtml(m.paid, pm.paid, {})
+        },
     {
       label: 'Acceptance rate', value: A.fmtPct(m.acceptanceRate, 1),
-      sub: 'Paid ÷ raw',
+      sub: isRev ? 'Quality signal, not a payment gate' : 'Paid ÷ raw — drives your invoice',
       delta: A.deltaHtml(m.acceptanceRate, pm.acceptanceRate, {})
     },
     {
@@ -255,7 +294,9 @@
   if (sm.hasEarnings) {
     tiles.push({
       label: 'Your earnings', value: A.fmtMoney0(sm.earnings),
-      sub: '40% share of leads sold in window',
+      sub: sm.rejectedEarnings
+        ? A.fmtMoney0(sm.rejectedEarnings) + ' of it from leads we did not accept'
+        : '40% share of leads sold in window',
       delta: A.deltaHtml(sm.earnings, psm.earnings, {}),
       cls: 'tile-revshare'
     });
@@ -269,6 +310,59 @@
       (t.delta || '') +
       '</div>';
   }).join('');
+
+  /* ---- targets --------------------------------------------------------- */
+  /* Always month-to-date, regardless of the date filter — a monthly target
+     measured over an arbitrary 7-day window would mean nothing. */
+  (function () {
+    var blocks = [];
+
+    function block(t, label, fmt, unit) {
+      if (!t) return;
+      var pctOfTarget = Math.min(1, t.pct);
+      var cls = t.severity;
+      blocks.push(
+        '<div class="meter">' +
+          '<div class="meter-head">' +
+            '<span class="meter-name">' + A.esc(label) + '</span>' +
+            '<span class="spacer"></span>' +
+            '<span class="meter-score">' + fmt(t.actual) + ' / ' + fmt(t.target) + '</span>' +
+          '</div>' +
+          '<div class="meter-track ' + cls + '">' +
+            '<div class="meter-fill ' + cls + '" style="width:' + Math.round(pctOfTarget * 100) + '%"></div>' +
+          '</div>' +
+          '<div class="meter-parts">' +
+            '<span>' + A.fmtPct(t.pct, 0) + ' of target</span>' +
+            '<span>Expected by today: ' + fmt(Math.round(t.expected)) + '</span>' +
+            '<span style="color:' + (t.onPace ? 'var(--good-text)' : 'var(--critical-text)') + ';font-weight:600">' +
+              (t.onPace ? '✓ On pace' : '▲ Behind by ' + fmt(Math.round(Math.abs(t.aheadBy)))) +
+            '</span>' +
+            '<span>Need ' + fmt(Math.ceil(t.perDayNeeded)) + unit + ' for the remaining ' +
+              targets.daysLeft + ' days</span>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+
+    block(targets.volume, 'Lead volume', A.fmtInt, '/day');
+    block(targets.spend, targets.spendLabel, A.fmtMoney0, '/day');
+
+    if (!blocks.length) return;
+
+    document.getElementById('targets-card').style.display = '';
+    document.getElementById('targets-sub').textContent =
+      targets.monthLabel + ' · day ' + targets.daysElapsed + ' of ' + targets.daysInMonth +
+      ' · set by your account manager';
+    document.getElementById('targets-body').innerHTML = blocks.join('');
+    document.getElementById('targets-foot').innerHTML =
+      '<span><strong>Not built yet.</strong> Targets are hard-coded in this mock-up. ' +
+      'The admin side needs a screen to set them per partner, per month, as volume, spend, ' +
+      'or both — a target left blank means "not set" and simply does not render. ' +
+      (targets.spend
+        ? 'Switch to the CPL view to see the volume-only variant.'
+        : 'This partner has volume only; the RevShare view shows both.') +
+      '</span>';
+  })();
 
   /* ---- charts --------------------------------------------------------- */
   var days = D.dailySeries(rows, state.range);                        /* received basis */
@@ -296,7 +390,16 @@
 
   var volHost = document.getElementById('chart-volume');
   var convHost = document.getElementById('chart-conv');
-  C.mount(volHost, 'columns', { days: days, series: volumeSeries, ariaLabel: 'Leads submitted per day, accepted versus rejected' });
+
+  /* Where we want them to be, drawn on the chart they already read daily. */
+  var dailyTarget = D.dailyVolumeTarget(state.partnerType);
+  C.mount(volHost, 'columns', {
+    days: days, series: volumeSeries,
+    targetLine: dailyTarget
+      ? { value: dailyTarget, label: 'Target ' + Math.round(dailyTarget) + '/day' }
+      : null,
+    ariaLabel: 'Leads submitted per day, accepted versus rejected, against daily target'
+  });
   C.mount(convHost, 'columns', { days: soldDays, series: convSeries, ariaLabel: 'Priority and Hot sales per day' });
   A.viewToggle(document.getElementById('toggle-volume'), volHost);
   A.viewToggle(document.getElementById('toggle-conv'), convHost);
@@ -314,10 +417,10 @@
      from the right window. */
   function indexBy(rowSet, keyFn) {
     var out = {};
-    D.groupBy(rowSet, keyFn).forEach(function (g) { out[g.key] = g; });
+    D.groupBy(rowSet, keyFn, mOpts).forEach(function (g) { out[g.key] = g; });
     return out;
   }
-  var EMPTY = D.computeMetrics([]);
+  var EMPTY = D.computeMetrics([], null, mOpts);
   function pull(idx, key) { return idx[key] ? idx[key].metrics : EMPTY; }
 
   var byCampaign = indexBy(rows, function (r) { return r.campaignId; });

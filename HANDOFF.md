@@ -77,11 +77,58 @@ lead_cost · margin · margin_pct · buyer_name · csr_name · call_result
 ipqs_score · ipqs_rules_fired · clawback_reason · campaign_cost
 ```
 
-I verified this on the mock: across 3,610 rows in the CPL projection, zero revenue or internal
-fields are present on any row object. That is the property the build needs to preserve.
-
 **In production there is no partner-type selector.** Partner type comes off the session and
 cannot be chosen. The selector exists here only so reviewers can see both views.
+
+### The row rule: for CPL partners, a rejected lead dies at the door
+
+This is a **row-level** rule on top of the column allowlist, and it is the more important half.
+
+A lead we decline can still sell — at auction, at marketplace, occasionally at Hot or Priority —
+and it costs us nothing because we never paid for it. A CPL partner must never learn that
+happens. From their side a rejected lead shows **its reason and nothing further**: no sold type,
+no sold date, no days-to-sale, no price, no buyer, no call result.
+
+Two things this requires that a column allowlist alone will not give you:
+
+```php
+// 1. Null the outcome columns on rejected rows
+CASE WHEN l.status = 'paid' THEN l.sold_type END AS sold_type   -- and sold_at, days_to_sale
+
+// 2. Any query that filters BY sold_at must ALSO exclude rejected rows outright
+AND l.status = 'paid'
+```
+
+Point 2 is easy to miss and it leaks on its own: if a CPL partner can run a sold-date report,
+the **row count alone** tells them we work leads we declined, even with every column nulled.
+
+**RevShare is the exact opposite** — they are paid 40% of any sale, accepted or not, so hiding
+rejected-but-sold leads would understate what we owe them. In the mock data that is **158
+rejected-but-sold leads worth $3,562, about 8.8% of total RevShare earnings.** Real money, and
+it was invisible in the first version of this prototype because the generator never let a
+rejected lead sell.
+
+Verified on the mock: across 1,560 rejected rows in the CPL projection, **zero** carry any
+outcome or revenue field, and all 1,560 retain their rejection reason. A sold-date query returns
+**zero** rejected rows. Those are the properties the build needs to preserve.
+
+### Acceptance means different things to the two partner types
+
+| | CPL | RevShare |
+|---|---|---|
+| Paid on | accepted leads | any lead that sells, accepted or not |
+| Acceptance rate is | **the invoice** | a **quality signal** to optimise against |
+| Conversion rate denominator | matured **accepted** leads | **all** matured leads submitted |
+
+The denominator matters. Dividing a RevShare partner's sales by accepted leads alone overstates
+their conversion rate and understates the value of the volume they send. `computeMetrics()` takes
+a `rateBasis` of `'paid'` or `'all'` for exactly this.
+
+One deliberate exception: the **health score always uses the accepted basis**, for every partner
+type. Its tier thresholds are calibrated that way, and rescoring RevShare partners on the lower
+all-leads rate would drop them a tier for no reason other than a change of denominator. The
+scorecard labels that component "of accepted" so the two pages read as two different questions
+rather than a contradiction.
 
 ---
 
@@ -137,6 +184,37 @@ are labelled in the footer of every table that mixes them.
 Rates are the third case and cannot use either window: a rate needs a cohort that has finished
 maturing, so it is always the trailing 30 days with a 10-day buffer — the same basis the health
 score uses, so the Performance page and the scorecard can never disagree.
+
+---
+
+## Spend & volume targets — NOT BUILT, needs an admin screen
+
+The affiliate-facing half is mocked (targets card on Performance, plus a dashed target line on
+Leads by day). **The admin side does not exist and needs building.** What it needs to store:
+
+| Field | Notes |
+|---|---|
+| `partner_id` | required |
+| `campaign_id` | optional — targets should be settable per campaign or account-wide |
+| `period` | calendar month to start with |
+| `volume_target` | integer, nullable |
+| `spend_target` | decimal, nullable |
+
+**Either, or, or both.** A null target means *not set*, not zero — it must not render at all, and
+must not count as a missed target. The mock shows both states: the RevShare partner has volume
+and payout targets, the CPL partner has volume only.
+
+Two things the mock settled that are worth keeping:
+
+- **Pace, not just progress.** "209 / 1,500" on day 5 of 31 is not useful on its own. The card
+  shows expected-by-today, ahead/behind, and the daily rate needed to close the gap.
+- **Severity is judged against pace, not against the monthly total.** My first pass flagged 14%
+  of a monthly target as critical on day 5, which is nonsense — it was on track. Severity now
+  compares actual against expected-to-date.
+
+Note that a RevShare payout target must be measured on the **sold** date, not the received date,
+or it reports $0 for the first ten days of every month. CPL spend stays on the received basis
+because we owe on acceptance. Same attribution rule as everything else below.
 
 ---
 

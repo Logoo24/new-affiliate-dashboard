@@ -94,19 +94,21 @@
 
   rows.sort(function (a, b) { return b.receivedAt - a.receivedAt; });
 
-  var m = D.computeMetrics(all);
+  var isRev = state.partnerType === 'revshare';
+  var m = D.computeMetrics(all, null, { rateBasis: isRev ? 'all' : 'paid' });
   var hasEarnings = m.hasEarnings;
 
   /* ---- context notice -------------------------------------------------- */
-  document.getElementById('ctx-notice').innerHTML = hasEarnings
+  document.getElementById('ctx-notice').innerHTML = isRev
     ? '<div class="notice notice-info"><span class="ico">◆</span><div>' +
-      '<strong>RevShare view.</strong> The two shaded columns on the right — sale amount and ' +
-      'your 40% share — appear only for revenue-share partners. Everything else on this table ' +
-      'is identical for every partner type.</div></div>'
+      '<strong>RevShare view.</strong> Sale amount and your 40% share appear on every row that ' +
+      'sold — <strong>including leads we did not accept</strong>, because you are paid on those ' +
+      'too. Filter Status to "Rejected" and Sold type to "Priority or Hot" to see them.</div></div>'
     : '<div class="notice notice-info"><span class="ico">◆</span><div>' +
-      '<strong>CPL view.</strong> You can see <em>which</em> of your leads sold and to what tier, ' +
-      'which is what tells you where to push traffic. Sale price and revenue share are not part ' +
-      'of this partner type\'s query — there are no hidden columns on this page to reveal.</div></div>';
+      '<strong>CPL view.</strong> You can see which of your <em>accepted</em> leads sold and to ' +
+      'what tier. A rejected lead shows its reason and stops there — no sold type, no dates, no ' +
+      'price. Those fields are not in this partner type\'s query for a rejected row, so there ' +
+      'are no hidden columns on this page to reveal.</div></div>';
 
   /* ---- tiles ----------------------------------------------------------- */
   /* This page is a cohort view by definition — it lists the leads you SENT in
@@ -115,13 +117,21 @@
      the labels say so rather than leaving the reader to guess. */
   var tiles = [
     { label: 'Matching leads', value: A.fmtInt(rows.length), sub: 'of ' + A.fmtInt(all.length) + ' sent in window' },
-    { label: 'Accepted (paid)', value: A.fmtInt(m.paid), sub: A.fmtPct(m.acceptanceRate, 1) + ' acceptance' },
-    { label: 'Sold Priority/Hot', value: A.fmtInt(m.soldPriorityHot), sub: 'From this cohort so far' },
+    { label: isRev ? 'Accepted' : 'Accepted (paid)', value: A.fmtInt(m.paid),
+      sub: A.fmtPct(m.acceptanceRate, 1) + (isRev ? ' — quality signal' : ' acceptance') },
+    { label: 'Sold Priority/Hot', value: A.fmtInt(m.soldPriorityHot),
+      sub: isRev && m.rejectedSoldPriorityHot
+        ? A.fmtInt(m.rejectedSoldPriorityHot) + ' from non-accepted leads'
+        : 'From this cohort so far' },
     { label: 'Sold Auction/Marketplace', value: A.fmtInt(m.auction + m.marketplace), sub: 'Lower-tier outcomes' },
     { label: 'Still maturing', value: A.fmtInt(m.immaturePaid), sub: 'Paid, inside the ' + D.MATURITY_DAYS + '-day buffer' }
   ];
   if (hasEarnings) {
-    tiles.push({ label: 'Earnings from cohort', value: A.fmtMoney0(m.earnings), sub: '40% share, sales to date', cls: 'tile-revshare' });
+    tiles.push({ label: 'Earnings from cohort', value: A.fmtMoney0(m.earnings),
+      sub: m.rejectedEarnings
+        ? A.fmtMoney0(m.rejectedEarnings) + ' from non-accepted leads'
+        : '40% share, sales to date',
+      cls: 'tile-revshare' });
   }
   document.getElementById('tiles').innerHTML = tiles.map(function (t) {
     return '<div class="tile ' + (t.cls || '') + '">' +
@@ -154,7 +164,10 @@
         : '<span class="pill-free">Free</span>') + '</td>' +
       '<td style="font-size:12.5px;color:var(--ink-2)">' +
         (reject ? '<span title="' + A.esc(reject.fix) + '">' + A.esc(reject.label) + '</span>' : '—') + '</td>' +
-      '<td>' + (r.status === 'paid' ? A.soldBadge(r.soldType) : '—') + '</td>' +
+      /* The presence of the key IS the permission check — for a CPL partner a
+         rejected row has no outcome fields at all, so there is nothing here
+         to accidentally render. */
+      '<td>' + ('soldType' in r ? A.soldBadge(r.soldType) : '—') + '</td>' +
       '<td style="white-space:nowrap">' + (r.soldAt ? A.fmtDate(r.soldAt) : '—') + '</td>' +
       '<td class="num">' + (r.daysToSale == null ? '—' : r.daysToSale) + '</td>' +
       (hasEarnings

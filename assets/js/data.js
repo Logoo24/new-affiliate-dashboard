@@ -28,11 +28,21 @@
           FROM leads l JOIN partners p ON p.id = l.partner_id
          WHERE l.partner_id = ? AND l.received_at BETWEEN ? AND ?
 
-        // Flat / tiered CPL partner  — sale_amount is not in the statement AT ALL
+        // Flat / tiered CPL partner — sale_amount is not in the statement AT
+        // ALL, and outcome columns are nulled on rejected rows via CASE so a
+        // declined lead reveals nothing about what happened to it afterwards.
         SELECT l.id, l.received_at, l.subid, l.campaign_id, l.status,
-               l.reject_reason, l.sold_type, l.sold_at, l.days_to_sale
+               l.reject_reason,
+               CASE WHEN l.status = 'paid' THEN l.sold_type     END AS sold_type,
+               CASE WHEN l.status = 'paid' THEN l.sold_at       END AS sold_at,
+               CASE WHEN l.status = 'paid' THEN l.days_to_sale  END AS days_to_sale
           FROM leads l
          WHERE l.partner_id = ? AND l.received_at BETWEEN ? AND ?
+
+        // ...and any CPL query that filters BY sold_at must also exclude
+        // rejected rows outright, or a row count alone leaks the fact that we
+        // work leads we declined:
+        //     AND l.status = 'paid'
 
       Columns that appear in NEITHER list, for ANY partner type:
         lead_cost, margin, margin_pct, buyer_name, csr_name, call_result,
@@ -304,41 +314,29 @@
 
     if (!isPaid) {
       lead.rejectReason = weighted(camp.rejectMix);
+
+      /* REJECTED-BUT-SOLD. A lead we declined at our own bar can still find a
+         buyer, and it costs us nothing because we never paid for it.
+
+         This category is the whole reason the two partner views differ in
+         substance rather than just in column count:
+
+           · A RevShare partner IS PAID on these. They take 40% of any sale,
+             accepted or not, so hiding them would understate what we owe.
+           · A CPL partner must never learn they exist. From their side a
+             rejected lead dies at the door. Showing them that we sold a lead
+             we declined to pay for is a rate negotiation we hand them for
+             free — see the projection rule in runQuery(). */
+      lead._leadCost = 0;
+      applyOutcome(lead, camp, received, rejectedSellRates(camp), q);
+      lead._badContact = rnd() < (0.11 / Math.max(0.5, q));
       return lead;
     }
 
-    /* --- Paid leads: outcome ------------------------------------------- */
+    /* --- Accepted leads: we paid for these ----------------------------- */
 
     lead._leadCost = round2(between(11, 34));
-
-    var r = rnd();
-    var pPriority = camp.sold.priority * q;
-    var pHot      = camp.sold.hot * q;
-    var pAuction  = camp.sold.auction;
-    var pMarket   = camp.sold.marketplace;
-
-    var soldType = null;
-    if (r < pPriority) soldType = 'priority';
-    else if (r < pPriority + pHot) soldType = 'hot';
-    else if (r < pPriority + pHot + pAuction) soldType = 'auction';
-    else if (r < pPriority + pHot + pAuction + pMarket) soldType = 'marketplace';
-
-    if (soldType) {
-      var cycle = Math.round(between(camp.cycle[0], camp.cycle[1]));
-      var soldAt = addDays(received, cycle);
-      /* A lead cannot have sold in the future. Leads inside the maturity
-         buffer are simply still cooking — that is not missing data. */
-      if (soldAt <= TODAY) {
-        lead.soldType = soldType;
-        lead.soldAt = soldAt;
-        lead.daysToSale = cycle;
-        lead.saleAmount = round2(salePrice(soldType));
-        lead.partnerShare = round2(lead.saleAmount * 0.40);
-        lead._margin = round2(lead.saleAmount - lead._leadCost - lead.partnerShare);
-        lead._buyerName = pick(['Meridian Retirement', 'Crestline Financial', 'Oakhaven Advisors',
-                                'Summit Wealth Partners', 'Brightwater Group']);
-      }
-    }
+    applyOutcome(lead, camp, received, camp.sold, q);
 
     lead._csrName = pick(['D. Alvarez', 'M. Chen', 'R. Whitfield', 'T. Okafor', 'J. Reyes']);
     lead._callResult = pick(['Contacted — qualified', 'Contacted — not qualified',
@@ -347,6 +345,48 @@
     lead._clawback = lead.soldType ? rnd() < 0.035 : false;
 
     return lead;
+  }
+
+  /* Leads we declined sell far less often at the top tiers — that is why we
+     declined them — but they still clear at auction and marketplace. */
+  function rejectedSellRates(camp) {
+    return {
+      priority:    camp.sold.priority * 0.16,
+      hot:         camp.sold.hot * 0.22,
+      auction:     camp.sold.auction * 0.55,
+      marketplace: camp.sold.marketplace * 0.70
+    };
+  }
+
+  function applyOutcome(lead, camp, received, rates, q) {
+    var r = rnd();
+    var pPriority = rates.priority * q;
+    var pHot      = rates.hot * q;
+    var pAuction  = rates.auction;
+    var pMarket   = rates.marketplace;
+
+    var soldType = null;
+    if (r < pPriority) soldType = 'priority';
+    else if (r < pPriority + pHot) soldType = 'hot';
+    else if (r < pPriority + pHot + pAuction) soldType = 'auction';
+    else if (r < pPriority + pHot + pAuction + pMarket) soldType = 'marketplace';
+    if (!soldType) return;
+
+    var cycle = Math.round(between(camp.cycle[0], camp.cycle[1]));
+    var soldAt = addDays(received, cycle);
+    /* A lead cannot have sold in the future. Leads inside the maturity buffer
+       are simply still cooking — that is not missing data. */
+    if (soldAt > TODAY) return;
+
+    lead.soldType = soldType;
+    lead.soldAt = soldAt;
+    lead.daysToSale = cycle;
+    lead.saleAmount = round2(salePrice(soldType));
+    /* 40% of any sale, accepted or rejected. */
+    lead.partnerShare = round2(lead.saleAmount * 0.40);
+    lead._margin = round2(lead.saleAmount - lead._leadCost - lead.partnerShare);
+    lead._buyerName = pick(['Meridian Retirement', 'Crestline Financial', 'Oakhaven Advisors',
+                            'Summit Wealth Partners', 'Brightwater Group']);
   }
 
   function salePrice(type) {
@@ -368,11 +408,17 @@
      here is never copied onto the returned object. Adding a column to the
      dashboard means adding it to this list on purpose. */
   var COLUMNS = {
+    /* Identity and intake. Every partner type gets all of this, including the
+       rejection reason — a partner cannot fix what they cannot see. */
     base: [
       'id', 'receivedAt', 'campaignId', 'campaignKind', 'product',
       'subid', 'subidLabel', 'state', 'hourSegment',
-      'status', 'rejectReason', 'soldType', 'soldAt', 'daysToSale'
+      'status', 'rejectReason'
     ],
+    /* What happened to the lead after intake. Withheld on REJECTED rows for
+       CPL partners — see the row rule in runQuery(). */
+    outcome: ['soldType', 'soldAt', 'daysToSale'],
+    /* Money. RevShare only, on every row including rejected-but-sold. */
     revshare: ['saleAmount', 'partnerShare']
   };
 
@@ -436,8 +482,10 @@
 
   function runQuery(opts, dateField) {
     opts = opts || {};
-    var type = opts.partnerType === 'revshare' ? 'revshare' : 'cpl';
-    var cols = COLUMNS.base.concat(type === 'revshare' ? COLUMNS.revshare : []);
+    var isRev = opts.partnerType === 'revshare';
+    var cols = COLUMNS.base
+      .concat(COLUMNS.outcome)
+      .concat(isRev ? COLUMNS.revshare : []);
 
     var from = opts.from || addDays(TODAY, -6);
     var to = opts.to || TODAY;
@@ -454,10 +502,26 @@
       if (opts.campaignId && opts.campaignId !== 'all' && src.campaignId !== opts.campaignId) continue;
       if (opts.subid && opts.subid !== 'all' && src.subid !== opts.subid) continue;
 
+      /* ---- THE ROW RULE -------------------------------------------------
+         For a CPL partner a rejected lead dies at the door. They see that it
+         arrived and why it was declined, and nothing after that.
+
+         This is a ROW-level rule on top of the column allowlist, and it has
+         to be enforced here rather than in the view, because it is not just
+         about hiding a column — it changes which ROWS exist. A sold-date
+         query must not return a rejected lead at all, or a CPL partner could
+         infer from a row count alone that we work leads we declined. */
+      var dropOutcome = !isRev && src.status === 'free';
+      if (dropOutcome && dateField === 'soldAt') continue;
+
       /* Allowlist projection. Note this is a copy, not a reference — the
          caller never holds a handle on the internal record. */
       var row = {};
-      for (var c = 0; c < cols.length; c++) row[cols[c]] = src[cols[c]];
+      for (var c = 0; c < cols.length; c++) {
+        var k = cols[c];
+        if (dropOutcome && COLUMNS.outcome.indexOf(k) !== -1) continue;
+        row[k] = src[k];
+      }
       out.push(row);
     }
     return out;
@@ -529,11 +593,26 @@
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
   }
 
-  function computeMetrics(rows, asOf) {
+  /**
+   * @param opts.rateBasis 'paid' | 'all'
+   *   Which denominator a conversion RATE is measured against.
+   *
+   *   'paid' (CPL default) — of the leads we ACCEPTED and paid for, how many
+   *      converted. That is the right question for a partner who is paid per
+   *      accepted lead, and it is the only population they can see anyway.
+   *
+   *   'all' (RevShare) — of EVERY lead submitted, how many converted. A
+   *      RevShare partner is paid on any sale, accepted or rejected, so
+   *      dividing by accepted leads alone would overstate their conversion
+   *      rate and understate the value of the volume they send.
+   */
+  function computeMetrics(rows, asOf, opts) {
     asOf = asOf || TODAY;
+    var basis = (opts && opts.rateBasis) === 'all' ? 'all' : 'paid';
 
     var raw = rows.length;
     var paid = 0, free = 0, mature = 0, maturePaid = 0;
+    var rejectedSold = 0, rejectedSoldPH = 0, rejectedEarnings = 0;
     var priority = 0, hot = 0, auction = 0, marketplace = 0;
     var cycles = [];
     var earnings = 0, saleTotal = 0;
@@ -557,6 +636,14 @@
       else if (r.soldType === 'auction') auction++;
       else if (r.soldType === 'marketplace') marketplace++;
 
+      /* Rejected-but-sold. Only ever non-zero on a RevShare projection — a
+         CPL projection has no outcome fields on a rejected row at all. */
+      if (r.soldType && r.status === 'free') {
+        rejectedSold++;
+        if (r.soldType === 'priority' || r.soldType === 'hot') rejectedSoldPH++;
+        rejectedEarnings += r.partnerShare || 0;
+      }
+
       if (r.daysToSale != null) cycles.push(r.daysToSale);
 
       /* Present only when the projection included them. */
@@ -570,9 +657,11 @@
     var soldPH = priority + hot;
     var soldAny = soldPH + auction + marketplace;
 
-    /* Priority/Hot rate is measured against MATURED paid leads, so a busy
-       week does not look like a collapse just because it is recent. */
-    var phRate = maturePaid ? soldPH / maturePaid : 0;
+    /* Measured against MATURED leads, so a busy week does not look like a
+       collapse just because it is recent. The denominator depends on how the
+       partner is paid — see the rateBasis note above. */
+    var rateDenom = basis === 'all' ? mature : maturePaid;
+    var phRate = rateDenom ? soldPH / rateDenom : 0;
 
     var points = (priority * SOLD_TYPES.priority.points) +
                  (hot * SOLD_TYPES.hot.points) +
@@ -593,8 +682,15 @@
       soldPriorityHot: soldPH,
       soldAny: soldAny,
       priorityHotRate: phRate,
-      soldRate: maturePaid ? soldAny / maturePaid : 0,
+      rateBasis: basis,
+      rateDenominator: rateDenom,
+      soldRate: rateDenom ? soldAny / rateDenom : 0,
       pointsPerPaid: maturePaid ? points / maturePaid : 0,
+
+      /* RevShare-only visibility: what the leads we declined still earned. */
+      rejectedSold: rejectedSold,
+      rejectedSoldPriorityHot: rejectedSoldPH,
+      rejectedEarnings: round2(rejectedEarnings),
       medianCycle: median(cycles),
       rejects: rejects,
       hasEarnings: hasEarnings,
@@ -638,19 +734,124 @@
       from: range.from, to: range.to,
       campaignId: opts.campaignId, subid: opts.subid
     });
-    return { range: range, rows: rows, metrics: computeMetrics(rows) };
+    return {
+      range: range, rows: rows,
+      metrics: computeMetrics(rows, TODAY, { rateBasis: opts.rateBasis })
+    };
   }
 
   /* Group rows by an arbitrary key, with metrics per group. */
-  function groupBy(rows, keyFn) {
+  function groupBy(rows, keyFn, opts) {
     var buckets = {};
     for (var i = 0; i < rows.length; i++) {
       var k = keyFn(rows[i]);
       (buckets[k] = buckets[k] || []).push(rows[i]);
     }
     return Object.keys(buckets).map(function (k) {
-      return { key: k, rows: buckets[k], metrics: computeMetrics(buckets[k]) };
+      return { key: k, rows: buckets[k], metrics: computeMetrics(buckets[k], null, opts) };
     });
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Spend & volume targets                                                 */
+  /* ---------------------------------------------------------------------- */
+
+  /* NOT YET BUILT — there is no admin UI to set these. The values below are
+     hard-coded so the affiliate-facing half can be reviewed now.
+     What the admin side needs (see HANDOFF.md):
+       · per partner, per campaign, per calendar month
+       · volume target and/or spend target — EITHER, OR, OR BOTH.
+         A null target is not zero; it means "not set" and must not render.
+     Nothing here is sensitive: a spend target is what we plan to pay the
+     partner, which is their own revenue, not our margin. */
+  var TARGETS = {
+    revshare: { volume: 1500, spend: 9000, spendLabel: 'Revenue share payout' },
+    cpl:      { volume: 900,  spend: null, spendLabel: 'Spend' }
+  };
+
+  function targetsFor(partnerType) {
+    return TARGETS[partnerType === 'revshare' ? 'revshare' : 'cpl'];
+  }
+
+  /**
+   * Month-to-date progress against target, with the pace maths the affiliate
+   * actually needs: are they ahead or behind, and what daily rate closes it.
+   * Always month-to-date regardless of the date filter — a monthly target
+   * measured over an arbitrary 7-day window would be meaningless.
+   */
+  function targetProgress(opts) {
+    var t = targetsFor(opts.partnerType);
+    var monthStart = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+    var monthEnd = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0);
+    var daysInMonth = monthEnd.getDate();
+    var daysElapsed = TODAY.getDate();
+    var daysLeft = daysInMonth - daysElapsed;
+
+    /* Volume is measured on leads SUBMITTED — the thing the affiliate
+       actually controls, so it uses the received basis. */
+    var rows = queryLeads({
+      partnerType: opts.partnerType,
+      from: monthStart, to: TODAY,
+      campaignId: opts.campaignId, subid: opts.subid
+    });
+    var m = computeMetrics(rows, TODAY, { rateBasis: opts.rateBasis });
+    var volumeActual = m.raw;
+
+    /* Spend is an OUTCOME for a RevShare partner — they are paid when a lead
+       SELLS, which is 9–12 days after it arrives. Counting their payout on
+       the received basis would report $0 for the first week and a half of
+       every month and make the target look permanently missed. CPL is the
+       opposite: we owe on acceptance, so it stays on the received basis. */
+    var spendActual = null;
+    if (m.hasEarnings) {
+      var soldMtd = queryLeadsBySold({
+        partnerType: opts.partnerType,
+        from: monthStart, to: TODAY,
+        campaignId: opts.campaignId, subid: opts.subid
+      });
+      spendActual = computeMetrics(soldMtd, TODAY, { rateBasis: opts.rateBasis }).earnings;
+    } else if (opts.cplRate) {
+      spendActual = round2(m.paid * opts.cplRate);
+    }
+
+    function pace(actual, target) {
+      if (target == null || !target) return null;
+      var expected = target * (daysElapsed / daysInMonth);
+      /* Severity is judged against where they should be TODAY, not against
+         the full month — at day 5 of 31, 14% of a monthly target is fine. */
+      var ratio = expected ? actual / expected : 1;
+      return {
+        target: target,
+        actual: actual,
+        pct: actual / target,
+        expected: expected,
+        ratio: ratio,
+        aheadBy: actual - expected,
+        onPace: ratio >= 0.97,
+        severity: ratio >= 0.97 ? '' : ratio >= 0.85 ? 'is-warning'
+                : ratio >= 0.70 ? 'is-serious' : 'is-critical',
+        perDayNeeded: daysLeft > 0 ? Math.max(0, (target - actual) / daysLeft) : 0,
+        projected: daysElapsed ? (actual / daysElapsed) * daysInMonth : 0
+      };
+    }
+
+    return {
+      monthLabel: TODAY.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      daysElapsed: daysElapsed,
+      daysInMonth: daysInMonth,
+      daysLeft: daysLeft,
+      spendLabel: t.spendLabel,
+      volume: pace(volumeActual, t.volume),
+      spend: spendActual == null ? null : pace(spendActual, t.spend)
+    };
+  }
+
+  /* Daily volume target, for the reference line on the leads-by-day chart. */
+  function dailyVolumeTarget(partnerType) {
+    var t = targetsFor(partnerType);
+    if (!t.volume) return null;
+    var daysInMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0).getDate();
+    return t.volume / daysInMonth;
   }
 
   /* ---------------------------------------------------------------------- */
@@ -707,6 +908,9 @@
     queryLeads: queryLeads,
     queryLeadsBySold: queryLeadsBySold,
     cohort: cohort,
+    targetsFor: targetsFor,
+    targetProgress: targetProgress,
+    dailyVolumeTarget: dailyVolumeTarget,
     resolveRange: resolveRange,
     priorWindow: priorWindow,
     computeMetrics: computeMetrics,
