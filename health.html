@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Health scorecard — Financialize Partner Portal</title>
+<link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar" data-shell="sidebar"></aside>
+
+  <div class="main">
+    <header class="topbar" data-shell="topbar"></header>
+
+    <div class="content">
+
+      <div id="filter-host"></div>
+
+      <section class="card">
+        <div class="card-body" style="padding-top:18px">
+          <div class="hero">
+            <div>
+              <div class="hero-label">Lead health score</div>
+              <div class="hero-figure" id="hero-score">—</div>
+              <div id="hero-tier" style="margin-top:8px"></div>
+            </div>
+            <div style="flex:1;min-width:260px">
+              <div id="hero-action" style="font-size:14px;font-weight:600;margin-bottom:6px"></div>
+              <p class="hero-note" id="hero-note"></p>
+              <div id="hero-provisional"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card-foot" id="window-note"></div>
+      </section>
+
+      <div class="grid-2">
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Pillar breakdown</h2>
+              <p class="sub">A low score should point straight at its cause.</p>
+            </div>
+          </div>
+          <div class="card-body" id="pillars"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>90-day trend</h2>
+              <p class="sub">Each point is a full 30-day window ending that week.</p>
+            </div>
+            <div class="spacer"></div>
+            <div id="toggle-trend"></div>
+          </div>
+          <div class="card-body">
+            <div class="chart-wrap" id="chart-trend"></div>
+            <div class="legend" id="tier-legend" style="margin-top:8px"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="grid-2">
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Coverage asks</h2>
+              <p class="sub">Where more volume from you is worth more to both of us right now.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data" id="coverage-table"></table>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>How the score is built</h2>
+              <p class="sub">The tiers below are the same thresholds used to set allocation.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data" id="tier-table"></table>
+          </div>
+          <div class="card-foot">
+            Refreshed weekly on the Monday allocation cycle. Rolling 30-day window,
+            10-day maturity buffer on outcome metrics, benchmarked against the trailing 90 days.
+          </div>
+        </section>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/health.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = FZData, A = FZApp, C = FZCharts, H = FZHealth;
+
+  var state = A.params();
+
+  A.shell(state, {
+    active: 'health.html',
+    title: 'Health scorecard',
+    subtitle: 'One number for how effective your campaign is, and what is driving it.'
+  });
+  /* The score is defined on a rolling 30-day window, so the date-range preset
+     does not apply here — only the campaign and sub-ID scope do. */
+  A.filterBar(document.getElementById('filter-host'), state, ['campaign', 'subid']);
+
+  var result = H.score({
+    partnerType: state.partnerType,
+    campaignId: state.campaignId,
+    subid: state.subid
+  });
+
+  /* ---- hero ------------------------------------------------------------ */
+  document.getElementById('hero-score').textContent = result.score;
+  document.getElementById('hero-tier').innerHTML =
+    '<span class="badge ' + result.tier.badge + '" style="font-size:12px;padding:4px 12px">' +
+    '<span class="dot"></span>' + result.tier.label + '</span>';
+  document.getElementById('hero-action').textContent = result.tier.action;
+  document.getElementById('hero-note').textContent =
+    'The score is anchored on one question: of the leads we paid you for, how many reached ' +
+    'Priority or Hot, and how fast. Everything else in the model exists to explain or protect ' +
+    'that number.';
+
+  if (result.provisional) {
+    document.getElementById('hero-provisional').innerHTML =
+      '<div class="notice notice-warn" style="margin:12px 0 0"><span class="ico">▲</span><div>' +
+      '<strong>Provisional.</strong> ' + A.fmtInt(result.maturePaid) + ' matured paid leads in the ' +
+      'window, below the 100-lead gate. Treat the score as directional until volume builds.' +
+      '</div></div>';
+  }
+
+  document.getElementById('window-note').innerHTML =
+    'Window: ' + A.fmtDate(result.range.from) + ' – ' + A.fmtDate(result.range.to) +
+    ' · ' + A.fmtInt(result.metrics.paid) + ' paid leads, ' +
+    A.fmtInt(result.maturePaid) + ' matured' +
+    (result.penalties.length
+      ? ' · <span style="color:var(--critical-text);font-weight:600">Penalties applied: ' +
+        result.penalties.map(function (p) { return A.esc(p.label) + ' (−' + p.points + ')'; }).join(', ') +
+        '</span>'
+      : ' · No penalties applied');
+
+  /* ---- pillar meters --------------------------------------------------- */
+  (function () {
+    var html = result.pillars.map(function (p) {
+      if (p.parked) {
+        return '<div class="meter is-parked">' +
+          '<div class="meter-head">' +
+            '<span class="meter-name">' + A.esc(p.label) + '</span>' +
+            '<span class="meter-weight">' + Math.round(p.weight * 100) + '% weight</span>' +
+            '<span class="spacer"></span>' +
+            '<span class="badge badge-warn"><span class="dot"></span>Parked</span>' +
+          '</div>' +
+          '<div class="meter-track is-parked"></div>' +
+          '<div class="meter-parts"><span>' + A.esc(p.note) + '</span></div>' +
+          '</div>';
+      }
+      var parts = p.parts.map(function (part) {
+        if (part.display === undefined) return null;   /* internal-only inputs stay unnamed */
+        return '<span>' + A.esc(part.label) + ': <strong style="color:var(--ink-2)">' +
+          A.esc(part.display) + '</strong></span>';
+      }).filter(Boolean).join('');
+
+      return '<div class="meter">' +
+        '<div class="meter-head">' +
+          '<span class="meter-name">' + A.esc(p.label) + '</span>' +
+          '<span class="meter-weight">' + Math.round(p.weight * 100) + '% weight' +
+            (p.effectiveWeight && Math.abs(p.effectiveWeight - p.weight) > 0.001
+              ? ' · ' + Math.round(p.effectiveWeight * 100) + '% applied'
+              : '') +
+          '</span>' +
+          '<span class="spacer"></span>' +
+          '<span class="meter-score">' + Math.round(p.score) + '</span>' +
+        '</div>' +
+        '<div class="meter-track">' +
+          '<div class="meter-fill ' + H.meterClass(p.score) + '" style="width:' + Math.round(p.score) + '%"></div>' +
+        '</div>' +
+        '<div class="meter-parts">' + parts + '</div>' +
+        (p.note ? '<div class="meter-parts" style="opacity:.85"><span>' + A.esc(p.note) + '</span></div>' : '') +
+        '</div>';
+    }).join('');
+
+    html += '<div class="mocknote">' +
+      'Speed &amp; operations is excluded rather than scored zero — a missing pillar should not ' +
+      'quietly cap the score at 90. The other three are renormalised to 100 and the applied ' +
+      'weights are shown above. When the two operations fields land, the weights snap back on ' +
+      'their own.</div>';
+
+    document.getElementById('pillars').innerHTML = html;
+  })();
+
+  /* ---- trend ----------------------------------------------------------- */
+  var trendHost = document.getElementById('chart-trend');
+  C.mount(trendHost, 'line', {
+    points: H.trend({ partnerType: state.partnerType, campaignId: state.campaignId, subid: state.subid }),
+    seriesLabel: 'Health score',
+    yMin: 0, yMax: 100,
+    ariaLabel: 'Health score over the trailing 90 days',
+    bands: [
+      { from: 80, to: 100, color: C.cssVar('--good') },
+      { from: 60, to: 80,  color: C.cssVar('--series-1') },
+      { from: 45, to: 60,  color: C.cssVar('--warning') },
+      { from: 0,  to: 45,  color: C.cssVar('--critical') }
+    ]
+  });
+  A.viewToggle(document.getElementById('toggle-trend'), trendHost);
+
+  document.getElementById('tier-legend').innerHTML = H.TIERS.slice().reverse().map(function (t) {
+    var color = { good: '--good', info: '--series-1', warning: '--warning', critical: '--critical' }[t.tone];
+    return '<span class="legend-item"><span class="legend-swatch" style="background:' +
+      C.cssVar(color) + ';opacity:.35"></span>' + t.label + '</span>';
+  }).join('');
+
+  /* ---- coverage asks --------------------------------------------------- */
+  (function () {
+    var asks = H.coverageAsks(result);
+    var head = '<thead><tr><th>We need more of</th><th>Which means</th>' +
+      '<th class="num">You now</th><th class="num">Target</th></tr></thead>';
+    var body = asks.map(function (a) {
+      return '<tr><td><strong>' + A.esc(a.what) + '</strong></td>' +
+        '<td style="font-size:12.5px;color:var(--ink-2)">' + A.esc(a.detail) + '</td>' +
+        '<td class="num">' + a.now + '</td>' +
+        '<td class="num">' + a.target + '</td></tr>';
+    }).join('');
+    document.getElementById('coverage-table').innerHTML = head + '<tbody>' +
+      (body || '<tr><td colspan="4" class="empty">Coverage is on target. Nothing to ask for this week.</td></tr>') +
+      '</tbody>';
+  })();
+
+  /* ---- tier table ------------------------------------------------------ */
+  (function () {
+    var head = '<thead><tr><th>Tier</th><th class="num">Score</th><th>What we do at this tier</th></tr></thead>';
+    var body = H.TIERS.map(function (t) {
+      var isHere = t.key === result.tier.key;
+      var next = H.TIERS[H.TIERS.indexOf(t) - 1];
+      var band = next ? t.min + '–' + (next.min - 1) : t.min + '–100';
+      return '<tr' + (isHere ? ' style="background:var(--surface-2)"' : '') + '>' +
+        '<td><span class="badge ' + t.badge + '"><span class="dot"></span>' + t.label + '</span>' +
+          (isHere ? ' <strong style="font-size:11px;color:var(--ink-2)">← you</strong>' : '') + '</td>' +
+        '<td class="num">' + band + '</td>' +
+        '<td style="font-size:12.5px;color:var(--ink-2)">' + A.esc(t.action) + '</td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('tier-table').innerHTML = head + '<tbody>' + body + '</tbody>';
+  })();
+
+})();
+</script>
+</body>
+</html>

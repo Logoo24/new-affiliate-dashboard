@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance — Financialize Partner Portal</title>
+<link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar" data-shell="sidebar"></aside>
+
+  <div class="main">
+    <header class="topbar" data-shell="topbar"></header>
+
+    <div class="content">
+
+      <div class="notice notice-mock">
+        <span class="ico">▲</span>
+        <div>
+          <strong>Mock-up.</strong> Numbers are fabricated but internally consistent — the date
+          range, campaign and sub-ID filters all really work, and every figure recomputes from
+          the filtered set. See <code>HANDOFF.md</code> for what is mocked vs what needs fields
+          from the dev team.
+        </div>
+      </div>
+
+      <div id="filter-host"></div>
+      <div id="ctx-notice"></div>
+
+      <!-- Hero: the North Star. Exactly one hero figure on this view. -->
+      <section class="card">
+        <div class="card-body" style="padding-top:18px">
+          <div class="hero">
+            <div>
+              <div class="hero-label">Sold to Priority or Hot</div>
+              <div class="hero-figure" id="hero-figure">—</div>
+            </div>
+            <div>
+              <div id="hero-detail"></div>
+              <p class="hero-note" id="hero-note"></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="tiles" id="tiles"></div>
+
+      <div class="grid-2">
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Leads by day</h2>
+              <p class="sub">Submitted leads, split by whether they were accepted.</p>
+            </div>
+            <div class="spacer"></div>
+            <div id="toggle-volume"></div>
+          </div>
+          <div class="card-body">
+            <div class="legend" id="legend-volume"></div>
+            <div class="chart-wrap" id="chart-volume"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Priority &amp; Hot by day</h2>
+              <p class="sub">Counted on the day they sold, not the day the lead came in.</p>
+            </div>
+            <div class="spacer"></div>
+            <div id="toggle-conv"></div>
+          </div>
+          <div class="card-body">
+            <div class="legend" id="legend-conv"></div>
+            <div class="chart-wrap" id="chart-conv"></div>
+            <div class="mocknote" id="cook-note"></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Campaigns</h2>
+            <p class="sub">
+              Broken out natively. Blended, a small excellent campaign and a large low-yield one
+              read as one mediocre campaign — which is exactly the reading to avoid.
+            </p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="campaign-table"></table>
+        </div>
+        <div class="card-foot">
+          <span>
+            <strong>Leads / Accepted / Accept %</strong> count leads that <em>arrived</em> in the
+            selected window. <strong>Priority / Hot / Median cycle / Earnings</strong> count leads
+            that <em>sold</em> in it. <strong>P/H rate</strong> is the trailing 30-day matured
+            cohort — a rate needs leads that have finished cooking, so it does not move with the
+            date filter.
+          </span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Sub-ID breakdown</h2>
+            <p class="sub">Account averages hide publisher-level problems. This is where they surface.</p>
+          </div>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" id="export-subid">Export CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="subid-table"></table>
+        </div>
+        <div class="card-foot" id="subid-foot"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Why leads were rejected</h2>
+            <p class="sub">Plain language, with the fix. A reason with no fix is just a complaint.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="reject-table"></table>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/health.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = FZData, A = FZApp, C = FZCharts, H = FZHealth;
+
+  var state = A.params();
+
+  A.shell(state, {
+    active: 'index.html',
+    title: 'Performance',
+    subtitle: 'Real-time view of your submitted leads and what happened to them.'
+  });
+  A.filterBar(document.getElementById('filter-host'), state, ['range', 'campaign', 'subid']);
+
+  /* ---- pull rows through the redaction layer -------------------------- */
+  /* Three bases, deliberately. Volume is attributed to the day a lead
+     arrived; outcomes to the day it sold; rates to the trailing matured
+     cohort. Mixing these up is what makes a 7-day view report zero sales.
+     See the comment above queryLeadsBySold() in data.js. */
+  var scope = {
+    partnerType: state.partnerType,
+    campaignId: state.campaignId, subid: state.subid
+  };
+
+  var rows = D.queryLeads(Object.assign({ from: state.range.from, to: state.range.to }, scope));
+  var m = D.computeMetrics(rows);
+
+  var soldRows = D.queryLeadsBySold(Object.assign({ from: state.range.from, to: state.range.to }, scope));
+  var sm = D.computeMetrics(soldRows);
+
+  var coh = D.cohort(scope);
+
+  var prior = D.priorWindow(state.range);
+  var priorRows = D.queryLeads(Object.assign({ from: prior.from, to: prior.to }, scope));
+  var pm = D.computeMetrics(priorRows);
+  var priorSold = D.queryLeadsBySold(Object.assign({ from: prior.from, to: prior.to }, scope));
+  var psm = D.computeMetrics(priorSold);
+
+  /* ---- context notice: make the visibility difference visible ---------- */
+  var ctxHost = document.getElementById('ctx-notice');
+  if (state.partnerType === 'cpl') {
+    ctxHost.innerHTML =
+      '<div class="notice notice-info"><span class="ico">◆</span><div>' +
+      '<strong>Viewing as a flat/tiered CPL partner.</strong> Sold status is shown; ' +
+      'sale price and revenue share are not — those columns are not in this partner type\'s ' +
+      'query projection at all, so they cannot render here or appear in a CSV export. ' +
+      'Switch the selector in the header to see the RevShare view.' +
+      '</div></div>';
+  } else {
+    ctxHost.innerHTML =
+      '<div class="notice notice-info"><span class="ico">◆</span><div>' +
+      '<strong>Viewing as a RevShare partner.</strong> Earnings are included because this ' +
+      'partner is paid on outcomes. Margin, our cost, buyer name, CSR name and call result ' +
+      'are withheld from every partner type, RevShare included.' +
+      '</div></div>';
+  }
+
+  /* ---- hero ----------------------------------------------------------- */
+  /* Count of what SOLD in the window — always answerable, for any range,
+     including Today. The conversion rate sits beside it on its own basis. */
+  document.getElementById('hero-figure').textContent = A.fmtInt(sm.soldPriorityHot);
+  document.getElementById('hero-detail').innerHTML =
+    '<div style="font-size:15px;font-weight:600;margin-bottom:4px">' +
+      A.fmtInt(sm.soldPriorityHot) + ' of ' + A.fmtInt(sm.soldAny) + ' leads that sold in this window' +
+      ' reached Priority or Hot' +
+    '</div>' +
+    A.deltaHtml(sm.soldPriorityHot, psm.soldPriorityHot, { periodLabel: 'period' }) +
+    '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' +
+      '<span style="font-size:12px;color:var(--ink-muted)">Conversion rate, trailing 30-day matured cohort</span><br>' +
+      '<span style="font-size:20px;font-weight:650">' + A.fmtPct(coh.metrics.priorityHotRate, 1) + '</span> ' +
+      '<span style="font-size:12px;color:var(--ink-2)">of ' + A.fmtInt(coh.metrics.maturePaid) +
+      ' matured paid leads</span>' +
+    '</div>';
+  document.getElementById('hero-note').textContent =
+    'Priority leads carry 10 points and Hot 8; Auction and Marketplace score negative. ' +
+    'The count moves with the date range. The rate does not — a conversion rate needs leads ' +
+    'that have finished cooking, so it is always measured on the trailing 30 days. It is the ' +
+    'same figure the health score is built on.';
+
+  /* ---- tiles ---------------------------------------------------------- */
+  var tiles = [
+    {
+      label: 'Leads submitted', value: A.fmtInt(m.raw),
+      sub: 'Raw posts in window',
+      delta: A.deltaHtml(m.raw, pm.raw, {})
+    },
+    {
+      label: 'Accepted (paid)', value: A.fmtInt(m.paid),
+      sub: A.fmtInt(m.free) + ' rejected',
+      delta: A.deltaHtml(m.paid, pm.paid, {})
+    },
+    {
+      label: 'Acceptance rate', value: A.fmtPct(m.acceptanceRate, 1),
+      sub: 'Paid ÷ raw',
+      delta: A.deltaHtml(m.acceptanceRate, pm.acceptanceRate, {})
+    },
+    {
+      label: 'Median sales cycle',
+      value: sm.medianCycle == null ? '—' : sm.medianCycle + ' days',
+      sub: 'Of leads that sold in window',
+      delta: A.deltaHtml(sm.medianCycle, psm.medianCycle, { lowerIsBetter: true })
+    }
+  ];
+
+  /* Health score tile — links to the full scorecard. */
+  var hs = H.score({ partnerType: state.partnerType, campaignId: state.campaignId, subid: state.subid });
+  tiles.push({
+    label: 'Health score',
+    value: String(hs.score),
+    sub: '<span class="badge ' + hs.tier.badge + '"><span class="dot"></span>' + hs.tier.label + '</span>',
+    delta: '<div class="tile-delta delta-flat"><a href="' + A.linkTo('health.html', state) + '">See the breakdown →</a></div>'
+  });
+
+  if (sm.hasEarnings) {
+    tiles.push({
+      label: 'Your earnings', value: A.fmtMoney0(sm.earnings),
+      sub: '40% share of leads sold in window',
+      delta: A.deltaHtml(sm.earnings, psm.earnings, {}),
+      cls: 'tile-revshare'
+    });
+  }
+
+  document.getElementById('tiles').innerHTML = tiles.map(function (t, i) {
+    return '<div class="tile ' + (t.cls || '') + '">' +
+      '<div class="tile-label">' + t.label + '</div>' +
+      '<div class="tile-value">' + t.value + '</div>' +
+      '<div class="tile-sub">' + t.sub + '</div>' +
+      (t.delta || '') +
+      '</div>';
+  }).join('');
+
+  /* ---- charts --------------------------------------------------------- */
+  var days = D.dailySeries(rows, state.range);                        /* received basis */
+  var soldDays = D.dailySeries(soldRows, state.range, 'soldAt');      /* sold basis     */
+
+  var volumeSeries = [
+    { key: 'paid', label: 'Accepted (paid)', color: C.cssVar('--series-1') },
+    { key: 'free', label: 'Rejected', color: C.cssVar('--muted-mark') }
+  ];
+  var convSeries = [
+    { key: 'priority', label: 'Priority', color: C.cssVar('--series-1') },
+    { key: 'hot', label: 'Hot', color: C.cssVar('--series-2') }
+  ];
+
+  function legend(host, series) {
+    document.getElementById(host).innerHTML = series.map(function (s) {
+      return '<span class="legend-item"><span class="legend-swatch" style="background:' +
+        s.color + '"></span>' + s.label + '</span>';
+    }).join('');
+  }
+  legend('legend-volume', volumeSeries);
+  legend('legend-conv', convSeries);
+
+  var volHost = document.getElementById('chart-volume');
+  var convHost = document.getElementById('chart-conv');
+  C.mount(volHost, 'columns', { days: days, series: volumeSeries, ariaLabel: 'Leads submitted per day, accepted versus rejected' });
+  C.mount(convHost, 'columns', { days: soldDays, series: convSeries, ariaLabel: 'Priority and Hot sales per day' });
+  A.viewToggle(document.getElementById('toggle-volume'), volHost);
+  A.viewToggle(document.getElementById('toggle-conv'), convHost);
+
+  document.getElementById('cook-note').innerHTML =
+    'Sales are plotted on the day they <strong>sold</strong>, not the day the lead arrived. ' +
+    'Leads take ' + D.MATURITY_DAYS + '–14 days to cook, so plotting them on the arrival date ' +
+    'would make every short window read as zero sales. ' +
+    '<strong>' + A.fmtInt(m.immaturePaid) + '</strong> paid leads that arrived in this window are ' +
+    'still inside the ' + D.MATURITY_DAYS + '-day maturity buffer — they have not failed to sell, ' +
+    'they have not finished cooking.';
+
+  /* ---- campaign breakout ---------------------------------------------- */
+  /* Index every basis by the same key so a row can pull the right number
+     from the right window. */
+  function indexBy(rowSet, keyFn) {
+    var out = {};
+    D.groupBy(rowSet, keyFn).forEach(function (g) { out[g.key] = g; });
+    return out;
+  }
+  var EMPTY = D.computeMetrics([]);
+  function pull(idx, key) { return idx[key] ? idx[key].metrics : EMPTY; }
+
+  var byCampaign = indexBy(rows, function (r) { return r.campaignId; });
+  var soldByCampaign = indexBy(soldRows, function (r) { return r.campaignId; });
+  var cohByCampaign = indexBy(coh.rows, function (r) { return r.campaignId; });
+
+  (function () {
+    var head = '<thead><tr>' +
+      '<th>Campaign</th><th>Type</th>' +
+      '<th class="num">Leads</th><th class="num">Accepted</th><th class="num">Accept %</th>' +
+      '<th class="num">Priority</th><th class="num">Hot</th>' +
+      '<th class="num">Median cycle</th>' +
+      (sm.hasEarnings ? '<th class="num revshare-col">Earnings</th>' : '') +
+      '<th class="num">P/H rate</th>' +
+      '</tr></thead>';
+
+    var body = D.CAMPAIGNS.filter(function (c) {
+      return state.campaignId === 'all' || c.id === state.campaignId;
+    }).map(function (c) {
+      var gm = pull(byCampaign, c.id);
+      var gs = pull(soldByCampaign, c.id);
+      var gc = pull(cohByCampaign, c.id);
+      return '<tr>' +
+        '<td><a href="' + A.linkTo('leads.html', state, { campaign: c.id }) + '">' + A.esc(c.name) + '</a>' +
+          '<div style="font-size:11px;color:var(--ink-muted)">' + A.esc(c.id) + '</div></td>' +
+        '<td><span class="badge">' + (c.kind === 'aged' ? 'Aged' : 'Fresh') + ' · ' + c.product + '</span></td>' +
+        '<td class="num">' + A.fmtInt(gm.raw) + '</td>' +
+        '<td class="num">' + A.fmtInt(gm.paid) + '</td>' +
+        '<td class="num">' + A.fmtPct(gm.acceptanceRate, 1) + '</td>' +
+        '<td class="num">' + A.fmtInt(gs.priority) + '</td>' +
+        '<td class="num">' + A.fmtInt(gs.hot) + '</td>' +
+        '<td class="num">' + (gs.medianCycle == null ? '—' : gs.medianCycle + 'd') + '</td>' +
+        (sm.hasEarnings ? '<td class="num revshare-col">' + A.fmtMoney0(gs.earnings) + '</td>' : '') +
+        '<td class="num">' + A.fmtPct(gc.priorityHotRate, 1) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    var foot = '<tfoot><tr><td colspan="2">All selected campaigns</td>' +
+      '<td class="num">' + A.fmtInt(m.raw) + '</td>' +
+      '<td class="num">' + A.fmtInt(m.paid) + '</td>' +
+      '<td class="num">' + A.fmtPct(m.acceptanceRate, 1) + '</td>' +
+      '<td class="num">' + A.fmtInt(sm.priority) + '</td>' +
+      '<td class="num">' + A.fmtInt(sm.hot) + '</td>' +
+      '<td class="num">' + (sm.medianCycle == null ? '—' : sm.medianCycle + 'd') + '</td>' +
+      (sm.hasEarnings ? '<td class="num revshare-col">' + A.fmtMoney0(sm.earnings) + '</td>' : '') +
+      '<td class="num">' + A.fmtPct(coh.metrics.priorityHotRate, 1) + '</td>' +
+      '</tr></tfoot>';
+
+    document.getElementById('campaign-table').innerHTML = head + '<tbody>' + body + '</tbody>' + foot;
+  })();
+
+  /* ---- sub-ID breakdown ------------------------------------------------ */
+  var subRowsForExport = [];
+  (function () {
+    var soldBySub = indexBy(soldRows, function (r) { return r.subid; });
+    var cohBySub = indexBy(coh.rows, function (r) { return r.subid; });
+
+    var groups = D.groupBy(rows, function (r) { return r.subid; });
+    /* Rank by the cohort rate — the only column that is a like-for-like
+       quality comparison between publishers. */
+    groups.sort(function (a, b) {
+      return pull(cohBySub, b.key).priorityHotRate - pull(cohBySub, a.key).priorityHotRate;
+    });
+
+    var best = groups.reduce(function (a, g) {
+      return Math.max(a, pull(cohBySub, g.key).priorityHotRate);
+    }, 0) || 1;
+
+    var head = '<thead><tr>' +
+      '<th>Sub-ID</th><th>Campaign</th>' +
+      '<th class="num">Leads</th><th class="num">Accepted</th><th class="num">Accept %</th>' +
+      '<th class="num">Priority/Hot</th>' +
+      (sm.hasEarnings ? '<th class="num revshare-col">Earnings</th>' : '') +
+      '<th class="num">P/H rate — 30d cohort</th>' +
+      '</tr></thead>';
+
+    var body = groups.map(function (g) {
+      var gm = g.metrics;
+      var gs = pull(soldBySub, g.key);
+      var gc = pull(cohBySub, g.key);
+      var label = g.rows[0].subidLabel;
+      var camp = g.rows[0].campaignId;
+      subRowsForExport.push({ subid: g.key, label: label, campaign: camp, m: gm, s: gs, c: gc });
+      var w = Math.round((gc.priorityHotRate / best) * 100);
+      return '<tr>' +
+        '<td><a href="' + A.linkTo('leads.html', state, { subid: g.key }) + '">' + A.esc(label) + '</a>' +
+          '<div style="font-size:11px;color:var(--ink-muted);font-family:ui-monospace,monospace">' + A.esc(g.key) + '</div></td>' +
+        '<td style="font-size:12px;color:var(--ink-2)">' + A.esc(camp) + '</td>' +
+        '<td class="num">' + A.fmtInt(gm.raw) + '</td>' +
+        '<td class="num">' + A.fmtInt(gm.paid) + '</td>' +
+        '<td class="num">' + A.fmtPct(gm.acceptanceRate, 1) + '</td>' +
+        '<td class="num">' + A.fmtInt(gs.soldPriorityHot) + '</td>' +
+        (sm.hasEarnings ? '<td class="num revshare-col">' + A.fmtMoney0(gs.earnings) + '</td>' : '') +
+        '<td class="num"><span class="bar-cell">' +
+          '<span>' + A.fmtPct(gc.priorityHotRate, 1) + '</span>' +
+          '<span class="bar-track"><span class="bar-fill" style="width:' + w + '%"></span></span>' +
+        '</span></td>' +
+        '</tr>';
+    }).join('');
+
+    document.getElementById('subid-table').innerHTML =
+      head + '<tbody>' + (body || '<tr><td colspan="8" class="empty">No leads in this window.</td></tr>') + '</tbody>';
+
+    var worst = groups[groups.length - 1];
+    document.getElementById('subid-foot').innerHTML = worst && groups.length > 1
+      ? 'Widest spread on the 30-day cohort: <strong>' + A.esc(groups[0].rows[0].subidLabel) + '</strong> at ' +
+        A.fmtPct(pull(cohBySub, groups[0].key).priorityHotRate, 1) + ' Priority/Hot versus <strong>' +
+        A.esc(worst.rows[0].subidLabel) + '</strong> at ' + A.fmtPct(pull(cohBySub, worst.key).priorityHotRate, 1) +
+        '. Same account, same rate card — which is the argument for paying by publisher, not by account.'
+      : '';
+  })();
+
+  document.getElementById('export-subid').addEventListener('click', function () {
+    var cols = [
+      { label: 'Sub-ID', value: function (r) { return r.subid; } },
+      { label: 'Label', value: function (r) { return r.label; } },
+      { label: 'Campaign', value: function (r) { return r.campaign; } },
+      { label: 'Leads submitted', value: function (r) { return r.m.raw; } },
+      { label: 'Accepted', value: function (r) { return r.m.paid; } },
+      { label: 'Acceptance rate', value: function (r) { return (r.m.acceptanceRate * 100).toFixed(2) + '%'; } },
+      { label: 'Priority (sold in window)', value: function (r) { return r.s.priority; } },
+      { label: 'Hot (sold in window)', value: function (r) { return r.s.hot; } },
+      { label: 'Median days to sale', value: function (r) { return r.s.medianCycle == null ? '' : r.s.medianCycle; } },
+      { label: 'Priority/Hot rate (30d cohort)', value: function (r) { return (r.c.priorityHotRate * 100).toFixed(2) + '%'; } }
+    ];
+    /* Earnings columns are appended only when the projection carried them. */
+    if (sm.hasEarnings) {
+      cols.push({ label: 'Your earnings (USD)', value: function (r) { return r.s.earnings.toFixed(2); } });
+    }
+    A.exportCsv(subRowsForExport, cols,
+      'subid-performance_' + A.isoDate(state.range.from) + '_' + A.isoDate(state.range.to) + '.csv');
+  });
+
+  /* ---- rejection reasons ---------------------------------------------- */
+  (function () {
+    var entries = Object.keys(m.rejects).map(function (k) {
+      return { key: k, count: m.rejects[k] };
+    }).sort(function (a, b) { return b.count - a.count; });
+
+    var head = '<thead><tr><th>Reason</th><th class="num">Leads</th>' +
+      '<th class="num">% of rejected</th><th class="num">% of submitted</th><th>What fixes it</th></tr></thead>';
+
+    var body = entries.map(function (e) {
+      var r = D.REJECT_REASONS[e.key];
+      return '<tr>' +
+        '<td>' + A.esc(r.label) + '</td>' +
+        '<td class="num">' + A.fmtInt(e.count) + '</td>' +
+        '<td class="num">' + A.fmtPct(m.free ? e.count / m.free : 0, 1) + '</td>' +
+        '<td class="num">' + A.fmtPct(m.raw ? e.count / m.raw : 0, 1) + '</td>' +
+        '<td style="color:var(--ink-2);font-size:12.5px">' + A.esc(r.fix) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    document.getElementById('reject-table').innerHTML =
+      head + '<tbody>' + (body || '<tr><td colspan="5" class="empty">No rejected leads in this window.</td></tr>') + '</tbody>';
+  })();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leads — Financialize Partner Portal</title>
+<link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar" data-shell="sidebar"></aside>
+
+  <div class="main">
+    <header class="topbar" data-shell="topbar"></header>
+
+    <div class="content">
+
+      <div id="filter-host"></div>
+      <div id="ctx-notice"></div>
+
+      <div class="tiles" id="tiles"></div>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Lead detail</h2>
+            <p class="sub" id="table-sub"></p>
+          </div>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" id="export-csv">Export CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="lead-table"></table>
+        </div>
+        <div class="card-foot">
+          <div class="pager" id="pager"></div>
+          <div class="spacer" style="flex:1"></div>
+          <div id="col-note" style="text-align:right"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Rejected leads in this window</h2>
+            <p class="sub">Grouped so a pattern is obvious at a glance rather than 30 rows apart.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="reject-table"></table>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/health.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = FZData, A = FZApp;
+
+  var PER_PAGE = 50;
+  var state = A.params({ defaultRange: '30d' });
+
+  A.shell(state, {
+    active: 'leads.html',
+    title: 'Leads',
+    subtitle: 'Every lead you sent, what happened to it, and why.'
+  });
+  A.filterBar(document.getElementById('filter-host'), state,
+    ['range', 'campaign', 'subid', 'status', 'sold']);
+
+  /* ---- query + client-side outcome filter ----------------------------- */
+  var all = D.queryLeads({
+    partnerType: state.partnerType,
+    from: state.range.from, to: state.range.to,
+    campaignId: state.campaignId, subid: state.subid
+  });
+
+  var rows = all.filter(function (r) {
+    if (state.status === 'paid' && r.status !== 'paid') return false;
+    if (state.status === 'free' && r.status !== 'free') return false;
+    if (state.sold === 'all') return true;
+    if (state.sold === 'ph') return r.soldType === 'priority' || r.soldType === 'hot';
+    if (state.sold === 'unsold') return !r.soldType;
+    return r.soldType === state.sold;
+  });
+
+  rows.sort(function (a, b) { return b.receivedAt - a.receivedAt; });
+
+  var m = D.computeMetrics(all);
+  var hasEarnings = m.hasEarnings;
+
+  /* ---- context notice -------------------------------------------------- */
+  document.getElementById('ctx-notice').innerHTML = hasEarnings
+    ? '<div class="notice notice-info"><span class="ico">◆</span><div>' +
+      '<strong>RevShare view.</strong> The two shaded columns on the right — sale amount and ' +
+      'your 40% share — appear only for revenue-share partners. Everything else on this table ' +
+      'is identical for every partner type.</div></div>'
+    : '<div class="notice notice-info"><span class="ico">◆</span><div>' +
+      '<strong>CPL view.</strong> You can see <em>which</em> of your leads sold and to what tier, ' +
+      'which is what tells you where to push traffic. Sale price and revenue share are not part ' +
+      'of this partner type\'s query — there are no hidden columns on this page to reveal.</div></div>';
+
+  /* ---- tiles ----------------------------------------------------------- */
+  /* This page is a cohort view by definition — it lists the leads you SENT in
+     the window — so every tile here is on the received basis. That is a
+     different question from the Performance view's "what sold this week," and
+     the labels say so rather than leaving the reader to guess. */
+  var tiles = [
+    { label: 'Matching leads', value: A.fmtInt(rows.length), sub: 'of ' + A.fmtInt(all.length) + ' sent in window' },
+    { label: 'Accepted (paid)', value: A.fmtInt(m.paid), sub: A.fmtPct(m.acceptanceRate, 1) + ' acceptance' },
+    { label: 'Sold Priority/Hot', value: A.fmtInt(m.soldPriorityHot), sub: 'From this cohort so far' },
+    { label: 'Sold Auction/Marketplace', value: A.fmtInt(m.auction + m.marketplace), sub: 'Lower-tier outcomes' },
+    { label: 'Still maturing', value: A.fmtInt(m.immaturePaid), sub: 'Paid, inside the ' + D.MATURITY_DAYS + '-day buffer' }
+  ];
+  if (hasEarnings) {
+    tiles.push({ label: 'Earnings from cohort', value: A.fmtMoney0(m.earnings), sub: '40% share, sales to date', cls: 'tile-revshare' });
+  }
+  document.getElementById('tiles').innerHTML = tiles.map(function (t) {
+    return '<div class="tile ' + (t.cls || '') + '">' +
+      '<div class="tile-label">' + t.label + '</div>' +
+      '<div class="tile-value">' + t.value + '</div>' +
+      '<div class="tile-sub">' + t.sub + '</div></div>';
+  }).join('');
+
+  /* ---- table ----------------------------------------------------------- */
+  var totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+  var page = Math.min(state.page, totalPages);
+  var slice = rows.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+  var head = '<thead><tr>' +
+    '<th>Received</th><th>Lead ID</th><th>Sub-ID</th><th>Campaign</th>' +
+    '<th>Status</th><th>Rejection reason</th><th>Sold type</th>' +
+    '<th>Date sold</th><th class="num">Days to sale</th>' +
+    (hasEarnings ? '<th class="num revshare-col">Sale amount</th><th class="num revshare-col">Your share</th>' : '') +
+    '</tr></thead>';
+
+  var body = slice.map(function (r) {
+    var reject = r.rejectReason ? D.REJECT_REASONS[r.rejectReason] : null;
+    return '<tr>' +
+      '<td style="white-space:nowrap">' + A.fmtDateTime(r.receivedAt) + '</td>' +
+      '<td class="lead-id">' + A.esc(r.id) + '</td>' +
+      '<td style="font-size:12px">' + A.esc(r.subidLabel) + '</td>' +
+      '<td style="font-size:12px;color:var(--ink-2)">' + A.esc(r.campaignId) + '</td>' +
+      '<td>' + (r.status === 'paid'
+        ? '<span class="pill-paid">Paid</span>'
+        : '<span class="pill-free">Free</span>') + '</td>' +
+      '<td style="font-size:12.5px;color:var(--ink-2)">' +
+        (reject ? '<span title="' + A.esc(reject.fix) + '">' + A.esc(reject.label) + '</span>' : '—') + '</td>' +
+      '<td>' + (r.status === 'paid' ? A.soldBadge(r.soldType) : '—') + '</td>' +
+      '<td style="white-space:nowrap">' + (r.soldAt ? A.fmtDate(r.soldAt) : '—') + '</td>' +
+      '<td class="num">' + (r.daysToSale == null ? '—' : r.daysToSale) + '</td>' +
+      (hasEarnings
+        ? '<td class="num revshare-col">' + (r.saleAmount ? A.fmtMoney(r.saleAmount) : '—') + '</td>' +
+          '<td class="num revshare-col">' + (r.partnerShare ? A.fmtMoney(r.partnerShare) : '—') + '</td>'
+        : '') +
+      '</tr>';
+  }).join('');
+
+  document.getElementById('lead-table').innerHTML = head + '<tbody>' +
+    (body || '<tr><td colspan="11" class="empty">No leads match these filters.</td></tr>') +
+    '</tbody>';
+
+  document.getElementById('table-sub').innerHTML =
+    A.fmtInt(rows.length) + ' leads received ' + A.esc(A.rangeSummary(state.range)) +
+    (m.immaturePaid
+      ? ' · <strong>' + A.fmtInt(m.immaturePaid) + '</strong> are still inside the ' +
+        D.MATURITY_DAYS + '-day cook window, so a blank sold column on a recent lead is expected. ' +
+        'Set <strong>Sold type</strong> above to jump straight to the ones that sold.'
+      : '');
+
+  document.getElementById('col-note').innerHTML =
+    '<span style="font-size:11.5px;color:var(--ink-muted)">Columns shown are the ' +
+    (hasEarnings ? 'RevShare' : 'CPL') + ' projection. ' +
+    'Buyer name, CSR name, call result, our cost and margin are excluded for all partner types.</span>';
+
+  /* ---- pager ----------------------------------------------------------- */
+  (function () {
+    var host = document.getElementById('pager');
+    if (totalPages <= 1) {
+      host.textContent = A.fmtInt(rows.length) + ' leads';
+      return;
+    }
+    var startN = (page - 1) * PER_PAGE + 1;
+    var endN = Math.min(page * PER_PAGE, rows.length);
+    var html = '<span>Showing ' + A.fmtInt(startN) + '–' + A.fmtInt(endN) +
+      ' of ' + A.fmtInt(rows.length) + '</span>';
+    if (page > 1) {
+      html += '<a class="btn btn-sm" href="' + A.linkTo('leads.html', state,
+        { status: state.status, sold: state.sold, p: page - 1 }) + '">← Prev</a>';
+    }
+    html += '<span>Page ' + page + ' of ' + totalPages + '</span>';
+    if (page < totalPages) {
+      html += '<a class="btn btn-sm" href="' + A.linkTo('leads.html', state,
+        { status: state.status, sold: state.sold, p: page + 1 }) + '">Next →</a>';
+    }
+    host.innerHTML = html;
+  })();
+
+  /* ---- CSV export ------------------------------------------------------ */
+  /* Exports the FULL filtered set, not just the visible page — this is the
+     file currently assembled by hand every day. */
+  document.getElementById('export-csv').addEventListener('click', function () {
+    var cols = [
+      { label: 'Received', value: function (r) { return r.receivedAt.toISOString(); } },
+      { label: 'Lead ID', value: function (r) { return r.id; } },
+      { label: 'Sub-ID', value: function (r) { return r.subid; } },
+      { label: 'Sub-ID label', value: function (r) { return r.subidLabel; } },
+      { label: 'Campaign', value: function (r) { return r.campaignId; } },
+      { label: 'Product', value: function (r) { return r.product; } },
+      { label: 'State', value: function (r) { return r.state; } },
+      { label: 'Status', value: function (r) { return r.status === 'paid' ? 'Paid' : 'Free'; } },
+      { label: 'Rejection reason', value: function (r) {
+          return r.rejectReason ? D.REJECT_REASONS[r.rejectReason].label : ''; } },
+      { label: 'Sold type', value: function (r) {
+          return r.soldType ? D.SOLD_TYPES[r.soldType].label : ''; } },
+      { label: 'Date sold', value: function (r) { return r.soldAt ? A.isoDate(r.soldAt) : ''; } },
+      { label: 'Days to sale', value: function (r) { return r.daysToSale == null ? '' : r.daysToSale; } }
+    ];
+    /* Nothing to guard here — for a CPL partner these fields do not exist on
+       the row object, so the branch is about the header, not about hiding. */
+    if (hasEarnings) {
+      cols.push({ label: 'Sale amount (USD)', value: function (r) { return r.saleAmount ? r.saleAmount.toFixed(2) : ''; } });
+      cols.push({ label: 'Your share (USD)', value: function (r) { return r.partnerShare ? r.partnerShare.toFixed(2) : ''; } });
+    }
+    A.exportCsv(rows, cols,
+      'leads_' + A.isoDate(state.range.from) + '_' + A.isoDate(state.range.to) + '.csv');
+  });
+
+  /* ---- rejection grouping ---------------------------------------------- */
+  (function () {
+    var counts = {};
+    all.forEach(function (r) {
+      if (r.rejectReason) counts[r.rejectReason] = (counts[r.rejectReason] || 0) + 1;
+    });
+    var entries = Object.keys(counts).map(function (k) { return { key: k, n: counts[k] }; })
+      .sort(function (a, b) { return b.n - a.n; });
+
+    var head = '<thead><tr><th>Reason</th><th class="num">Leads</th>' +
+      '<th class="num">% of rejected</th><th>What fixes it</th><th></th></tr></thead>';
+    var body = entries.map(function (e) {
+      var r = D.REJECT_REASONS[e.key];
+      var link = e.key === 'duplicate'
+        ? '<a class="btn btn-sm" href="' + A.linkTo('duplicate-check.html', state) + '">Screen numbers →</a>'
+        : '';
+      return '<tr><td>' + A.esc(r.label) + '</td>' +
+        '<td class="num">' + A.fmtInt(e.n) + '</td>' +
+        '<td class="num">' + A.fmtPct(m.free ? e.n / m.free : 0, 1) + '</td>' +
+        '<td style="color:var(--ink-2);font-size:12.5px">' + A.esc(r.fix) + '</td>' +
+        '<td style="text-align:right">' + link + '</td></tr>';
+    }).join('');
+
+    document.getElementById('reject-table').innerHTML = head + '<tbody>' +
+      (body || '<tr><td colspan="5" class="empty">No rejected leads in this window.</td></tr>') + '</tbody>';
+  })();
+
+})();
+</script>
+</body>
+</html>

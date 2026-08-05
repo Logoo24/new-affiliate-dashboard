@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duplicate check — Financialize Partner Portal</title>
+<link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar" data-shell="sidebar"></aside>
+
+  <div class="main">
+    <header class="topbar" data-shell="topbar"></header>
+
+    <div class="content">
+
+      <div class="notice notice-info">
+        <span class="ico">◆</span>
+        <div>
+          Check a phone number against everything sold as <strong>Priority or Hot in the last
+          365 days</strong> — the exclusivity window for those two tiers. Screen a number before
+          you pay to acquire it, instead of finding out at post time.
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Single lookup</h2>
+              <p class="sub">One number, one answer.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <form class="dupe-form" id="single-form">
+              <div class="field" style="flex:1">
+                <label for="phone">Phone number</label>
+                <input type="text" id="phone" name="phone" placeholder="(555) 213-4470"
+                       autocomplete="off" inputmode="tel" style="min-width:220px">
+              </div>
+              <button type="submit" class="btn btn-primary">Check</button>
+            </form>
+            <div id="single-result"></div>
+            <div class="mocknote">
+              Try a few — roughly one in five comes back as a duplicate in this mock-up.
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Bulk check</h2>
+              <p class="sub">Paste a list or upload a CSV. One number per line.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="field" style="width:100%">
+              <label for="bulk">Numbers</label>
+              <textarea id="bulk" rows="5" style="width:100%;font-family:ui-monospace,monospace;
+                font-size:12px;padding:8px;border:1px solid var(--border-strong);
+                border-radius:6px;background:var(--surface-1);color:var(--ink)"
+                placeholder="5552134470&#10;555-889-1203&#10;(555) 442-9987"></textarea>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+              <button class="btn btn-primary" id="bulk-run">Check list</button>
+              <label class="btn btn-sm" style="cursor:pointer;margin:0">
+                Upload CSV<input type="file" id="bulk-file" accept=".csv,.txt" style="display:none">
+              </label>
+              <button class="btn btn-sm" id="bulk-export" style="display:none">Export results</button>
+              <span class="spacer" style="flex:1"></span>
+              <span class="quota" id="quota"></span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section class="card" id="bulk-card" style="display:none">
+        <div class="card-head">
+          <div>
+            <h2>Bulk results</h2>
+            <p class="sub" id="bulk-sub"></p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="bulk-table"></table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>What this returns, and what it does not</h2>
+            <p class="sub">Worth stating plainly, because the boundary is the point.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="grid-2">
+            <div>
+              <h3 style="margin-bottom:8px;color:var(--good-text)">Returned</h3>
+              <ul class="checklist">
+                <li><span class="mark">✓</span><span>Yes or no — has this number sold as Priority or Hot in the last 365 days</span></li>
+                <li><span class="mark">✓</span><span>At most, the month it last sold</span></li>
+              </ul>
+            </div>
+            <div>
+              <h3 style="margin-bottom:8px;color:var(--critical-text)">Never returned</h3>
+              <ul class="checklist">
+                <li><span class="mark">✕</span><span>Buyer name, sale price, or lead ID</span></li>
+                <li><span class="mark">✕</span><span>Consumer name, address, or any other field</span></li>
+                <li><span class="mark">✕</span><span>Which affiliate originally sent the lead</span></li>
+                <li><span class="mark">✕</span><span>Anything at all for a number that has not sold</span></li>
+              </ul>
+            </div>
+          </div>
+          <div class="mocknote">
+            <strong>Build note.</strong> This is a suppression-list API in disguise, so the
+            containment has to be in the design, not the UI: return a boolean, rate-limit per
+            partner per day, log every query with the partner ID, and reject bulk jobs above the
+            cap rather than truncating them silently. A partner who can query without limit can
+            enumerate the database one number at a time.
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/health.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = FZData, A = FZApp;
+
+  var state = A.params();
+  A.shell(state, {
+    active: 'duplicate-check.html',
+    title: 'Duplicate check',
+    subtitle: '365-day Priority/Hot exclusivity lookup.'
+  });
+
+  /* Rate limiting is mocked here with a session counter purely so the quota
+     affordance is visible. In production it is enforced server-side, per
+     partner, and it is the actual containment — not this. */
+  var DAILY_CAP = 500;
+  var used = parseInt(sessionStorage.getItem('fz_dupe_used') || '0', 10);
+
+  function paintQuota() {
+    document.getElementById('quota').textContent =
+      A.fmtInt(used) + ' / ' + A.fmtInt(DAILY_CAP) + ' lookups used today';
+  }
+  function spend(n) {
+    used = Math.min(DAILY_CAP, used + n);
+    sessionStorage.setItem('fz_dupe_used', String(used));
+    paintQuota();
+  }
+  paintQuota();
+
+  /* ---- single lookup --------------------------------------------------- */
+  document.getElementById('single-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var host = document.getElementById('single-result');
+    var value = document.getElementById('phone').value;
+
+    if (used >= DAILY_CAP) {
+      host.innerHTML = '<div class="dupe-result"><span class="dupe-icon">▲</span><div>' +
+        '<div class="dupe-verdict">Daily lookup limit reached</div>' +
+        '<div class="dupe-meta">Resets at midnight ET. Contact your account manager to raise the cap.</div>' +
+        '</div></div>';
+      return;
+    }
+
+    var res = D.checkDuplicate(value);
+    if (!res.ok) {
+      host.innerHTML = '<div class="dupe-result"><span class="dupe-icon">▲</span><div>' +
+        '<div class="dupe-verdict">' + A.esc(res.error) + '</div></div></div>';
+      return;
+    }
+    spend(1);
+
+    host.innerHTML = res.duplicate
+      ? '<div class="dupe-result" style="border-color:var(--critical)">' +
+          '<span class="dupe-icon" style="color:var(--critical)">✕</span><div>' +
+          '<div class="dupe-verdict">Duplicate — do not acquire</div>' +
+          '<div class="dupe-meta">' + A.esc(res.phone) + ' sold as Priority or Hot in ' +
+            A.esc(res.lastSoldMonth) + '. It is inside the 365-day exclusivity window and ' +
+            'will be rejected at post.</div>' +
+          '</div></div>'
+      : '<div class="dupe-result" style="border-color:var(--good)">' +
+          '<span class="dupe-icon" style="color:var(--good)">✓</span><div>' +
+          '<div class="dupe-verdict">Clear</div>' +
+          '<div class="dupe-meta">' + A.esc(res.phone) + ' has not sold as Priority or Hot in the ' +
+            'last 365 days. Safe to acquire.</div>' +
+          '</div></div>';
+  });
+
+  /* ---- bulk ------------------------------------------------------------ */
+  var lastResults = [];
+
+  document.getElementById('bulk-file').addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      document.getElementById('bulk').value = String(reader.result);
+    };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('bulk-run').addEventListener('click', function () {
+    var raw = document.getElementById('bulk').value || '';
+    /* Accept a bare list or a CSV — take the first field of each line. */
+    var lines = raw.split(/[\r\n]+/)
+      .map(function (l) { return l.split(',')[0].trim(); })
+      .filter(function (l) { return l.length; });
+
+    if (!lines.length) return;
+
+    var remaining = DAILY_CAP - used;
+    var capped = lines.length > remaining;
+    var batch = lines.slice(0, Math.max(0, remaining));
+
+    lastResults = batch.map(function (n) { return D.checkDuplicate(n); });
+    spend(batch.length);
+
+    var dupes = lastResults.filter(function (r) { return r.ok && r.duplicate; }).length;
+    var invalid = lastResults.filter(function (r) { return !r.ok; }).length;
+
+    document.getElementById('bulk-card').style.display = '';
+    document.getElementById('bulk-export').style.display = '';
+    document.getElementById('bulk-sub').innerHTML =
+      A.fmtInt(batch.length) + ' checked · <strong>' + A.fmtInt(dupes) + ' duplicates</strong> · ' +
+      A.fmtInt(batch.length - dupes - invalid) + ' clear' +
+      (invalid ? ' · ' + A.fmtInt(invalid) + ' unreadable' : '') +
+      (capped
+        ? ' · <span style="color:var(--critical-text)">' + A.fmtInt(lines.length - batch.length) +
+          ' not checked — daily cap reached</span>'
+        : '');
+
+    var head = '<thead><tr><th>Number</th><th>Result</th><th>Last sold</th></tr></thead>';
+    var body = lastResults.map(function (r, i) {
+      if (!r.ok) {
+        return '<tr><td class="lead-id">' + A.esc(batch[i]) + '</td>' +
+          '<td><span class="badge"><span class="dot"></span>Unreadable</span></td><td>—</td></tr>';
+      }
+      return '<tr><td class="lead-id">' + A.esc(r.phone) + '</td>' +
+        '<td>' + (r.duplicate
+          ? '<span class="badge badge-crit"><span class="dot"></span>Duplicate</span>'
+          : '<span class="badge badge-good"><span class="dot"></span>Clear</span>') + '</td>' +
+        '<td>' + (r.duplicate ? A.esc(r.lastSoldMonth) : '—') + '</td></tr>';
+    }).join('');
+
+    document.getElementById('bulk-table').innerHTML = head + '<tbody>' + body + '</tbody>';
+  });
+
+  document.getElementById('bulk-export').addEventListener('click', function () {
+    A.exportCsv(lastResults.filter(function (r) { return r.ok; }), [
+      { label: 'Phone', value: function (r) { return r.phone; } },
+      { label: 'Duplicate', value: function (r) { return r.duplicate ? 'YES' : 'NO'; } },
+      { label: 'Last sold', value: function (r) { return r.duplicate ? r.lastSoldMonth : ''; } }
+    ], 'duplicate-check-results.csv');
+  });
+
+})();
+</script>
+</body>
+</html>
