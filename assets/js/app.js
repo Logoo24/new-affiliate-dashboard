@@ -196,11 +196,14 @@
         '<input type="date" id="f-to" name="to" value="' + isoDate(state.range.to) + '"></div>';
     }
 
+    /* Campaigns belong to the partner, so the list is scoped to them. */
+    var myCampaigns = D.campaignsFor(state.partnerType);
+
     if (fields.indexOf('campaign') !== -1) {
       html += '<div class="field"><label for="f-campaign">Campaign</label>' +
         '<select id="f-campaign" name="campaign">' +
         '<option value="all"' + (state.campaignId === 'all' ? ' selected' : '') + '>All campaigns</option>' +
-        D.CAMPAIGNS.map(function (c) {
+        myCampaigns.map(function (c) {
           return '<option value="' + c.id + '"' + (c.id === state.campaignId ? ' selected' : '') + '>' +
             esc(c.name) + '</option>';
         }).join('') +
@@ -209,7 +212,7 @@
 
     if (fields.indexOf('subid') !== -1) {
       var subs = [];
-      D.CAMPAIGNS.forEach(function (c) {
+      myCampaigns.forEach(function (c) {
         if (state.campaignId !== 'all' && c.id !== state.campaignId) return;
         c.subids.forEach(function (s) { subs.push(s); });
       });
@@ -235,7 +238,9 @@
     if (fields.indexOf('sold') !== -1) {
       html += '<div class="field"><label for="f-sold">Sold type</label>' +
         '<select id="f-sold" name="sold">' +
-        [['all', 'Any outcome'], ['ph', 'Priority or Hot'], ['priority', 'Priority'], ['hot', 'Hot'],
+        [['all', 'Any outcome'], ['ph', 'Priority or Hot'],
+         ['livetransfer', 'Live transfer'], ['appointment', 'Appointment'],
+         ['priority', 'Priority'], ['hot', 'Hot'],
          ['auction', 'Auction'], ['marketplace', 'Marketplace'], ['unsold', 'Not yet sold']].map(function (o) {
           return '<option value="' + o[0] + '"' + (state.sold === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
         }).join('') +
@@ -315,10 +320,11 @@
       return '<span class="badge badge-unsold"><span class="dot"></span>Not yet sold</span>';
     }
     var map = {
+      livetransfer: 'badge-livetransfer', appointment: 'badge-appointment',
       priority: 'badge-priority', hot: 'badge-hot',
       auction: 'badge-auction', marketplace: 'badge-market'
     };
-    return '<span class="badge ' + map[soldType] + '"><span class="dot"></span>' +
+    return '<span class="badge ' + (map[soldType] || '') + '"><span class="dot"></span>' +
       D.SOLD_TYPES[soldType].label + '</span>';
   }
 
@@ -365,6 +371,71 @@
     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
 
+  /**
+   * Export control — download a CSV, or send it to Google Drive.
+   *
+   * The CSV download is real and works. **Google Drive is mocked**: it shows
+   * the confirmation an affiliate would see and nothing leaves the browser.
+   * Wiring it up needs a Drive OAuth scope per partner and a service account —
+   * see HANDOFF.md before anyone assumes this half exists.
+   *
+   * Both paths serialise the SAME projected rows the table renders, so a CPL
+   * partner's export cannot carry a revenue column: the field is not on the
+   * object to begin with.
+   */
+  function exportControl(host, getExport) {
+    host.innerHTML =
+      '<div class="export">' +
+        '<button type="button" class="btn btn-sm" data-export-toggle>Export ▾</button>' +
+        '<div class="export-menu" data-export-menu>' +
+          '<button type="button" data-export="csv">' +
+            '<span class="ico">↓</span>' +
+            '<span><strong>Download CSV</strong>' +
+            '<span class="sub">Opens in Excel or Sheets</span></span>' +
+          '</button>' +
+          '<button type="button" data-export="drive">' +
+            '<span class="ico">▲</span>' +
+            '<span><strong>Send to Google Drive</strong>' +
+            '<span class="sub">Saves to your shared reports folder</span></span>' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+
+    var menu = host.querySelector('[data-export-menu]');
+    var toggle = host.querySelector('[data-export-toggle]');
+
+    toggle.addEventListener('click', function (e) {
+      e.stopPropagation();
+      menu.classList.toggle('is-open');
+    });
+    document.addEventListener('click', function () { menu.classList.remove('is-open'); });
+    menu.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    host.querySelectorAll('[data-export]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        menu.classList.remove('is-open');
+        var spec = getExport();
+        if (b.dataset.export === 'csv') {
+          exportCsv(spec.rows, spec.columns, spec.filename);
+          toast(spec.toastHost, 'Downloaded <strong>' + esc(spec.filename) + '</strong> — ' +
+            fmtInt(spec.rows.length) + ' rows.');
+        } else {
+          toast(spec.toastHost,
+            'Saved <strong>' + esc(spec.filename) + '</strong> to Google Drive → ' +
+            '<strong>Financialize Reports</strong>. ' +
+            '<span style="color:var(--ink-muted)">Mock-up — nothing was actually sent.</span>');
+        }
+      });
+    });
+  }
+
+  function toast(host, html) {
+    if (!host) return;
+    host.innerHTML = '<div class="export-toast"><span>✓</span><span>' + html + '</span></div>';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { host.innerHTML = ''; }, 8000);
+  }
+
   /* ---------------------------------------------------------------------- */
   /* Chart view toggle (plot ⇄ table twin)                                  */
   /* ---------------------------------------------------------------------- */
@@ -401,6 +472,7 @@
     soldBadge: soldBadge,
     deltaHtml: deltaHtml,
     exportCsv: exportCsv,
+    exportControl: exportControl,
     viewToggle: viewToggle
   };
 

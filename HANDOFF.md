@@ -80,6 +80,27 @@ ipqs_score · ipqs_rules_fired · clawback_reason · campaign_cost
 **In production there is no partner-type selector.** Partner type comes off the session and
 cannot be chosen. The selector exists here only so reviewers can see both views.
 
+### DECISION — rejected-but-sold leads ARE visible to RevShare partners
+
+**This overrides the affiliate context document.** That doc (§16) lists "rejected-but-sold rows"
+under *never exposed to any partner, rev-share included*, and cites the July 31 Heritage
+spreadsheet as the failure mode. **Logan ruled on August 5 2026 that the doc is wrong on this
+point:** RevShare partners do get to see that rejected leads are being worked and which of them
+convert.
+
+The reasoning holds up. A RevShare partner is paid 40% of any sale, accepted or not. Hiding those
+rows would understate what we owe them and make their invoice impossible to reconcile — Madrivo's
+framing of the whole point is *"to make sure our revenue and lead amounts match up."* What made
+the July 31 leak a leak was the **Profit column, Buyer Name, CSR Name and Call Result**, all of
+which remain forbidden to everyone.
+
+In the mock data this is **276 rejected-but-sold leads worth $6,808 — about 12.6% of RevShare
+earnings.** Not a rounding error.
+
+**For CPL partners nothing changes: they must never learn these exist.** See the row rule below.
+
+---
+
 ### The row rule: for CPL partners, a rejected lead dies at the door
 
 This is a **row-level** rule on top of the column allowlist, and it is the more important half.
@@ -187,6 +208,49 @@ score uses, so the Performance page and the scorecard can never disagree.
 
 ---
 
+## Partner-specific criteria exceptions — must be carried everywhere
+
+The two demo partners are the real ones, on their real terms:
+
+| | Comp | Products | Integration | Accepted age band |
+|---|---|---|---|---|
+| **Annuity Heritage Group** | 40% revenue share | Annuity | Their funnel → our API | 45–75 (standard) |
+| **OptiLabX Media** | Tiered CPL $102 / $90 / $27 | Annuity + Life | Our landing pages | **45–79 (negotiated)** |
+
+OptiLabX's band is a **commercial term, not a data error.** It has already cost us twice — a
+$5,194 invoice variance and 55 leads (~$4,000) wrongly flagged on a July unfire list.
+
+Every criteria label in this UI renders through `rejectLabel(reason, partnerType)`, so an
+OptiLabX lead reads *"Age outside 45–79 criteria"* and a Heritage lead reads *"45–75"*. **If the
+build ever computes acceptance or eligibility, it has to be exception-aware the same way** — a
+hardcoded 45–75 anywhere will misreport our largest partner.
+
+---
+
+## New sale tiers — POINTS NEED MICHAEL'S SIGN-OFF
+
+Appointment booking (~$750) and Live transfer (~$1,000) launched this month. Both are modelled,
+both appear in the tier mix, and both sit above Priority. The point values are **my proposal, not
+a decision**:
+
+| Tier | Price | Points | Source |
+|---|---|---|---|
+| Live transfer | ~$1,000 | **14** | proposed |
+| Appointment | ~$750 | **12** | proposed |
+| Priority | ~$500 | 10 | Michael |
+| Hot | ~$400–475 | 8 | Michael |
+| Auction | low | −3 | Michael ("negative") |
+| Marketplace | ~$10–20 | −4 | Michael ("negative") |
+
+The North Star metric deliberately still counts **Priority + Hot only** — that is Michael's KPI
+and I did not redefine it. The new tiers are reported alongside rather than folded in. If they
+should count toward the headline number, that is a one-line change and his call.
+
+Also: the revenue-share rate is now per-partner rather than hardcoded at 40%, because
+annuity.org runs at 85%.
+
+---
+
 ## Spend & volume targets — NOT BUILT, needs an admin screen
 
 The affiliate-facing half is mocked (targets card on Performance, plus a dashed target line on
@@ -257,8 +321,23 @@ example, where 3.6% of volume produced 82% of revenue. The dashboard must never 
 blending for the affiliate.
 
 **Leads.** Defaults to Last 30 days rather than 7, deliberately: at 7 days every row's sold
-column is still blank, which is the exact complaint this replaces. CSV export covers the full
+column is still blank, which is the exact complaint this replaces. Export covers the full
 filtered set, not the visible page — this is the file currently assembled by hand every day.
+
+**Export — CSV works, Google Drive is mocked.** The CSV path is real. The Drive path shows the
+confirmation an affiliate would see and **nothing leaves the browser**. Wiring it up needs a
+Drive OAuth scope per partner plus a service account and a destination folder convention; none
+of that exists. Do not assume that half is built.
+
+**Three affiliate-facing stats were added** beyond the original spec, each because the context
+made the case for it:
+
+- **Investable-asset band performance**, with $100K–$250K flagged. It converts materially better
+  and holds across months — the highest-leverage targeting change most partners can make.
+- **Arrival-window performance.** 6–9a arrivals convert far better, so the coverage ask points
+  at early morning. An earlier draft asked for *evening* volume, which was backwards.
+- **Tier mix and average sale price**, explicitly requested by Heritage. RevShare sees the
+  earnings column; CPL sees the mix and share only, because sale price is revenue.
 
 **Duplicate check.** Returns a boolean and at most the month it last sold. Nothing else. This is
 a suppression-list API in disguise, so the containment has to be in the design: rate-limit per

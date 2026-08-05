@@ -4,47 +4,40 @@
    TWO THINGS LIVE IN THIS FILE, AND THE SECOND ONE IS THE IMPORTANT ONE.
 
    1. A deterministic generator that fabricates ~4 months of realistic lead
-      traffic so the mock-up has something to render. This is throwaway — in
-      production it is replaced by a MySQL query.
+      traffic so the mock-up has something to render. Throwaway — in production
+      it is replaced by a MySQL query.
 
-   2. queryLeads() — the visibility firewall. It is written as an ALLOWLIST
-      projection: it builds each returned row field-by-field from a per-partner-
-      type column list. Fields that a partner type may not see are never copied
-      onto the object, so they cannot be read back out of the DOM, the CSV
-      export, or the browser console.
+   2. queryLeads() — the visibility firewall. An ALLOWLIST projection: each
+      returned row is built field-by-field from a per-partner-type column list,
+      so a field a partner may not see is never copied onto the object and
+      cannot be read out of the DOM, a CSV export, or the console.
 
-      THIS IS THE PATTERN THE PHP BUILD SHOULD COPY. It is not a UI toggle and
-      it must not become one. Spec §3.1: "Build the redaction as a data-layer
-      rule, not a UI toggle... If the query never returns the column, it can
-      never render."
-
-      The equivalent PHP is two different SELECT lists, not one SELECT plus an
-      `if` in the template:
+      THIS IS THE PATTERN THE PHP BUILD SHOULD COPY. Two different SELECT
+      lists, not one SELECT plus an `if` in the template:
 
         // RevShare partner
         SELECT l.id, l.received_at, l.subid, l.campaign_id, l.status,
-               l.reject_reason, l.sold_type, l.sold_at, l.days_to_sale,
-               l.sale_amount, ROUND(l.sale_amount * p.rev_share_pct, 2) AS partner_share
+               l.reject_reason, l.asset_band, l.sold_type, l.sold_at,
+               l.days_to_sale, l.sale_amount,
+               ROUND(l.sale_amount * p.rev_share_pct, 2) AS partner_share
           FROM leads l JOIN partners p ON p.id = l.partner_id
          WHERE l.partner_id = ? AND l.received_at BETWEEN ? AND ?
 
-        // Flat / tiered CPL partner — sale_amount is not in the statement AT
-        // ALL, and outcome columns are nulled on rejected rows via CASE so a
-        // declined lead reveals nothing about what happened to it afterwards.
+        // Flat / tiered CPL partner — sale_amount is not in the statement at
+        // all, and outcome columns are nulled on rejected rows.
         SELECT l.id, l.received_at, l.subid, l.campaign_id, l.status,
-               l.reject_reason,
-               CASE WHEN l.status = 'paid' THEN l.sold_type     END AS sold_type,
-               CASE WHEN l.status = 'paid' THEN l.sold_at       END AS sold_at,
-               CASE WHEN l.status = 'paid' THEN l.days_to_sale  END AS days_to_sale
+               l.reject_reason, l.asset_band,
+               CASE WHEN l.status = 'paid' THEN l.sold_type    END AS sold_type,
+               CASE WHEN l.status = 'paid' THEN l.sold_at      END AS sold_at,
+               CASE WHEN l.status = 'paid' THEN l.days_to_sale END AS days_to_sale
           FROM leads l
          WHERE l.partner_id = ? AND l.received_at BETWEEN ? AND ?
 
-        // ...and any CPL query that filters BY sold_at must also exclude
-        // rejected rows outright, or a row count alone leaks the fact that we
-        // work leads we declined:
+        // ...and any CPL query filtering BY sold_at must also add
         //     AND l.status = 'paid'
+        // or the row count alone leaks that we work leads we declined.
 
-      Columns that appear in NEITHER list, for ANY partner type:
+      Columns in NEITHER list, for ANY partner type:
         lead_cost, margin, margin_pct, buyer_name, csr_name, call_result,
         ipqs_score, ipqs_rules_fired, clawback_reason, campaign_cost
    ========================================================================== */
@@ -70,8 +63,8 @@
   function pick(arr) { return arr[Math.floor(rnd() * arr.length)]; }
   function between(lo, hi) { return lo + rnd() * (hi - lo); }
   function intBetween(lo, hi) { return Math.floor(between(lo, hi + 1)); }
+  function round2(n) { return Math.round(n * 100) / 100; }
 
-  /* Weighted pick: [[value, weight], ...] */
   function weighted(pairs) {
     var total = 0, i;
     for (i = 0; i < pairs.length; i++) total += pairs[i][1];
@@ -87,38 +80,62 @@
   /* Reference data                                                         */
   /* ---------------------------------------------------------------------- */
 
-  /* "Today" is pinned so the mock-up is stable for review. In production this
-     is simply NOW(); nothing else about the date logic changes. */
-  var TODAY = new Date(2026, 7, 5);           // 2026-08-05, local
-  var HISTORY_DAYS = 120;                     // enough for a 90-day benchmark
+  var TODAY = new Date(2026, 7, 5);          /* pinned so the mock is stable */
+  var HISTORY_DAYS = 120;
+  var NEW_PRODUCT_LAUNCH = new Date(2026, 7, 1);   /* Aug 1 2026 */
 
-  /* Rejection reasons are written in the affiliate's language, not ours.
-     Each carries the fix, because a reason with no fix is just a complaint.
-     Spec §3.2 Module B. */
+  /* Sale tiers. Prices are the real ones — Priority ~$500, Hot ~$400-475,
+     Marketplace ~$10-20. Appointment booking and Live transfer launched
+     August 2026, so they only appear in the last few days of the data.
+
+     POINTS: Michael's system is Priority 10 / Hot 8 / Auction & Marketplace
+     negative. The two new tiers sit above Priority, so they are scored above
+     it here — those two values are my proposal and NEED HIS SIGN-OFF. */
+  var SOLD_TYPES = {
+    livetransfer: { label: 'Live transfer', short: 'Live',   points: 14, price: [900, 1150], premium: true, launched: true },
+    appointment:  { label: 'Appointment',   short: 'Appt',   points: 12, price: [680, 820],  premium: true, launched: true },
+    priority:     { label: 'Priority',      short: 'Priority', points: 10, price: [450, 560], premium: true },
+    hot:          { label: 'Hot',           short: 'Hot',    points: 8,  price: [395, 480],  premium: true },
+    auction:      { label: 'Auction',       short: 'Auction', points: -3, price: [45, 95] },
+    marketplace:  { label: 'Marketplace',   short: 'Market', points: -4, price: [10, 22] }
+  };
+
+  /* The North Star bucket stays Priority + Hot — Michael's KPI, unchanged.
+     The two new tiers are reported alongside it rather than folded into it. */
+  var NORTH_STAR_TYPES = ['priority', 'hot'];
+  var NEW_TIER_TYPES = ['livetransfer', 'appointment'];
+
+  /* Rejection reasons in the affiliate's language, each with the fix.
+     `age` is rendered through rejectLabel() because the accepted band is a
+     negotiated commercial term that differs by partner. */
   var REJECT_REASONS = {
     duplicate: {
       label: 'Duplicate — sold as Priority/Hot in last 365 days',
       fix: 'Screen the number in Duplicate Check before you pay to acquire it.'
     },
+    assets: {
+      label: 'Investable assets under $25,000',
+      fix: 'Under $25K never pays under any model. Add an assets question to the funnel.'
+    },
     advisor: {
       label: 'Financial advisor or industry professional',
-      fix: 'Add an occupation exclusion to your form or suppress advisor lists.'
+      fix: 'Add an occupation exclusion or suppress advisor lists.'
     },
     consent: {
       label: 'Consent / sign-up not captured',
-      fix: 'Confirm the TCPA disclosure is on the page and the token is posting.'
+      fix: 'Confirm the TCPA disclosure is on the page and the certificate is posting.'
     },
     ipqs: {
       label: 'Failed contact validation',
       fix: 'Phone or email did not validate. Check traffic source quality.'
     },
     age: {
-      label: 'Age outside 45–75 criteria',
+      label: 'Age outside accepted criteria',
       fix: 'Add an age gate to the funnel before the lead posts.'
     },
     state: {
-      label: 'State not currently open',
-      fix: 'See Coverage Asks on the Health Scorecard for open states.'
+      label: 'State not accepted',
+      fix: 'New York is never accepted. See Coverage for the states we want most.'
     },
     contact: {
       label: 'Bad contact — wrong number or disconnected',
@@ -126,90 +143,213 @@
     }
   };
 
-  var SOLD_TYPES = {
-    priority:    { label: 'Priority',    points:  10, exclusivity: 365 },
-    hot:         { label: 'Hot',         points:   8, exclusivity: 365 },
-    auction:     { label: 'Auction',     points:  -3, exclusivity:  30 },
-    marketplace: { label: 'Marketplace', points:  -4, exclusivity:  30 }
+  /* Investable-asset bands. Under $25K never pays, under any comp model.
+     The $100K–$250K band converts materially better than anything else and
+     holds across months — the single highest-leverage targeting change most
+     partners can make, so the dashboard surfaces it explicitly. */
+  var ASSET_BANDS = [
+    { key: 'end',   label: 'Under $25K',    weight: 9,  yield: 0,    payable: false, cpl: 0 },
+    { key: 'low',   label: '$25K – $50K',   weight: 16, yield: 0.55, payable: true,  cpl: 27 },
+    { key: 'mid1',  label: '$50K – $100K',  weight: 20, yield: 0.88, payable: true,  cpl: 90 },
+    { key: 'sweet', label: '$100K – $250K', weight: 23, yield: 1.55, payable: true,  cpl: 90, focus: true },
+    { key: 'mid2',  label: '$250K – $500K', weight: 18, yield: 1.18, payable: true,  cpl: 90 },
+    { key: 'high',  label: '$500K+',        weight: 14, yield: 1.02, payable: true,  cpl: 102 }
+  ];
+  var ASSET_BY_KEY = {};
+  ASSET_BANDS.forEach(function (b) { ASSET_BY_KEY[b.key] = b; });
+
+  /* ---------------------------------------------------------------------- */
+  /* Partners                                                               */
+  /* ---------------------------------------------------------------------- */
+
+  /* Two real partners, matched to their actual commercial terms:
+       · Annuity Heritage Group — 40% revenue share, annuity only, posts to
+         our API from their own funnel. The loudest voice on visibility.
+       · OptiLabX Media — TIERED CPL ($102 / $90 / $27), annuity + life, runs
+         on our landing pages. Carries a negotiated age band of 45–79 rather
+         than the standard 45–75. That exception has already caused a $5,194
+         invoice variance and wrongly flagged 55 leads on an unfire list, so
+         every criteria label in this UI is rendered through rejectLabel()
+         with the partner's own band. */
+  var PARTNER_TYPES = {
+    revshare: {
+      key: 'revshare',
+      name: 'Annuity Heritage Group',
+      compModel: 'Revenue share — 40%',
+      shortModel: 'RevShare 40%',
+      seesEarnings: true,
+      revSharePct: 0.40,
+      ageBand: '45–75',
+      products: 'Annuity',
+      integration: 'Their funnel → our API'
+    },
+    cpl: {
+      key: 'cpl',
+      name: 'OptiLabX Media',
+      compModel: 'Tiered CPL — $102 / $90 / $27',
+      shortModel: 'Tiered CPL',
+      seesEarnings: false,
+      revSharePct: 0,
+      ageBand: '45–79',                 /* negotiated exception, not an error */
+      products: 'Annuity + Life',
+      integration: 'Our landing pages'
+    }
   };
 
-  /* Four campaigns for the first build target (spec §7: OptiLabX). The fresh
-     vs aged split is deliberate — blended they read as one mediocre campaign,
-     split they read as one excellent campaign and one large low-yield one.
-     Spec §6 requires the dashboard break this out natively. */
+  function partner(partnerType) {
+    return PARTNER_TYPES[partnerType === 'revshare' ? 'revshare' : 'cpl'];
+  }
+
+  /** Criteria labels must carry the partner's negotiated band. */
+  function rejectLabel(key, partnerType) {
+    if (key === 'age') return 'Age outside ' + partner(partnerType).ageBand + ' criteria';
+    return REJECT_REASONS[key] ? REJECT_REASONS[key].label : key;
+  }
+  function rejectFix(key) {
+    return REJECT_REASONS[key] ? REJECT_REASONS[key].fix : '';
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Campaigns                                                              */
+  /* ---------------------------------------------------------------------- */
+
+  /* Heritage's fresh/aged split is the live example of why campaigns must be
+     broken out natively: a small excellent campaign and a large low-yield one
+     blend into a single mediocre-looking account. */
   var CAMPAIGNS = [
     {
-      id: 'OPX-ANN-FRESH', name: 'Annuity — Fresh Web', product: 'Annuity',
-      kind: 'fresh', perDay: [5, 10], acceptRate: 0.79,
-      sold: { priority: 0.13, hot: 0.10, auction: 0.05, marketplace: 0.04 },
-      rejectMix: [['ipqs', 30], ['duplicate', 22], ['consent', 16], ['advisor', 12], ['age', 10], ['state', 6], ['contact', 4]],
+      id: '596', name: 'Annuity — Fresh', partnerType: 'revshare',
+      product: 'Annuity', kind: 'fresh', perDay: [4, 8], acceptRate: 0.80,
+      sold: { priority: 0.16, hot: 0.13, auction: 0.05, marketplace: 0.04 },
+      rejectMix: [['ipqs', 26], ['duplicate', 24], ['consent', 15], ['assets', 13], ['advisor', 10], ['age', 8], ['state', 4]],
+      cycle: [7, 13],
+      subids: [
+        { id: 'ahg_search_brand', label: 'Search — brand',    share: 0.31, quality: 1.30 },
+        { id: 'ahg_search_gen',   label: 'Search — generic',  share: 0.27, quality: 1.06 },
+        { id: 'ahg_native_a',     label: 'Native — placement A', share: 0.23, quality: 0.84 },
+        { id: 'ahg_display_rt',   label: 'Display — retarget', share: 0.19, quality: 0.58 }
+      ]
+    },
+    {
+      id: '597', name: 'Annuity — Aged under 6mo', partnerType: 'revshare',
+      product: 'Annuity', kind: 'aged', perDay: [10, 16], acceptRate: 0.62,
+      sold: { priority: 0.035, hot: 0.045, auction: 0.08, marketplace: 0.10 },
+      rejectMix: [['duplicate', 32], ['age', 20], ['contact', 16], ['assets', 12], ['ipqs', 11], ['consent', 6], ['advisor', 3]],
+      cycle: [10, 19],
+      subids: [
+        { id: 'ahg_aged_a', label: 'Aged batch A', share: 0.52, quality: 1.02 },
+        { id: 'ahg_aged_b', label: 'Aged batch B', share: 0.48, quality: 0.88 }
+      ]
+    },
+    {
+      id: '600', name: 'Annuity — Aged over 6mo', partnerType: 'revshare',
+      product: 'Annuity', kind: 'aged', perDay: [22, 34], acceptRate: 0.48,
+      sold: { priority: 0.004, hot: 0.008, auction: 0.07, marketplace: 0.13 },
+      rejectMix: [['duplicate', 34], ['age', 24], ['contact', 18], ['assets', 10], ['ipqs', 9], ['consent', 3], ['state', 2]],
+      cycle: [12, 22],
+      subids: [
+        { id: 'ahg_bulk_1', label: 'Bulk import 1', share: 0.55, quality: 0.92 },
+        { id: 'ahg_bulk_2', label: 'Bulk import 2', share: 0.45, quality: 0.80 }
+      ]
+    },
+
+    {
+      id: 'OPX-ANN-LP', name: 'Annuity — Landing page', partnerType: 'cpl',
+      product: 'Annuity', kind: 'fresh', perDay: [12, 20], acceptRate: 0.78,
+      sold: { priority: 0.12, hot: 0.10, auction: 0.05, marketplace: 0.04 },
+      rejectMix: [['ipqs', 27], ['duplicate', 23], ['assets', 16], ['consent', 13], ['advisor', 10], ['age', 7], ['state', 4]],
       cycle: [7, 14],
       subids: [
-        { id: 'opx_search_brand', label: 'Search — brand',      share: 0.30, quality: 1.28 },
-        { id: 'opx_search_gen',   label: 'Search — generic',    share: 0.26, quality: 1.05 },
+        { id: 'opx_search_brand', label: 'Search — brand',     share: 0.30, quality: 1.28 },
+        { id: 'opx_search_gen',   label: 'Search — generic',   share: 0.26, quality: 1.04 },
         { id: 'opx_native_a',     label: 'Native — placement A', share: 0.24, quality: 0.86 },
-        { id: 'opx_display_rt',   label: 'Display — retarget',  share: 0.20, quality: 0.62 }
+        { id: 'opx_display_rt',   label: 'Display — retarget', share: 0.20, quality: 0.60 }
       ]
     },
     {
-      id: 'OPX-ANN-AGED', name: 'Annuity — Aged 6mo', product: 'Annuity',
-      kind: 'aged', perDay: [16, 26], acceptRate: 0.62,
-      sold: { priority: 0.012, hot: 0.020, auction: 0.09, marketplace: 0.13 },
-      rejectMix: [['duplicate', 34], ['age', 24], ['contact', 16], ['ipqs', 12], ['advisor', 6], ['consent', 5], ['state', 3]],
-      cycle: [11, 22],
-      subids: [
-        { id: 'opx_aged_batch1', label: 'Aged batch 1', share: 0.34, quality: 0.92 },
-        { id: 'opx_aged_batch2', label: 'Aged batch 2', share: 0.33, quality: 1.02 },
-        { id: 'opx_aged_batch3', label: 'Aged batch 3', share: 0.33, quality: 0.88 }
-      ]
-    },
-    {
-      id: 'OPX-LIFE-FRESH', name: 'Life — Fresh Web', product: 'Life',
-      kind: 'fresh', perDay: [4, 8], acceptRate: 0.74,
-      sold: { priority: 0.10, hot: 0.11, auction: 0.06, marketplace: 0.05 },
-      rejectMix: [['ipqs', 28], ['consent', 20], ['duplicate', 18], ['contact', 14], ['state', 10], ['advisor', 6], ['age', 4]],
-      cycle: [6, 13],
-      subids: [
-        { id: 'opx_life_search', label: 'Search — life',   share: 0.42, quality: 1.16 },
-        { id: 'opx_life_social', label: 'Social — life',   share: 0.33, quality: 0.94 },
-        { id: 'opx_life_email',  label: 'Email — partner', share: 0.25, quality: 0.74 }
-      ]
-    },
-    {
-      id: 'OPX-ANN-FB', name: 'Annuity — Social', product: 'Annuity',
-      kind: 'fresh', perDay: [6, 12], acceptRate: 0.68,
-      sold: { priority: 0.075, hot: 0.085, auction: 0.07, marketplace: 0.07 },
-      rejectMix: [['age', 26], ['ipqs', 22], ['duplicate', 18], ['consent', 14], ['contact', 11], ['advisor', 6], ['state', 3]],
+      id: 'OPX-ANN-EMAIL', name: 'Annuity — Email', partnerType: 'cpl',
+      product: 'Annuity', kind: 'fresh', perDay: [10, 16], acceptRate: 0.66,
+      sold: { priority: 0.08, hot: 0.09, auction: 0.06, marketplace: 0.06 },
+      rejectMix: [['duplicate', 26], ['ipqs', 22], ['assets', 18], ['age', 13], ['contact', 11], ['consent', 7], ['advisor', 3]],
       cycle: [9, 17],
       subids: [
-        { id: 'opx_fb_lookalike', label: 'Social — lookalike', share: 0.38, quality: 1.10 },
-        { id: 'opx_fb_interest',  label: 'Social — interest',  share: 0.34, quality: 0.90 },
-        { id: 'opx_fb_broad',     label: 'Social — broad',     share: 0.28, quality: 0.55 }
+        { id: 'opx_email_house', label: 'Email — house file', share: 0.44, quality: 1.12 },
+        { id: 'opx_email_part',  label: 'Email — partner',    share: 0.33, quality: 0.90 },
+        { id: 'opx_email_cold',  label: 'Email — cold',       share: 0.23, quality: 0.54 }
+      ]
+    },
+    {
+      id: 'OPX-ANN-SPAN', name: 'Annuity — Spanish', partnerType: 'cpl',
+      product: 'Annuity', kind: 'fresh', perDay: [4, 8], acceptRate: 0.72,
+      sold: { priority: 0.10, hot: 0.10, auction: 0.05, marketplace: 0.05 },
+      rejectMix: [['ipqs', 25], ['assets', 20], ['duplicate', 18], ['consent', 15], ['age', 12], ['advisor', 6], ['state', 4]],
+      cycle: [8, 15],
+      subids: [
+        { id: 'opx_span_search', label: 'Spanish — search', share: 0.58, quality: 1.14 },
+        { id: 'opx_span_social', label: 'Spanish — social', share: 0.42, quality: 0.88 }
+      ]
+    },
+    {
+      id: 'OPX-LIFE-LP', name: 'Life — Landing page', partnerType: 'cpl',
+      product: 'Life', kind: 'fresh', perDay: [6, 11], acceptRate: 0.74,
+      sold: { priority: 0.09, hot: 0.11, auction: 0.06, marketplace: 0.05 },
+      rejectMix: [['ipqs', 26], ['consent', 20], ['duplicate', 17], ['contact', 14], ['state', 10], ['age', 8], ['advisor', 5]],
+      cycle: [6, 13],
+      subids: [
+        { id: 'opx_life_search', label: 'Search — life', share: 0.44, quality: 1.16 },
+        { id: 'opx_life_social', label: 'Social — life', share: 0.34, quality: 0.94 },
+        { id: 'opx_life_email',  label: 'Email — life',  share: 0.22, quality: 0.72 }
       ]
     }
   ];
 
-  /* Coverage: weighted to show the Pacific/Mountain late-shift gap called out
-     in the framework's Volume & Coverage pillar. */
+  function campaignsFor(partnerType) {
+    return CAMPAIGNS.filter(function (c) { return c.partnerType === partnerType; });
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Geography & timing                                                     */
+  /* ---------------------------------------------------------------------- */
+
+  /* New York is a hard exclusion and is deliberately absent from supply here;
+     the few that arrive are generated as rejects. */
   var STATES = [
     ['TX', 14], ['FL', 13], ['OH', 8], ['PA', 8], ['NC', 7], ['GA', 7],
     ['MI', 6], ['TN', 5], ['MO', 5], ['IN', 4], ['AZ', 4], ['CO', 3],
-    ['WA', 3], ['OR', 2], ['CA', 6], ['NV', 2], ['UT', 2], ['ID', 1]
+    ['WA', 3], ['CA', 6], ['NV', 2], ['UT', 2], ['NM', 1], ['KS', 1],
+    ['NE', 1], ['SD', 1]
   ];
-  var WESTERN = { AZ: 1, CO: 1, WA: 1, OR: 1, CA: 1, NV: 1, UT: 1, ID: 1 };
 
+  /* Underserved high-retiree states plus the ones we are currently short in.
+     A partner who fills these earns budget. */
+  var FOCUS_STATES = { CA: 1, NV: 1, AZ: 1, NM: 1, WA: 1 };
+  var SHORT_STATES = { CO: 1, UT: 1, NE: 1, SD: 1, KS: 1 };
+  function isCoverageState(st) { return !!(FOCUS_STATES[st] || SHORT_STATES[st]); }
+
+  /* Arrival windows. Early-morning arrivals convert materially better, so
+     that is the window we ask partners to grow — not the evening. */
+  /* Early has to carry enough volume that its conversion rate is readable —
+     at ~9% of traffic the sample was small enough that noise swamped the
+     lift and the card contradicted its own footnote. */
   var HOUR_SEGMENTS = [
-    ['early',   8],   /* 6a–9a  */
-    ['morning', 26],  /* 9a–12p */
-    ['midday',  24],  /* 12p–3p */
-    ['afternoon', 22],/* 3p–6p  */
-    ['evening', 16],  /* 6p–9p  — the late shift we are short on */
-    ['late',     4]   /* 9p+    */
+    ['early',    16],   /* 6a–9a  — the golden window */
+    ['morning',  25],
+    ['midday',   22],
+    ['afternoon', 20],
+    ['evening',  13],
+    ['late',      4]
   ];
   var HOUR_SEGMENT_LABEL = {
     early: '6a–9a', morning: '9a–12p', midday: '12p–3p',
     afternoon: '3p–6p', evening: '6p–9p', late: '9p+'
   };
+  var HOUR_SEGMENT_ORDER = ['early', 'morning', 'midday', 'afternoon', 'evening', 'late'];
+  /* Early arrivals convert better; late arrivals worse. */
+  var HOUR_YIELD = {
+    early: 2.05, morning: 1.15, midday: 0.95, afternoon: 0.85, evening: 0.70, late: 0.55
+  };
+
+  var DOW_LABEL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   /* ---------------------------------------------------------------------- */
   /* Generation                                                             */
@@ -225,9 +365,7 @@
     c.setDate(c.getDate() + n);
     return c;
   }
-  function daysBetween(a, b) {
-    return Math.round((b - a) / 86400000);
-  }
+  function daysBetween(a, b) { return Math.round((b - a) / 86400000); }
 
   function hourForSegment(seg) {
     var ranges = {
@@ -246,19 +384,16 @@
     for (var dayIdx = 0; dayIdx < HISTORY_DAYS; dayIdx++) {
       var day = addDays(start, dayIdx);
       var dow = day.getDay();
-      /* Weekends run lighter — traffic patterns should look like traffic. */
-      var dowFactor = (dow === 0) ? 0.55 : (dow === 6) ? 0.68 : 1;
-      /* A slow upward drift over the window so trends are not flat noise. */
+      /* Monday–Wednesday is the strongest revenue window, Wednesday biggest;
+         weekends run light and carry the worst COGS. */
+      var dowFactor = [0.55, 1.06, 1.10, 1.14, 1.00, 0.92, 0.66][dow];
       var drift = 0.86 + (dayIdx / HISTORY_DAYS) * 0.30;
 
       for (var c = 0; c < CAMPAIGNS.length; c++) {
         var camp = CAMPAIGNS[c];
         var base = between(camp.perDay[0], camp.perDay[1]);
         var count = Math.max(0, Math.round(base * dowFactor * drift));
-
-        for (var i = 0; i < count; i++) {
-          leads.push(makeLead(camp, day, ++counter));
-        }
+        for (var i = 0; i < count; i++) leads.push(makeLead(camp, day, ++counter));
       }
     }
 
@@ -275,29 +410,26 @@
                             hourForSegment(seg), intBetween(0, 59), intBetween(0, 59));
 
     var state = weighted(STATES);
-
-    /* Acceptance scales with sub-ID quality — this is what makes the sub-ID
-       drilldown worth building: the account average hides the bad publisher. */
-    var accept = Math.min(0.94, camp.acceptRate * (0.72 + 0.28 * q));
-    var isPaid = rnd() < accept;
+    var band = weighted(ASSET_BANDS.map(function (b) { return [b, b.weight]; }));
 
     var lead = {
       id: 'FZ-' + seq,
       receivedAt: received,
+      partnerType: camp.partnerType,
       campaignId: camp.id,
+      campaignName: camp.name,
       campaignKind: camp.kind,
       product: camp.product,
       subid: sub.id,
       subidLabel: sub.label,
       state: state,
       hourSegment: seg,
-      status: isPaid ? 'paid' : 'free',
+      assetBand: band.key,
+      status: 'paid',
       rejectReason: null,
       soldType: null,
       soldAt: null,
       daysToSale: null,
-
-      /* ---- RevShare-visible ---------------------------------------- */
       saleAmount: 0,
       partnerShare: 0,
 
@@ -312,31 +444,31 @@
       _badContact: false
     };
 
+    /* Under $25K investable never pays, under any comp model. */
+    var forcedReject = !band.payable;
+    var accept = Math.min(0.94, camp.acceptRate * (0.72 + 0.28 * q));
+    var isPaid = !forcedReject && rnd() < accept;
+
+    var pct = partner(camp.partnerType).revSharePct;
+
     if (!isPaid) {
-      lead.rejectReason = weighted(camp.rejectMix);
+      lead.status = 'free';
+      lead.rejectReason = forcedReject ? 'assets' : weighted(camp.rejectMix);
 
-      /* REJECTED-BUT-SOLD. A lead we declined at our own bar can still find a
-         buyer, and it costs us nothing because we never paid for it.
+      /* REJECTED-BUT-SOLD. A lead we declined can still find a buyer, and it
+         costs us nothing because we never paid for it.
 
-         This category is the whole reason the two partner views differ in
-         substance rather than just in column count:
-
-           · A RevShare partner IS PAID on these. They take 40% of any sale,
-             accepted or not, so hiding them would understate what we owe.
-           · A CPL partner must never learn they exist. From their side a
-             rejected lead dies at the door. Showing them that we sold a lead
-             we declined to pay for is a rate negotiation we hand them for
-             free — see the projection rule in runQuery(). */
+         RevShare partners SEE these and are paid on them — confirmed by Logan
+         Aug 2026, overriding the blanket rule in the context doc. CPL partners
+         must never learn they exist; see the row rule in runQuery(). */
       lead._leadCost = 0;
-      applyOutcome(lead, camp, received, rejectedSellRates(camp), q);
+      applyOutcome(lead, camp, received, rejectedSellRates(camp), q, band, seg, pct);
       lead._badContact = rnd() < (0.11 / Math.max(0.5, q));
       return lead;
     }
 
-    /* --- Accepted leads: we paid for these ----------------------------- */
-
-    lead._leadCost = round2(between(11, 34));
-    applyOutcome(lead, camp, received, camp.sold, q);
+    lead._leadCost = round2(band.cpl * between(0.92, 1.08));
+    applyOutcome(lead, camp, received, camp.sold, q, band, seg, pct);
 
     lead._csrName = pick(['D. Alvarez', 'M. Chen', 'R. Whitfield', 'T. Okafor', 'J. Reyes']);
     lead._callResult = pick(['Contacted — qualified', 'Contacted — not qualified',
@@ -358,10 +490,14 @@
     };
   }
 
-  function applyOutcome(lead, camp, received, rates, q) {
+  function applyOutcome(lead, camp, received, rates, q, band, seg, revSharePct) {
+    /* Asset band and arrival window both move conversion. The $100K–$250K
+       band and the 6–9a window are the two biggest levers a partner has. */
+    var lift = band.yield * (HOUR_YIELD[seg] || 1);
+
     var r = rnd();
-    var pPriority = rates.priority * q;
-    var pHot      = rates.hot * q;
+    var pPriority = rates.priority * q * lift;
+    var pHot      = rates.hot * q * lift;
     var pAuction  = rates.auction;
     var pMarket   = rates.marketplace;
 
@@ -375,28 +511,27 @@
     var cycle = Math.round(between(camp.cycle[0], camp.cycle[1]));
     var soldAt = addDays(received, cycle);
     /* A lead cannot have sold in the future. Leads inside the maturity buffer
-       are simply still cooking — that is not missing data. */
+       are still cooking — that is not missing data. */
     if (soldAt > TODAY) return;
 
+    /* Appointment booking and Live transfer launched Aug 2026. A small slice
+       of what would have been Priority now routes to them. */
+    if (soldType === 'priority' && soldAt >= NEW_PRODUCT_LAUNCH) {
+      var roll = rnd();
+      if (roll < 0.14) soldType = 'appointment';
+      else if (roll < 0.20) soldType = 'livetransfer';
+    }
+
+    var price = SOLD_TYPES[soldType].price;
     lead.soldType = soldType;
     lead.soldAt = soldAt;
     lead.daysToSale = cycle;
-    lead.saleAmount = round2(salePrice(soldType));
-    /* 40% of any sale, accepted or rejected. */
-    lead.partnerShare = round2(lead.saleAmount * 0.40);
+    lead.saleAmount = round2(between(price[0], price[1]));
+    lead.partnerShare = round2(lead.saleAmount * revSharePct);
     lead._margin = round2(lead.saleAmount - lead._leadCost - lead.partnerShare);
     lead._buyerName = pick(['Meridian Retirement', 'Crestline Financial', 'Oakhaven Advisors',
                             'Summit Wealth Partners', 'Brightwater Group']);
   }
-
-  function salePrice(type) {
-    if (type === 'priority')    return between(210, 340);
-    if (type === 'hot')         return between(140, 225);
-    if (type === 'auction')     return between(38, 72);
-    return between(18, 44);     /* marketplace */
-  }
-
-  function round2(n) { return Math.round(n * 100) / 100; }
 
   var ALL_LEADS = generate();
 
@@ -404,81 +539,38 @@
   /* THE FIREWALL                                                           */
   /* ====================================================================== */
 
-  /* Columns each partner type is permitted to receive. Anything not named
-     here is never copied onto the returned object. Adding a column to the
-     dashboard means adding it to this list on purpose. */
   var COLUMNS = {
     /* Identity and intake. Every partner type gets all of this, including the
        rejection reason — a partner cannot fix what they cannot see. */
     base: [
-      'id', 'receivedAt', 'campaignId', 'campaignKind', 'product',
-      'subid', 'subidLabel', 'state', 'hourSegment',
+      'id', 'receivedAt', 'campaignId', 'campaignName', 'campaignKind', 'product',
+      'subid', 'subidLabel', 'state', 'hourSegment', 'assetBand',
       'status', 'rejectReason'
     ],
-    /* What happened to the lead after intake. Withheld on REJECTED rows for
-       CPL partners — see the row rule in runQuery(). */
+    /* What happened after intake. Withheld on REJECTED rows for CPL. */
     outcome: ['soldType', 'soldAt', 'daysToSale'],
     /* Money. RevShare only, on every row including rejected-but-sold. */
     revshare: ['saleAmount', 'partnerShare']
   };
 
-  var PARTNER_TYPES = {
-    revshare: {
-      key: 'revshare',
-      name: 'OptiLabX Media',
-      compModel: 'Revenue Share — 40%',
-      shortModel: 'RevShare 40%',
-      seesEarnings: true
-    },
-    cpl: {
-      key: 'cpl',
-      name: 'Cardinal Reach LLC',
-      compModel: 'Tiered CPL',
-      shortModel: 'Tiered CPL',
-      seesEarnings: false
-    }
-  };
+  function queryLeads(opts) { return runQuery(opts, 'receivedAt'); }
 
   /**
-   * The only way the UI is allowed to reach lead data.
+   * The same projection, filtered on the date the lead SOLD.
    *
-   * @param {object} opts
-   *   partnerType {'revshare'|'cpl'}  required — decides the column list
-   *   from, to    {Date}              inclusive date window
-   *   campaignId  {string}            'all' or a campaign id
-   *   subid       {string}            'all' or a sub-id
-   * @returns {Array<object>} projected rows — redacted by construction
-   */
-  function queryLeads(opts) {
-    return runQuery(opts, 'receivedAt');
-  }
-
-  /**
-   * The same projection, filtered on the date the lead SOLD rather than the
-   * date it arrived.
-   *
-   * WHY BOTH EXIST — this is the single most important modelling decision on
-   * the dashboard, and getting it wrong is what makes a report look broken:
-   *
+   * WHY BOTH EXIST — the most important modelling decision on the dashboard:
    *   Volume questions  ("what did I send, did it get accepted")
    *      → attribute to the RECEIVED date.
    *   Outcome questions ("what sold this week, what did I earn")
    *      → attribute to the SOLD date.
+   * Leads take 9–12 days to cook, so attributing outcomes to the received
+   * date makes every Today / Yesterday / Last-7-days view report zero sales.
    *
-   * Leads take 9–12 days to cook. If outcomes are attributed to the received
-   * date, then a Today / Yesterday / Last-7-days view can only ever report
-   * zero sales and zero earnings — not because nothing sold, but because
-   * nothing sent that recently has had time to. A partner reads that as "the
-   * numbers are wrong again," and they would be right to.
-   *
-   * Conversion RATES are the third case and cannot use either window: a rate
-   * needs a cohort that has finished maturing. Those are reported against the
-   * trailing 30 days with the maturity buffer applied — the same basis the
-   * health score uses, so the two pages never disagree.
+   * Conversion RATES are a third case and use neither: a rate needs a matured
+   * cohort, so those run on the trailing 30 days with the maturity buffer —
+   * the same basis the health score uses.
    */
-  function queryLeadsBySold(opts) {
-    return runQuery(opts, 'soldAt');
-  }
+  function queryLeadsBySold(opts) { return runQuery(opts, 'soldAt'); }
 
   function runQuery(opts, dateField) {
     opts = opts || {};
@@ -491,10 +583,12 @@
     var to = opts.to || TODAY;
     var fromMs = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
     var toMs = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999).getTime();
+    var wantPartner = isRev ? 'revshare' : 'cpl';
 
     var out = [];
     for (var i = 0; i < ALL_LEADS.length; i++) {
       var src = ALL_LEADS[i];
+      if (src.partnerType !== wantPartner) continue;
       var d = src[dateField];
       if (!d) continue;
       var t = d.getTime();
@@ -503,19 +597,16 @@
       if (opts.subid && opts.subid !== 'all' && src.subid !== opts.subid) continue;
 
       /* ---- THE ROW RULE -------------------------------------------------
-         For a CPL partner a rejected lead dies at the door. They see that it
+         For a CPL partner a rejected lead dies at the door: they see that it
          arrived and why it was declined, and nothing after that.
 
-         This is a ROW-level rule on top of the column allowlist, and it has
-         to be enforced here rather than in the view, because it is not just
-         about hiding a column — it changes which ROWS exist. A sold-date
-         query must not return a rejected lead at all, or a CPL partner could
-         infer from a row count alone that we work leads we declined. */
+         Enforced here rather than in the view because it is not just about
+         hiding a column — it changes which ROWS exist. A sold-date query must
+         not return a rejected lead at all, or a CPL partner could infer from
+         a row count alone that we work leads we declined. */
       var dropOutcome = !isRev && src.status === 'free';
       if (dropOutcome && dateField === 'soldAt') continue;
 
-      /* Allowlist projection. Note this is a copy, not a reference — the
-         caller never holds a handle on the internal record. */
       var row = {};
       for (var c = 0; c < cols.length; c++) {
         var k = cols[c];
@@ -531,8 +622,6 @@
   /* Date range presets                                                     */
   /* ---------------------------------------------------------------------- */
 
-  /* Every one of these works. That is the single highest-value fix in the
-     rebuild — the current portal renders current-month-total only. */
   var RANGES = {
     today:      { label: 'Today',        days: 0 },
     yesterday:  { label: 'Yesterday',    days: 1, offset: 1 },
@@ -555,10 +644,8 @@
     }
     else if (key === 'custom' && customFrom && customTo) { from = customFrom; to = customTo; }
     else {
-      /* Falls through for a plain day-count preset, and for 'custom' arriving
-         without usable dates — that case must land on a bounded window, not
-         an unbounded one. RANGES.custom has no `days`, so guard on the type
-         rather than on the key existing. */
+      /* Also catches 'custom' arriving without usable dates — that must land
+         on a bounded window, not an unbounded one. */
       var cfg = RANGES[key];
       var d = (cfg && typeof cfg.days === 'number') ? cfg.days : 6;
       from = addDays(TODAY, -d); to = TODAY;
@@ -567,19 +654,15 @@
     return { key: key, from: from, to: to, label: RANGES[key] ? RANGES[key].label : 'Custom range' };
   }
 
-  /* Same length window immediately before the current one — for tile deltas. */
   function priorWindow(range) {
     var span = daysBetween(range.from, range.to) + 1;
     return { from: addDays(range.from, -span), to: addDays(range.from, -1) };
   }
 
   /* ---------------------------------------------------------------------- */
-  /* Metrics — computed from PROJECTED rows only                            */
+  /* Metrics                                                                */
   /* ---------------------------------------------------------------------- */
 
-  /* Outcome metrics honour a 10-day maturity buffer (framework §4: the 9–12
-     day cook cycle). A lead received four days ago has not failed to sell —
-     it has not finished cooking, and counting it drags the number down. */
   var MATURITY_DAYS = 10;
 
   function isMature(row, asOf) {
@@ -595,117 +678,125 @@
 
   /**
    * @param opts.rateBasis 'paid' | 'all'
-   *   Which denominator a conversion RATE is measured against.
-   *
-   *   'paid' (CPL default) — of the leads we ACCEPTED and paid for, how many
-   *      converted. That is the right question for a partner who is paid per
-   *      accepted lead, and it is the only population they can see anyway.
-   *
-   *   'all' (RevShare) — of EVERY lead submitted, how many converted. A
-   *      RevShare partner is paid on any sale, accepted or rejected, so
-   *      dividing by accepted leads alone would overstate their conversion
-   *      rate and understate the value of the volume they send.
+   *   'paid' (CPL) — of the leads we ACCEPTED and paid for, how many
+   *      converted. The right question for a partner paid per accepted lead.
+   *   'all' (RevShare) — of EVERY lead submitted. A RevShare partner is paid
+   *      on any sale, accepted or not, so dividing by accepted leads alone
+   *      overstates conversion and undervalues the volume they send.
    */
   function computeMetrics(rows, asOf, opts) {
     asOf = asOf || TODAY;
     var basis = (opts && opts.rateBasis) === 'all' ? 'all' : 'paid';
 
     var raw = rows.length;
-    var paid = 0, free = 0, mature = 0, maturePaid = 0;
+    var paid = 0, free = 0, mature = 0, maturePaid = 0, immaturePaid = 0;
     var rejectedSold = 0, rejectedSoldPH = 0, rejectedEarnings = 0;
-    var priority = 0, hot = 0, auction = 0, marketplace = 0;
-    var cycles = [];
-    var earnings = 0, saleTotal = 0;
-    var hasEarnings = false;
-    var rejects = {};
-    var immaturePaid = 0;
+    var byType = { priority: 0, hot: 0, auction: 0, marketplace: 0, appointment: 0, livetransfer: 0 };
+    var cycles = [], rejects = {}, salePrices = [];
+    var earnings = 0, saleTotal = 0, hasEarnings = false;
+    var byBand = {}, bySegment = {}, byState = {}, byDow = {};
+
+    function bucket(map, key) {
+      if (!map[key]) map[key] = { raw: 0, paid: 0, mature: 0, ph: 0, earnings: 0 };
+      return map[key];
+    }
 
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
+      var matured = isMature(r, asOf);
+      var isPH = r.soldType === 'priority' || r.soldType === 'hot';
+
       if (r.status === 'paid') {
         paid++;
-        if (isMature(r, asOf)) { maturePaid++; } else { immaturePaid++; }
+        if (matured) maturePaid++; else immaturePaid++;
       } else {
         free++;
         if (r.rejectReason) rejects[r.rejectReason] = (rejects[r.rejectReason] || 0) + 1;
       }
-      if (isMature(r, asOf)) mature++;
+      if (matured) mature++;
 
-      if (r.soldType === 'priority') priority++;
-      else if (r.soldType === 'hot') hot++;
-      else if (r.soldType === 'auction') auction++;
-      else if (r.soldType === 'marketplace') marketplace++;
+      if (r.soldType && byType[r.soldType] !== undefined) byType[r.soldType]++;
 
-      /* Rejected-but-sold. Only ever non-zero on a RevShare projection — a
-         CPL projection has no outcome fields on a rejected row at all. */
       if (r.soldType && r.status === 'free') {
         rejectedSold++;
-        if (r.soldType === 'priority' || r.soldType === 'hot') rejectedSoldPH++;
+        if (isPH) rejectedSoldPH++;
         rejectedEarnings += r.partnerShare || 0;
       }
 
       if (r.daysToSale != null) cycles.push(r.daysToSale);
+      if (r.saleAmount) salePrices.push(r.saleAmount);
 
-      /* Present only when the projection included them. */
       if (r.partnerShare !== undefined) {
         hasEarnings = true;
         earnings += r.partnerShare || 0;
         saleTotal += r.saleAmount || 0;
       }
+
+      /* Breakdowns the affiliate can act on. */
+      var bBand = bucket(byBand, r.assetBand);
+      var bSeg = bucket(bySegment, r.hourSegment);
+      var bSt = bucket(byState, r.state);
+      var bDow = bucket(byDow, r.receivedAt.getDay());
+      [bBand, bSeg, bSt, bDow].forEach(function (b) {
+        b.raw++;
+        if (r.status === 'paid') b.paid++;
+        if (matured) b.mature++;
+        if (isPH) b.ph++;
+        b.earnings += r.partnerShare || 0;
+      });
     }
 
-    var soldPH = priority + hot;
-    var soldAny = soldPH + auction + marketplace;
+    var soldPH = byType.priority + byType.hot;
+    var soldNewTiers = byType.appointment + byType.livetransfer;
+    var soldAny = soldPH + soldNewTiers + byType.auction + byType.marketplace;
 
-    /* Measured against MATURED leads, so a busy week does not look like a
-       collapse just because it is recent. The denominator depends on how the
-       partner is paid — see the rateBasis note above. */
     var rateDenom = basis === 'all' ? mature : maturePaid;
     var phRate = rateDenom ? soldPH / rateDenom : 0;
 
-    var points = (priority * SOLD_TYPES.priority.points) +
-                 (hot * SOLD_TYPES.hot.points) +
-                 (auction * SOLD_TYPES.auction.points) +
-                 (marketplace * SOLD_TYPES.marketplace.points);
+    var points = 0;
+    Object.keys(byType).forEach(function (k) {
+      points += byType[k] * SOLD_TYPES[k].points;
+    });
 
     return {
-      raw: raw,
-      paid: paid,
-      free: free,
+      raw: raw, paid: paid, free: free,
       acceptanceRate: raw ? paid / raw : 0,
-      maturePaid: maturePaid,
-      immaturePaid: immaturePaid,
-      priority: priority,
-      hot: hot,
-      auction: auction,
-      marketplace: marketplace,
+      mature: mature, maturePaid: maturePaid, immaturePaid: immaturePaid,
+
+      priority: byType.priority, hot: byType.hot,
+      auction: byType.auction, marketplace: byType.marketplace,
+      appointment: byType.appointment, livetransfer: byType.livetransfer,
+      byType: byType,
+
       soldPriorityHot: soldPH,
+      soldNewTiers: soldNewTiers,
       soldAny: soldAny,
       priorityHotRate: phRate,
       rateBasis: basis,
       rateDenominator: rateDenom,
-      soldRate: rateDenom ? soldAny / rateDenom : 0,
+      sellThrough: maturePaid ? soldAny / maturePaid : 0,
       pointsPerPaid: maturePaid ? points / maturePaid : 0,
 
-      /* RevShare-only visibility: what the leads we declined still earned. */
       rejectedSold: rejectedSold,
       rejectedSoldPriorityHot: rejectedSoldPH,
       rejectedEarnings: round2(rejectedEarnings),
+
       medianCycle: median(cycles),
+      avgSalePrice: salePrices.length ? round2(salePrices.reduce(function (a, b) { return a + b; }, 0) / salePrices.length) : null,
       rejects: rejects,
+
       hasEarnings: hasEarnings,
       earnings: round2(earnings),
-      saleTotal: round2(saleTotal)
+      saleTotal: round2(saleTotal),
+
+      byBand: byBand, bySegment: bySegment, byState: byState, byDow: byDow
     };
   }
 
-  /* Daily series for the trend charts.
-     `dateField` picks the attribution basis — see queryLeadsBySold() above. */
   function dailySeries(rows, range, dateField) {
     dateField = dateField || 'receivedAt';
-    var byDay = {};
+    var byDay = {}, days = [];
     var cursor = new Date(range.from.getTime());
-    var days = [];
     while (cursor <= range.to) {
       var k = dayKey(cursor);
       byDay[k] = { key: k, date: new Date(cursor.getTime()), raw: 0, paid: 0, free: 0, priority: 0, hot: 0 };
@@ -725,8 +816,6 @@
     return days;
   }
 
-  /* The trailing-30-day matured cohort — the only honest basis for a
-     conversion RATE, and the same window the health score scores on. */
   function cohort(opts) {
     var range = { from: addDays(TODAY, -29), to: TODAY };
     var rows = queryLeads({
@@ -740,7 +829,6 @@
     };
   }
 
-  /* Group rows by an arbitrary key, with metrics per group. */
   function groupBy(rows, keyFn, opts) {
     var buckets = {};
     for (var i = 0; i < rows.length; i++) {
@@ -756,29 +844,19 @@
   /* Spend & volume targets                                                 */
   /* ---------------------------------------------------------------------- */
 
-  /* NOT YET BUILT — there is no admin UI to set these. The values below are
-     hard-coded so the affiliate-facing half can be reviewed now.
-     What the admin side needs (see HANDOFF.md):
-       · per partner, per campaign, per calendar month
-       · volume target and/or spend target — EITHER, OR, OR BOTH.
-         A null target is not zero; it means "not set" and must not render.
-     Nothing here is sensitive: a spend target is what we plan to pay the
-     partner, which is their own revenue, not our margin. */
+  /* NOT YET BUILT — no admin UI sets these. Hard-coded so the affiliate-facing
+     half can be reviewed. Volume and/or spend, either or both; a null target
+     means "not set" and must not render. Always worded as a TARGET, never a
+     cap — partners hear "cap" as a limit and go quiet. */
   var TARGETS = {
     revshare: { volume: 1500, spend: 9000, spendLabel: 'Revenue share payout' },
-    cpl:      { volume: 900,  spend: null, spendLabel: 'Spend' }
+    cpl:      { volume: 1400, spend: null, spendLabel: 'Spend' }
   };
 
   function targetsFor(partnerType) {
     return TARGETS[partnerType === 'revshare' ? 'revshare' : 'cpl'];
   }
 
-  /**
-   * Month-to-date progress against target, with the pace maths the affiliate
-   * actually needs: are they ahead or behind, and what daily rate closes it.
-   * Always month-to-date regardless of the date filter — a monthly target
-   * measured over an arbitrary 7-day window would be meaningless.
-   */
   function targetProgress(opts) {
     var t = targetsFor(opts.partnerType);
     var monthStart = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
@@ -787,8 +865,6 @@
     var daysElapsed = TODAY.getDate();
     var daysLeft = daysInMonth - daysElapsed;
 
-    /* Volume is measured on leads SUBMITTED — the thing the affiliate
-       actually controls, so it uses the received basis. */
     var rows = queryLeads({
       partnerType: opts.partnerType,
       from: monthStart, to: TODAY,
@@ -797,11 +873,10 @@
     var m = computeMetrics(rows, TODAY, { rateBasis: opts.rateBasis });
     var volumeActual = m.raw;
 
-    /* Spend is an OUTCOME for a RevShare partner — they are paid when a lead
-       SELLS, which is 9–12 days after it arrives. Counting their payout on
-       the received basis would report $0 for the first week and a half of
-       every month and make the target look permanently missed. CPL is the
-       opposite: we owe on acceptance, so it stays on the received basis. */
+    /* Payout is an OUTCOME for RevShare — they are paid when a lead SELLS,
+       9–12 days after it arrives. On the received basis this reports $0 for
+       the first week and a half of every month. CPL is the opposite: we owe
+       on acceptance, so it stays on the received basis. */
     var spendActual = null;
     if (m.hasEarnings) {
       var soldMtd = queryLeadsBySold({
@@ -821,12 +896,8 @@
          the full month — at day 5 of 31, 14% of a monthly target is fine. */
       var ratio = expected ? actual / expected : 1;
       return {
-        target: target,
-        actual: actual,
-        pct: actual / target,
-        expected: expected,
-        ratio: ratio,
-        aheadBy: actual - expected,
+        target: target, actual: actual, pct: actual / target,
+        expected: expected, ratio: ratio, aheadBy: actual - expected,
         onPace: ratio >= 0.97,
         severity: ratio >= 0.97 ? '' : ratio >= 0.85 ? 'is-warning'
                 : ratio >= 0.70 ? 'is-serious' : 'is-critical',
@@ -837,16 +908,13 @@
 
     return {
       monthLabel: TODAY.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      daysElapsed: daysElapsed,
-      daysInMonth: daysInMonth,
-      daysLeft: daysLeft,
+      daysElapsed: daysElapsed, daysInMonth: daysInMonth, daysLeft: daysLeft,
       spendLabel: t.spendLabel,
       volume: pace(volumeActual, t.volume),
       spend: spendActual == null ? null : pace(spendActual, t.spend)
     };
   }
 
-  /* Daily volume target, for the reference line on the leads-by-day chart. */
   function dailyVolumeTarget(partnerType) {
     var t = targetsFor(partnerType);
     if (!t.volume) return null;
@@ -858,28 +926,21 @@
   /* Duplicate self-check                                                   */
   /* ---------------------------------------------------------------------- */
 
-  /* Returns a BOOLEAN and, at most, the month it last sold. No buyer, no
-     price, no lead id, no name. Spec §3.2 Module C: "this is a suppression-
-     list API in disguise" — the response shape is the containment.
-
-     The lookup is deterministic on the digits so the same number always
-     returns the same answer during a demo. */
+  /* Returns a BOOLEAN and at most the month it last sold. No buyer, no price,
+     no lead id, no name. This is a suppression-list API in disguise, so the
+     response shape is the containment. */
   function checkDuplicate(phoneRaw) {
     var digits = String(phoneRaw || '').replace(/\D/g, '');
     if (digits.length === 11 && digits.charAt(0) === '1') digits = digits.slice(1);
-    if (digits.length !== 10) {
-      return { ok: false, error: 'Enter a 10-digit US phone number.' };
-    }
+    if (digits.length !== 10) return { ok: false, error: 'Enter a 10-digit US phone number.' };
 
     var h = 0;
     for (var i = 0; i < digits.length; i++) h = (h * 31 + digits.charCodeAt(i)) >>> 0;
 
-    /* ~22% hit rate keeps the demo honest — most numbers are clean. */
     var isDupe = (h % 100) < 22;
     var result = { ok: true, phone: formatPhone(digits), duplicate: isDupe };
-
     if (isDupe) {
-      var monthsAgo = h % 12;                       // 0–11 months back
+      var monthsAgo = h % 12;
       var d = new Date(TODAY.getFullYear(), TODAY.getMonth() - monthsAgo, 1);
       result.lastSoldMonth = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     }
@@ -898,12 +959,24 @@
     TODAY: TODAY,
     MATURITY_DAYS: MATURITY_DAYS,
     CAMPAIGNS: CAMPAIGNS,
+    campaignsFor: campaignsFor,
     PARTNER_TYPES: PARTNER_TYPES,
+    partner: partner,
     REJECT_REASONS: REJECT_REASONS,
+    rejectLabel: rejectLabel,
+    rejectFix: rejectFix,
     SOLD_TYPES: SOLD_TYPES,
+    NORTH_STAR_TYPES: NORTH_STAR_TYPES,
+    NEW_TIER_TYPES: NEW_TIER_TYPES,
+    ASSET_BANDS: ASSET_BANDS,
+    ASSET_BY_KEY: ASSET_BY_KEY,
     RANGES: RANGES,
     HOUR_SEGMENT_LABEL: HOUR_SEGMENT_LABEL,
-    WESTERN: WESTERN,
+    HOUR_SEGMENT_ORDER: HOUR_SEGMENT_ORDER,
+    DOW_LABEL: DOW_LABEL,
+    FOCUS_STATES: FOCUS_STATES,
+    SHORT_STATES: SHORT_STATES,
+    isCoverageState: isCoverageState,
 
     queryLeads: queryLeads,
     queryLeadsBySold: queryLeadsBySold,
@@ -924,15 +997,17 @@
     daysBetween: daysBetween,
     dayKey: dayKey,
 
-    /* Internal-only aggregate used by the health engine. Deliberately NOT
-       part of queryLeads — see health.js for why it never reaches the UI. */
+    /* Internal-only aggregate for the health engine. Deliberately NOT part of
+       queryLeads — see health.js for why it never reaches the UI. */
     _internalAggregates: function (opts) {
       var range = opts.range;
+      var wantPartner = opts.partnerType === 'revshare' ? 'revshare' : 'cpl';
       var fromMs = new Date(range.from.getFullYear(), range.from.getMonth(), range.from.getDate()).getTime();
       var toMs = new Date(range.to.getFullYear(), range.to.getMonth(), range.to.getDate(), 23, 59, 59, 999).getTime();
-      var margin = 0, revenue = 0, cost = 0, clawbacks = 0, badContacts = 0, paid = 0;
+      var margin = 0, revenue = 0, clawbacks = 0, badContacts = 0, paid = 0;
       for (var i = 0; i < ALL_LEADS.length; i++) {
         var l = ALL_LEADS[i];
+        if (l.partnerType !== wantPartner) continue;
         var t = l.receivedAt.getTime();
         if (t < fromMs || t > toMs) continue;
         if (opts.campaignId && opts.campaignId !== 'all' && l.campaignId !== opts.campaignId) continue;
@@ -941,7 +1016,6 @@
         paid++;
         margin += l._margin;
         revenue += l.saleAmount;
-        cost += l._leadCost;
         if (l._clawback) clawbacks++;
         if (l._badContact) badContacts++;
       }

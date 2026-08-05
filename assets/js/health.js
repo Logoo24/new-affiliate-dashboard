@@ -106,6 +106,7 @@
        never returned on the result object. */
     var internal = D._internalAggregates({
       range: range,
+      partnerType: opts.partnerType,
       campaignId: opts.campaignId,
       subid: opts.subid
     });
@@ -166,18 +167,24 @@
     var dailyCounts = daily.map(function (d) { return d.raw; });
     var cv = coefficientOfVariation(dailyCounts);
 
-    var westernCount = 0, eveningCount = 0;
+    /* Two coverage gaps, and they are different kinds of gap:
+         GEOGRAPHY — underserved high-retiree states (CA, NV, AZ, NM, WA) plus
+           the ones we are currently short in (CO, UT, NE, SD, KS).
+         TIMING — 6–9a arrivals convert materially better than any other
+           window. This asks for MORE EARLY volume, not more evening volume;
+           an earlier draft of this had it backwards. */
+    var coverageStateCount = 0, earlyCount = 0;
     for (var i = 0; i < rows.length; i++) {
-      if (D.WESTERN[rows[i].state]) westernCount++;
-      if (rows[i].hourSegment === 'evening' || rows[i].hourSegment === 'late') eveningCount++;
+      if (D.isCoverageState(rows[i].state)) coverageStateCount++;
+      if (rows[i].hourSegment === 'early') earlyCount++;
     }
-    var westernShare = rows.length ? westernCount / rows.length : 0;
-    var eveningShare = rows.length ? eveningCount / rows.length : 0;
+    var coverageStateShare = rows.length ? coverageStateCount / rows.length : 0;
+    var earlyShare = rows.length ? earlyCount / rows.length : 0;
 
-    var TARGET_WESTERN = 0.22;
-    var TARGET_EVENING = 0.25;
-    var coverageScore = (norm(westernShare, 0.05, TARGET_WESTERN) +
-                         norm(eveningShare, 0.05, TARGET_EVENING)) / 2;
+    var TARGET_STATES = 0.28;
+    var TARGET_EARLY = 0.18;
+    var coverageScore = (norm(coverageStateShare, 0.05, TARGET_STATES) +
+                         norm(earlyShare, 0.03, TARGET_EARLY)) / 2;
 
     var volParts = [
       { key: 'sufficiency', label: 'Volume vs demand', weight: 0.40,
@@ -186,9 +193,9 @@
       { key: 'consistency', label: 'Day-to-day consistency', weight: 0.25,
         score: norm(1 - cv, 0.30, 0.85),
         display: 'CV ' + cv.toFixed(2) },
-      { key: 'coverage', label: 'State & hour coverage', weight: 0.35,
+      { key: 'coverage', label: 'State & arrival-window coverage', weight: 0.35,
         score: coverageScore,
-        display: pct(westernShare) + ' west · ' + pct(eveningShare) + ' evening' }
+        display: pct(coverageStateShare) + ' focus states · ' + pct(earlyShare) + ' early arrivals' }
     ];
 
     /* ---- Pillars ------------------------------------------------------- */
@@ -238,10 +245,10 @@
       metrics: m,
       range: range,
       coverage: {
-        westernShare: westernShare,
-        westernTarget: TARGET_WESTERN,
-        eveningShare: eveningShare,
-        eveningTarget: TARGET_EVENING
+        stateShare: coverageStateShare,
+        stateTarget: TARGET_STATES,
+        earlyShare: earlyShare,
+        earlyTarget: TARGET_EARLY
       }
     };
   }
@@ -272,20 +279,20 @@
   /* Coverage asks — the "send us more of this" list. */
   function coverageAsks(result) {
     var asks = [];
-    if (result.coverage.westernShare < result.coverage.westernTarget) {
+    if (result.coverage.stateShare < result.coverage.stateTarget) {
       asks.push({
-        what: 'Pacific & Mountain states',
-        detail: 'AZ, CO, WA, OR, CA, NV, UT, ID',
-        now: pct(result.coverage.westernShare),
-        target: pct(result.coverage.westernTarget)
+        what: 'Underserved states',
+        detail: 'CA, NV, AZ, NM, WA — plus CO, UT, NE, SD, KS where we are short',
+        now: pct(result.coverage.stateShare),
+        target: pct(result.coverage.stateTarget)
       });
     }
-    if (result.coverage.eveningShare < result.coverage.eveningTarget) {
+    if (result.coverage.earlyShare < result.coverage.earlyTarget) {
       asks.push({
-        what: 'Evening & late submissions',
-        detail: '6p–9p and after 9p, submitter local time',
-        now: pct(result.coverage.eveningShare),
-        target: pct(result.coverage.eveningTarget)
+        what: 'Early-morning arrivals',
+        detail: '6a–9a submitter local time — these convert materially better',
+        now: pct(result.coverage.earlyShare),
+        target: pct(result.coverage.earlyTarget)
       });
     }
     return asks;

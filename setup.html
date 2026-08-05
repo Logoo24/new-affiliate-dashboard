@@ -115,12 +115,14 @@
           <p class="sub">Self-verify the pixel without a round trip to your account manager.</p>
         </div></div>
         <div class="card-body">
-          <div class="notice notice-info" style="margin-bottom:14px">
-            <span class="ico">◆</span>
+          <div class="notice notice-warn" style="margin-bottom:14px">
+            <span class="ico">▲</span>
             <div>
-              Test posts use zip <strong>99997</strong>, which routes to the test bucket and never
-              reaches an agent. Every test submission needs a <strong>unique email and phone</strong>
-              — reusing them trips the duplicate filter and you will chase a rejection that is not real.
+              <strong>There is no sandbox — your first test posts to production.</strong>
+              Use zip <strong>99997</strong> so the lead is flagged for pixel verification
+              (<strong>99996</strong> for annuity landing-page previews). Every test needs a
+              <strong>unique email and phone</strong> — reusing them trips the duplicate filter
+              and you will chase a rejection that is not real.
             </div>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -271,7 +273,7 @@
   function paintCreds() {
     var products = choices.product === 'both' ? ['annuity', 'life'] : [choices.product];
     var html = products.map(function (p) {
-      var isAnnuity = p === 'annuity';
+        var isAnnuity = p === 'annuity';
       var campId = isAnnuity ? 'CR-ANN-2041' : 'CR-LIFE-2042';
       var endpoint = isAnnuity ? 'lead_post.php' : 'lead_post_life_insurance.php';
       var block = '<h3 style="margin-bottom:8px">' + (isAnnuity ? 'Annuity' : 'Life') + ' campaign</h3>' +

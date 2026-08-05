@@ -16,30 +16,19 @@
 
     <div class="content">
 
-      <div class="notice notice-mock">
-        <span class="ico">▲</span>
-        <div>
-          <strong>Mock-up.</strong> Numbers are fabricated but internally consistent — the date
-          range, campaign and sub-ID filters all really work, and every figure recomputes from
-          the filtered set. See <code>HANDOFF.md</code> for what is mocked vs what needs fields
-          from the dev team.
-        </div>
-      </div>
-
       <div id="filter-host"></div>
       <div id="ctx-notice"></div>
 
       <!-- Hero: the North Star. Exactly one hero figure on this view. -->
       <section class="card">
-        <div class="card-body" style="padding-top:18px">
+        <div class="card-body" style="padding-top:20px">
           <div class="hero">
             <div>
               <div class="hero-label">Sold to Priority or Hot</div>
               <div class="hero-figure" id="hero-figure">—</div>
             </div>
-            <div>
+            <div style="flex:1;min-width:280px">
               <div id="hero-detail"></div>
-              <p class="hero-note" id="hero-note"></p>
             </div>
           </div>
         </div>
@@ -55,7 +44,6 @@
           </div>
         </div>
         <div class="card-body" id="targets-body"></div>
-        <div class="card-foot" id="targets-foot"></div>
       </section>
 
       <div class="grid-2">
@@ -63,7 +51,7 @@
           <div class="card-head">
             <div>
               <h2>Leads by day</h2>
-              <p class="sub">Submitted leads, split by whether they were accepted, against your daily target.</p>
+              <p class="sub">Submitted leads against your daily target.</p>
             </div>
             <div class="spacer"></div>
             <div id="toggle-volume"></div>
@@ -78,7 +66,7 @@
           <div class="card-head">
             <div>
               <h2>Priority &amp; Hot by day</h2>
-              <p class="sub">Counted on the day they sold, not the day the lead came in.</p>
+              <p class="sub">Counted on the day they sold.</p>
             </div>
             <div class="spacer"></div>
             <div id="toggle-conv"></div>
@@ -86,8 +74,49 @@
           <div class="card-body">
             <div class="legend" id="legend-conv"></div>
             <div class="chart-wrap" id="chart-conv"></div>
-            <div class="mocknote" id="cook-note"></div>
           </div>
+        </section>
+      </div>
+
+      <!-- The three things an affiliate can actually act on -->
+      <div class="grid-3">
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Investable assets</h2>
+              <p class="sub">Where your leads convert best.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data" id="band-table"></table>
+          </div>
+          <div class="card-foot" id="band-foot"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Arrival window</h2>
+              <p class="sub">When your leads come in, local time.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data" id="window-table"></table>
+          </div>
+          <div class="card-foot" id="window-foot"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Tier mix</h2>
+              <p class="sub" id="tier-sub">What your sold leads sold as.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data" id="tier-table"></table>
+          </div>
+          <div class="card-foot" id="tier-foot"></div>
         </section>
       </div>
 
@@ -95,52 +124,49 @@
         <div class="card-head">
           <div>
             <h2>Campaigns</h2>
-            <p class="sub">
-              Broken out natively. Blended, a small excellent campaign and a large low-yield one
-              read as one mediocre campaign — which is exactly the reading to avoid.
-            </p>
+            <p class="sub">Broken out, never blended.</p>
           </div>
         </div>
         <div class="table-wrap">
           <table class="data" id="campaign-table"></table>
         </div>
-        <div class="card-foot">
-          <span>
-            <strong>Leads / Accepted / Accept %</strong> count leads that <em>arrived</em> in the
-            selected window. <strong>Priority / Hot / Median cycle / Earnings</strong> count leads
-            that <em>sold</em> in it. <strong>P/H rate</strong> is the trailing 30-day matured
-            cohort — a rate needs leads that have finished cooking, so it does not move with the
-            date filter.
-          </span>
-        </div>
+        <div class="card-foot" id="campaign-foot"></div>
       </section>
 
       <section class="card">
         <div class="card-head">
           <div>
             <h2>Sub-ID breakdown</h2>
-            <p class="sub">Account averages hide publisher-level problems. This is where they surface.</p>
+            <p class="sub">Account averages hide publisher-level problems.</p>
           </div>
           <div class="spacer"></div>
-          <button class="btn btn-sm" id="export-subid">Export CSV</button>
+          <div id="export-subid"></div>
         </div>
         <div class="table-wrap">
           <table class="data" id="subid-table"></table>
         </div>
-        <div class="card-foot" id="subid-foot"></div>
+        <div class="card-foot">
+          <div id="subid-foot" style="flex:1"></div>
+        </div>
+        <div style="padding:0 18px 14px" id="export-toast"></div>
       </section>
 
       <section class="card">
         <div class="card-head">
           <div>
             <h2>Why leads were rejected</h2>
-            <p class="sub">Plain language, with the fix. A reason with no fix is just a complaint.</p>
+            <p class="sub">Plain language, with the fix.</p>
           </div>
         </div>
         <div class="table-wrap">
           <table class="data" id="reject-table"></table>
         </div>
       </section>
+
+      <p class="mocknote" style="border:0;padding:0;margin:0">
+        Mock-up — figures are fabricated but internally consistent. Every filter recomputes the
+        whole page. See <code>HANDOFF.md</code> for what is mocked and what needs dev work.
+      </p>
 
     </div>
   </div>
@@ -156,26 +182,20 @@
   var D = FZData, A = FZApp, C = FZCharts, H = FZHealth;
 
   var state = A.params();
+  var isRev = state.partnerType === 'revshare';
 
   A.shell(state, {
     active: 'index.html',
     title: 'Performance',
-    subtitle: 'Real-time view of your submitted leads and what happened to them.'
+    subtitle: 'What you sent, what we accepted, and what sold.'
   });
   A.filterBar(document.getElementById('filter-host'), state, ['range', 'campaign', 'subid']);
 
-  /* ---- pull rows through the redaction layer -------------------------- */
-  /* Three bases, deliberately. Volume is attributed to the day a lead
-     arrived; outcomes to the day it sold; rates to the trailing matured
-     cohort. Mixing these up is what makes a 7-day view report zero sales.
-     See the comment above queryLeadsBySold() in data.js. */
-  var isRev = state.partnerType === 'revshare';
-
-  /* A RevShare partner is paid on ANY sale, accepted or rejected, so their
-     conversion rate is measured against every lead submitted. A CPL partner
-     is paid per accepted lead, so theirs is measured against accepted. */
+  /* Three attribution bases, deliberately — volume on the received date,
+     outcomes on the sold date, rates on the trailing matured cohort.
+     A RevShare partner is paid on ANY sale, so their rate denominator is
+     every lead submitted; a CPL partner's is accepted leads only. */
   var mOpts = { rateBasis: isRev ? 'all' : 'paid' };
-
   var scope = {
     partnerType: state.partnerType,
     campaignId: state.campaignId, subid: state.subid
@@ -190,103 +210,67 @@
   var coh = D.cohort(Object.assign({ rateBasis: mOpts.rateBasis }, scope));
 
   var prior = D.priorWindow(state.range);
-  var priorRows = D.queryLeads(Object.assign({ from: prior.from, to: prior.to }, scope));
-  var pm = D.computeMetrics(priorRows, null, mOpts);
-  var priorSold = D.queryLeadsBySold(Object.assign({ from: prior.from, to: prior.to }, scope));
-  var psm = D.computeMetrics(priorSold, null, mOpts);
+  var pm = D.computeMetrics(D.queryLeads(Object.assign({ from: prior.from, to: prior.to }, scope)), null, mOpts);
+  var psm = D.computeMetrics(D.queryLeadsBySold(Object.assign({ from: prior.from, to: prior.to }, scope)), null, mOpts);
 
-  var targets = D.targetProgress(Object.assign({ rateBasis: mOpts.rateBasis, cplRate: 16 }, scope));
+  var targets = D.targetProgress(Object.assign({ rateBasis: mOpts.rateBasis, cplRate: 90 }, scope));
 
-  /* ---- context notice: make the visibility difference visible ---------- */
-  var ctxHost = document.getElementById('ctx-notice');
-  if (!isRev) {
-    ctxHost.innerHTML =
-      '<div class="notice notice-info"><span class="ico">◆</span><div>' +
-      '<strong>Viewing as a flat/tiered CPL partner.</strong> You are paid per accepted lead, ' +
-      'so acceptance rate is the number that drives your invoice. Rejected leads show their ' +
-      'reason and nothing further — no sale price, no revenue share, and no outcome data of ' +
-      'any kind. Switch the selector in the header to see the RevShare view.' +
-      '</div></div>';
-  } else {
-    ctxHost.innerHTML =
-      '<div class="notice notice-info"><span class="ico">◆</span><div>' +
-      '<strong>Viewing as a RevShare partner.</strong> You earn 40% of any lead that sells, ' +
-      '<strong>whether we accepted it or not</strong> — so acceptance rate here is a quality ' +
-      'signal to optimise against, not a payment gate. Rates are measured against every lead ' +
-      'you send, not just the accepted ones. Margin, our cost, buyer name, CSR name and call ' +
-      'result are withheld from every partner type, RevShare included.' +
-      '</div></div>';
-  }
+  /* ---- context notice -------------------------------------------------- */
+  document.getElementById('ctx-notice').innerHTML = isRev
+    ? '<div class="notice notice-info"><span class="ico">◆</span><div>' +
+      'You earn 40% of any lead that sells — <strong>accepted or not</strong>. Acceptance rate ' +
+      'here is a quality signal, not a payment gate.</div></div>'
+    : '<div class="notice notice-info"><span class="ico">◆</span><div>' +
+      'You are paid per accepted lead, so acceptance rate drives your invoice. Rejected leads ' +
+      'show their reason and nothing further.</div></div>';
 
-  /* ---- hero ----------------------------------------------------------- */
-  /* Count of what SOLD in the window — always answerable, for any range,
-     including Today. The conversion rate sits beside it on its own basis. */
+  /* ---- hero ------------------------------------------------------------ */
   document.getElementById('hero-figure').textContent = A.fmtInt(sm.soldPriorityHot);
   document.getElementById('hero-detail').innerHTML =
-    '<div style="font-size:15px;font-weight:600;margin-bottom:4px">' +
+    '<div style="font-size:16px;font-weight:600;margin-bottom:4px">' +
       A.fmtInt(sm.soldPriorityHot) + ' of ' + A.fmtInt(sm.soldAny) + ' leads that sold in this window' +
-      ' reached Priority or Hot' +
     '</div>' +
     A.deltaHtml(sm.soldPriorityHot, psm.soldPriorityHot, { periodLabel: 'period' }) +
     (isRev && sm.rejectedSoldPriorityHot
-      ? '<div style="font-size:12px;color:var(--ink-2);margin-top:6px">' +
-        '<strong>' + A.fmtInt(sm.rejectedSoldPriorityHot) + '</strong> of those came from leads ' +
-        'we did not accept — you are paid on them all the same.</div>'
+      ? '<div style="font-size:13.5px;color:var(--ink-2);margin-top:8px">' +
+        '<strong>' + A.fmtInt(sm.rejectedSoldPriorityHot) + '</strong> came from leads we did not ' +
+        'accept — you are paid on those too.</div>'
       : '') +
-    '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' +
-      '<span style="font-size:12px;color:var(--ink-muted)">Conversion rate, trailing 30-day matured cohort</span><br>' +
-      '<span style="font-size:20px;font-weight:650">' + A.fmtPct(coh.metrics.priorityHotRate, 1) + '</span> ' +
-      '<span style="font-size:12px;color:var(--ink-2)">of ' + A.fmtInt(coh.metrics.rateDenominator) +
-      (isRev ? ' matured leads submitted' : ' matured paid leads') + '</span>' +
+    '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:flex;gap:32px;flex-wrap:wrap">' +
+      '<div><div style="font-size:13px;color:var(--ink-muted)">Conversion rate · 30-day cohort</div>' +
+      '<div style="font-size:24px;font-weight:650;margin-top:2px">' + A.fmtPct(coh.metrics.priorityHotRate, 1) + '</div>' +
+      '<div style="font-size:12.5px;color:var(--ink-muted)">of ' + A.fmtInt(coh.metrics.rateDenominator) +
+      (isRev ? ' matured leads sent' : ' matured paid leads') + '</div></div>' +
+      (sm.avgSalePrice != null
+        ? '<div><div style="font-size:13px;color:var(--ink-muted)">Average sale price</div>' +
+          '<div style="font-size:24px;font-weight:650;margin-top:2px">' + A.fmtMoney0(sm.avgSalePrice) + '</div>' +
+          '<div style="font-size:12.5px;color:var(--ink-muted)">across all tiers sold</div></div>'
+        : '') +
+      '<div><div style="font-size:13px;color:var(--ink-muted)">Sell-through</div>' +
+      '<div style="font-size:24px;font-weight:650;margin-top:2px">' + A.fmtPct(coh.metrics.sellThrough, 1) + '</div>' +
+      '<div style="font-size:12.5px;color:var(--ink-muted)">of matured paid leads sold at any tier</div></div>' +
     '</div>';
-  document.getElementById('hero-note').textContent = isRev
-    ? 'Priority leads carry 10 points and Hot 8; Auction and Marketplace score negative. ' +
-      'Because you earn on any sale, this rate is measured against every lead you send — not ' +
-      'just the accepted ones. The count moves with the date range; the rate does not, since ' +
-      'it needs leads that have finished cooking.'
-    : 'Priority leads carry 10 points and Hot 8; Auction and Marketplace score negative. ' +
-      'Of the leads we accepted and paid you for, this is the share that reached the two ' +
-      'outcomes that pay for the campaign. The count moves with the date range; the rate does ' +
-      'not, since it needs leads that have finished cooking.';
 
-  /* ---- tiles ---------------------------------------------------------- */
+  /* ---- tiles ----------------------------------------------------------- */
   var tiles = [
-    {
-      label: 'Leads submitted', value: A.fmtInt(m.raw),
-      sub: 'Raw posts in window',
-      delta: A.deltaHtml(m.raw, pm.raw, {})
-    },
-    /* Same two numbers, different job. For CPL this is the invoice. For
-       RevShare it is a quality signal — they are paid either way. */
-    isRev
-      ? {
-          label: 'Accepted', value: A.fmtInt(m.paid),
-          sub: A.fmtInt(m.free) + ' not accepted — still earn if they sell',
-          delta: A.deltaHtml(m.paid, pm.paid, {})
-        }
-      : {
-          label: 'Accepted (paid)', value: A.fmtInt(m.paid),
-          sub: A.fmtInt(m.free) + ' rejected',
-          delta: A.deltaHtml(m.paid, pm.paid, {})
-        },
-    {
-      label: 'Acceptance rate', value: A.fmtPct(m.acceptanceRate, 1),
-      sub: isRev ? 'Quality signal, not a payment gate' : 'Paid ÷ raw — drives your invoice',
-      delta: A.deltaHtml(m.acceptanceRate, pm.acceptanceRate, {})
-    },
-    {
-      label: 'Median sales cycle',
+    { label: 'Leads submitted', value: A.fmtInt(m.raw), sub: 'Raw posts in window',
+      delta: A.deltaHtml(m.raw, pm.raw, {}) },
+    { label: isRev ? 'Accepted' : 'Accepted (paid)', value: A.fmtInt(m.paid),
+      sub: isRev ? A.fmtInt(m.free) + ' not accepted — still earn if they sell'
+                 : A.fmtInt(m.free) + ' rejected',
+      delta: A.deltaHtml(m.paid, pm.paid, {}) },
+    { label: 'Acceptance rate', value: A.fmtPct(m.acceptanceRate, 1),
+      sub: isRev ? 'Quality signal' : 'Drives your invoice',
+      delta: A.deltaHtml(m.acceptanceRate, pm.acceptanceRate, {}) },
+    { label: 'Median sales cycle',
       value: sm.medianCycle == null ? '—' : sm.medianCycle + ' days',
-      sub: 'Of leads that sold in window',
-      delta: A.deltaHtml(sm.medianCycle, psm.medianCycle, { lowerIsBetter: true })
-    }
+      sub: 'Received → sold',
+      delta: A.deltaHtml(sm.medianCycle, psm.medianCycle, { lowerIsBetter: true }) }
   ];
 
-  /* Health score tile — links to the full scorecard. */
   var hs = H.score({ partnerType: state.partnerType, campaignId: state.campaignId, subid: state.subid });
   tiles.push({
-    label: 'Health score',
-    value: String(hs.score),
+    label: 'Health score', value: String(hs.score),
     sub: '<span class="badge ' + hs.tier.badge + '"><span class="dot"></span>' + hs.tier.label + '</span>',
     delta: '<div class="tile-delta delta-flat"><a href="' + A.linkTo('health.html', state) + '">See the breakdown →</a></div>'
   });
@@ -295,32 +279,25 @@
     tiles.push({
       label: 'Your earnings', value: A.fmtMoney0(sm.earnings),
       sub: sm.rejectedEarnings
-        ? A.fmtMoney0(sm.rejectedEarnings) + ' of it from leads we did not accept'
-        : '40% share of leads sold in window',
+        ? A.fmtMoney0(sm.rejectedEarnings) + ' from leads we did not accept'
+        : '40% of leads sold in window',
       delta: A.deltaHtml(sm.earnings, psm.earnings, {}),
       cls: 'tile-revshare'
     });
   }
 
-  document.getElementById('tiles').innerHTML = tiles.map(function (t, i) {
+  document.getElementById('tiles').innerHTML = tiles.map(function (t) {
     return '<div class="tile ' + (t.cls || '') + '">' +
       '<div class="tile-label">' + t.label + '</div>' +
       '<div class="tile-value">' + t.value + '</div>' +
-      '<div class="tile-sub">' + t.sub + '</div>' +
-      (t.delta || '') +
-      '</div>';
+      '<div class="tile-sub">' + t.sub + '</div>' + (t.delta || '') + '</div>';
   }).join('');
 
   /* ---- targets --------------------------------------------------------- */
-  /* Always month-to-date, regardless of the date filter — a monthly target
-     measured over an arbitrary 7-day window would mean nothing. */
   (function () {
     var blocks = [];
-
     function block(t, label, fmt, unit) {
       if (!t) return;
-      var pctOfTarget = Math.min(1, t.pct);
-      var cls = t.severity;
       blocks.push(
         '<div class="meter">' +
           '<div class="meter-head">' +
@@ -328,51 +305,33 @@
             '<span class="spacer"></span>' +
             '<span class="meter-score">' + fmt(t.actual) + ' / ' + fmt(t.target) + '</span>' +
           '</div>' +
-          '<div class="meter-track ' + cls + '">' +
-            '<div class="meter-fill ' + cls + '" style="width:' + Math.round(pctOfTarget * 100) + '%"></div>' +
+          '<div class="meter-track ' + t.severity + '">' +
+            '<div class="meter-fill ' + t.severity + '" style="width:' + Math.round(Math.min(1, t.pct) * 100) + '%"></div>' +
           '</div>' +
           '<div class="meter-parts">' +
-            '<span>' + A.fmtPct(t.pct, 0) + ' of target</span>' +
-            '<span>Expected by today: ' + fmt(Math.round(t.expected)) + '</span>' +
             '<span style="color:' + (t.onPace ? 'var(--good-text)' : 'var(--critical-text)') + ';font-weight:600">' +
-              (t.onPace ? '✓ On pace' : '▲ Behind by ' + fmt(Math.round(Math.abs(t.aheadBy)))) +
-            '</span>' +
-            '<span>Need ' + fmt(Math.ceil(t.perDayNeeded)) + unit + ' for the remaining ' +
-              targets.daysLeft + ' days</span>' +
+              (t.onPace ? '✓ On pace' : '▲ Behind by ' + fmt(Math.round(Math.abs(t.aheadBy)))) + '</span>' +
+            '<span>Expected by today: ' + fmt(Math.round(t.expected)) + '</span>' +
+            '<span>Need ' + fmt(Math.ceil(t.perDayNeeded)) + unit + ' for the remaining ' + targets.daysLeft + ' days</span>' +
           '</div>' +
-        '</div>'
-      );
+        '</div>');
     }
-
     block(targets.volume, 'Lead volume', A.fmtInt, '/day');
     block(targets.spend, targets.spendLabel, A.fmtMoney0, '/day');
-
     if (!blocks.length) return;
-
     document.getElementById('targets-card').style.display = '';
     document.getElementById('targets-sub').textContent =
-      targets.monthLabel + ' · day ' + targets.daysElapsed + ' of ' + targets.daysInMonth +
-      ' · set by your account manager';
+      targets.monthLabel + ' · day ' + targets.daysElapsed + ' of ' + targets.daysInMonth;
     document.getElementById('targets-body').innerHTML = blocks.join('');
-    document.getElementById('targets-foot').innerHTML =
-      '<span><strong>Not built yet.</strong> Targets are hard-coded in this mock-up. ' +
-      'The admin side needs a screen to set them per partner, per month, as volume, spend, ' +
-      'or both — a target left blank means "not set" and simply does not render. ' +
-      (targets.spend
-        ? 'Switch to the CPL view to see the volume-only variant.'
-        : 'This partner has volume only; the RevShare view shows both.') +
-      '</span>';
   })();
 
-  /* ---- charts --------------------------------------------------------- */
-  var days = D.dailySeries(rows, state.range);                        /* received basis */
-  var soldDays = D.dailySeries(soldRows, state.range, 'soldAt');      /* sold basis     */
+  /* ---- charts ---------------------------------------------------------- */
+  var days = D.dailySeries(rows, state.range);
+  var soldDays = D.dailySeries(soldRows, state.range, 'soldAt');
 
-  /* Colours are passed by CSS variable name, not as literal hex, so charts
-     repaint with the right theme's validated step on a light/dark flip. */
   var volumeSeries = [
-    { key: 'paid', label: 'Accepted (paid)', varName: '--series-1' },
-    { key: 'free', label: 'Rejected', varName: '--muted-mark' }
+    { key: 'paid', label: isRev ? 'Accepted' : 'Accepted (paid)', varName: '--series-1' },
+    { key: 'free', label: isRev ? 'Not accepted' : 'Rejected', varName: '--muted-mark' }
   ];
   var convSeries = [
     { key: 'priority', label: 'Priority', varName: '--series-1' },
@@ -390,31 +349,17 @@
 
   var volHost = document.getElementById('chart-volume');
   var convHost = document.getElementById('chart-conv');
-
-  /* Where we want them to be, drawn on the chart they already read daily. */
   var dailyTarget = D.dailyVolumeTarget(state.partnerType);
   C.mount(volHost, 'columns', {
     days: days, series: volumeSeries,
-    targetLine: dailyTarget
-      ? { value: dailyTarget, label: 'Target ' + Math.round(dailyTarget) + '/day' }
-      : null,
-    ariaLabel: 'Leads submitted per day, accepted versus rejected, against daily target'
+    targetLine: dailyTarget ? { value: dailyTarget, label: 'Target ' + Math.round(dailyTarget) + '/day' } : null,
+    ariaLabel: 'Leads submitted per day against daily target'
   });
   C.mount(convHost, 'columns', { days: soldDays, series: convSeries, ariaLabel: 'Priority and Hot sales per day' });
   A.viewToggle(document.getElementById('toggle-volume'), volHost);
   A.viewToggle(document.getElementById('toggle-conv'), convHost);
 
-  document.getElementById('cook-note').innerHTML =
-    'Sales are plotted on the day they <strong>sold</strong>, not the day the lead arrived. ' +
-    'Leads take ' + D.MATURITY_DAYS + '–14 days to cook, so plotting them on the arrival date ' +
-    'would make every short window read as zero sales. ' +
-    '<strong>' + A.fmtInt(m.immaturePaid) + '</strong> paid leads that arrived in this window are ' +
-    'still inside the ' + D.MATURITY_DAYS + '-day maturity buffer — they have not failed to sell, ' +
-    'they have not finished cooking.';
-
-  /* ---- campaign breakout ---------------------------------------------- */
-  /* Index every basis by the same key so a row can pull the right number
-     from the right window. */
+  /* ---- shared helpers -------------------------------------------------- */
   function indexBy(rowSet, keyFn) {
     var out = {};
     D.groupBy(rowSet, keyFn, mOpts).forEach(function (g) { out[g.key] = g; });
@@ -422,30 +367,125 @@
   }
   var EMPTY = D.computeMetrics([], null, mOpts);
   function pull(idx, key) { return idx[key] ? idx[key].metrics : EMPTY; }
+  function rate(b) { return b && b.mature ? b.ph / b.mature : 0; }
 
+  /* ---- investable assets ----------------------------------------------- */
+  (function () {
+    var bands = coh.metrics.byBand;
+    var best = 0;
+    D.ASSET_BANDS.forEach(function (b) { best = Math.max(best, rate(bands[b.key])); });
+    best = best || 1;
+
+    var head = '<thead><tr><th>Band</th><th class="num">Leads</th><th class="num">Priority/Hot</th></tr></thead>';
+    var body = D.ASSET_BANDS.map(function (b) {
+      var bucket = bands[b.key] || { raw: 0, mature: 0, ph: 0 };
+      var r = rate(bucket);
+      var w = Math.round((r / best) * 100);
+      return '<tr' + (b.focus ? ' style="background:var(--surface-2)"' : '') + '>' +
+        '<td>' + A.esc(b.label) + (b.focus ? ' <strong style="color:var(--good-text)">★</strong>' : '') +
+          (!b.payable ? '<div style="font-size:12px;color:var(--ink-muted)">never pays</div>' : '') + '</td>' +
+        '<td class="num">' + A.fmtInt(bucket.raw) + '</td>' +
+        '<td class="num"><span class="bar-cell"><span>' + A.fmtPct(r, 1) + '</span>' +
+        '<span class="bar-track"><span class="bar-fill" style="width:' + w + '%"></span></span></span></td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('band-table').innerHTML = head + '<tbody>' + body + '</tbody>';
+    document.getElementById('band-foot').innerHTML =
+      '<span>★ <strong>$100K–$250K</strong> converts best and holds across months. ' +
+      'It is the highest-leverage targeting change available to most partners.</span>';
+  })();
+
+  /* ---- arrival window --------------------------------------------------- */
+  (function () {
+    var segs = coh.metrics.bySegment;
+    var best = 0;
+    D.HOUR_SEGMENT_ORDER.forEach(function (k) { best = Math.max(best, rate(segs[k])); });
+    best = best || 1;
+
+    var head = '<thead><tr><th>Window</th><th class="num">Leads</th><th class="num">Priority/Hot</th></tr></thead>';
+    var body = D.HOUR_SEGMENT_ORDER.map(function (k) {
+      var bucket = segs[k] || { raw: 0, mature: 0, ph: 0 };
+      var r = rate(bucket);
+      var w = Math.round((r / best) * 100);
+      var isEarly = k === 'early';
+      return '<tr' + (isEarly ? ' style="background:var(--surface-2)"' : '') + '>' +
+        '<td>' + D.HOUR_SEGMENT_LABEL[k] + (isEarly ? ' <strong style="color:var(--good-text)">★</strong>' : '') + '</td>' +
+        '<td class="num">' + A.fmtInt(bucket.raw) + '</td>' +
+        '<td class="num"><span class="bar-cell"><span>' + A.fmtPct(r, 1) + '</span>' +
+        '<span class="bar-track"><span class="bar-fill" style="width:' + w + '%"></span></span></span></td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('window-table').innerHTML = head + '<tbody>' + body + '</tbody>';
+
+    var dows = coh.metrics.byDow;
+    var bestDow = null;
+    Object.keys(dows).forEach(function (d) {
+      if (!bestDow || rate(dows[d]) > rate(dows[bestDow])) bestDow = d;
+    });
+    document.getElementById('window-foot').innerHTML =
+      '<span>★ Early arrivals convert materially better.' +
+      (bestDow != null ? ' Your strongest day is <strong>' + D.DOW_LABEL[bestDow] + '</strong>.' : '') +
+      '</span>';
+  })();
+
+  /* ---- tier mix --------------------------------------------------------- */
+  (function () {
+    var order = ['livetransfer', 'appointment', 'priority', 'hot', 'auction', 'marketplace'];
+    var total = sm.soldAny || 1;
+    var showMoney = sm.hasEarnings;
+
+    document.getElementById('tier-sub').textContent = showMoney
+      ? 'What sold, and what it paid you.'
+      : 'What your sold leads sold as.';
+
+    var head = '<thead><tr><th>Tier</th><th class="num">Sold</th><th class="num">Share</th>' +
+      (showMoney ? '<th class="num revshare-col">You earned</th>' : '') + '</tr></thead>';
+
+    var body = order.map(function (k) {
+      var n = sm.byType[k] || 0;
+      if (!n && (k === 'livetransfer' || k === 'appointment')) {
+        return '<tr style="opacity:.55"><td>' + A.soldBadge(k) + '</td>' +
+          '<td class="num">0</td><td class="num">—</td>' +
+          (showMoney ? '<td class="num revshare-col">—</td>' : '') + '</tr>';
+      }
+      var earned = 0;
+      if (showMoney) {
+        soldRows.forEach(function (r) { if (r.soldType === k) earned += r.partnerShare || 0; });
+      }
+      return '<tr><td>' + A.soldBadge(k) + '</td>' +
+        '<td class="num">' + A.fmtInt(n) + '</td>' +
+        '<td class="num">' + A.fmtPct(n / total, 1) + '</td>' +
+        (showMoney ? '<td class="num revshare-col">' + (earned ? A.fmtMoney0(earned) : '—') + '</td>' : '') +
+        '</tr>';
+    }).join('');
+
+    document.getElementById('tier-table').innerHTML = head + '<tbody>' + body + '</tbody>';
+    document.getElementById('tier-foot').innerHTML =
+      '<span><strong>Appointment</strong> and <strong>Live transfer</strong> launched this month ' +
+      'and sit above Priority. Low counts are expected while they ramp.</span>';
+  })();
+
+  /* ---- campaigns -------------------------------------------------------- */
   var byCampaign = indexBy(rows, function (r) { return r.campaignId; });
   var soldByCampaign = indexBy(soldRows, function (r) { return r.campaignId; });
   var cohByCampaign = indexBy(coh.rows, function (r) { return r.campaignId; });
 
   (function () {
-    var head = '<thead><tr>' +
-      '<th>Campaign</th><th>Type</th>' +
-      '<th class="num">Leads</th><th class="num">Accepted</th><th class="num">Accept %</th>' +
-      '<th class="num">Priority</th><th class="num">Hot</th>' +
-      '<th class="num">Median cycle</th>' +
-      (sm.hasEarnings ? '<th class="num revshare-col">Earnings</th>' : '') +
-      '<th class="num">P/H rate</th>' +
-      '</tr></thead>';
-
-    var body = D.CAMPAIGNS.filter(function (c) {
+    var mine = D.campaignsFor(state.partnerType).filter(function (c) {
       return state.campaignId === 'all' || c.id === state.campaignId;
-    }).map(function (c) {
-      var gm = pull(byCampaign, c.id);
-      var gs = pull(soldByCampaign, c.id);
-      var gc = pull(cohByCampaign, c.id);
+    });
+
+    var head = '<thead><tr><th>Campaign</th><th>Type</th>' +
+      '<th class="num">Leads</th><th class="num">Accepted</th><th class="num">Accept %</th>' +
+      '<th class="num">Priority</th><th class="num">Hot</th><th class="num">Median cycle</th>' +
+      (sm.hasEarnings ? '<th class="num revshare-col">Earnings</th>' : '') +
+      '<th class="num">P/H rate</th></tr></thead>';
+
+    var body = mine.map(function (c) {
+      var gm = pull(byCampaign, c.id), gs = pull(soldByCampaign, c.id), gc = pull(cohByCampaign, c.id);
       return '<tr>' +
         '<td><a href="' + A.linkTo('leads.html', state, { campaign: c.id }) + '">' + A.esc(c.name) + '</a>' +
-          '<div style="font-size:11px;color:var(--ink-muted)">' + A.esc(c.id) + '</div></td>' +
+          '<div style="font-size:12px;color:var(--ink-muted)">' + A.esc(c.id) + '</div></td>' +
         '<td><span class="badge">' + (c.kind === 'aged' ? 'Aged' : 'Fresh') + ' · ' + c.product + '</span></td>' +
         '<td class="num">' + A.fmtInt(gm.raw) + '</td>' +
         '<td class="num">' + A.fmtInt(gm.paid) + '</td>' +
@@ -454,11 +494,10 @@
         '<td class="num">' + A.fmtInt(gs.hot) + '</td>' +
         '<td class="num">' + (gs.medianCycle == null ? '—' : gs.medianCycle + 'd') + '</td>' +
         (sm.hasEarnings ? '<td class="num revshare-col">' + A.fmtMoney0(gs.earnings) + '</td>' : '') +
-        '<td class="num">' + A.fmtPct(gc.priorityHotRate, 1) + '</td>' +
-        '</tr>';
+        '<td class="num">' + A.fmtPct(gc.priorityHotRate, 1) + '</td></tr>';
     }).join('');
 
-    var foot = '<tfoot><tr><td colspan="2">All selected campaigns</td>' +
+    var foot = '<tfoot><tr><td colspan="2">All campaigns</td>' +
       '<td class="num">' + A.fmtInt(m.raw) + '</td>' +
       '<td class="num">' + A.fmtInt(m.paid) + '</td>' +
       '<td class="num">' + A.fmtPct(m.acceptanceRate, 1) + '</td>' +
@@ -466,58 +505,51 @@
       '<td class="num">' + A.fmtInt(sm.hot) + '</td>' +
       '<td class="num">' + (sm.medianCycle == null ? '—' : sm.medianCycle + 'd') + '</td>' +
       (sm.hasEarnings ? '<td class="num revshare-col">' + A.fmtMoney0(sm.earnings) + '</td>' : '') +
-      '<td class="num">' + A.fmtPct(coh.metrics.priorityHotRate, 1) + '</td>' +
-      '</tr></tfoot>';
+      '<td class="num">' + A.fmtPct(coh.metrics.priorityHotRate, 1) + '</td></tr></tfoot>';
 
     document.getElementById('campaign-table').innerHTML = head + '<tbody>' + body + '</tbody>' + foot;
+    document.getElementById('campaign-foot').innerHTML =
+      '<span>Volume counts leads that <em>arrived</em> in the window; outcomes count leads that ' +
+      '<em>sold</em> in it. P/H rate is the trailing 30-day matured cohort, so it does not move ' +
+      'with the date filter.</span>';
   })();
 
-  /* ---- sub-ID breakdown ------------------------------------------------ */
-  var subRowsForExport = [];
+  /* ---- sub-IDs ----------------------------------------------------------- */
+  var subExport = [];
   (function () {
     var soldBySub = indexBy(soldRows, function (r) { return r.subid; });
     var cohBySub = indexBy(coh.rows, function (r) { return r.subid; });
+    var groups = D.groupBy(rows, function (r) { return r.subid; }, mOpts);
 
-    var groups = D.groupBy(rows, function (r) { return r.subid; });
-    /* Rank by the cohort rate — the only column that is a like-for-like
-       quality comparison between publishers. */
     groups.sort(function (a, b) {
       return pull(cohBySub, b.key).priorityHotRate - pull(cohBySub, a.key).priorityHotRate;
     });
-
     var best = groups.reduce(function (a, g) {
       return Math.max(a, pull(cohBySub, g.key).priorityHotRate);
     }, 0) || 1;
 
-    var head = '<thead><tr>' +
-      '<th>Sub-ID</th><th>Campaign</th>' +
+    var head = '<thead><tr><th>Sub-ID</th><th>Campaign</th>' +
       '<th class="num">Leads</th><th class="num">Accepted</th><th class="num">Accept %</th>' +
       '<th class="num">Priority/Hot</th>' +
       (sm.hasEarnings ? '<th class="num revshare-col">Earnings</th>' : '') +
-      '<th class="num">P/H rate — 30d cohort</th>' +
-      '</tr></thead>';
+      '<th class="num">P/H rate · 30d</th></tr></thead>';
 
     var body = groups.map(function (g) {
-      var gm = g.metrics;
-      var gs = pull(soldBySub, g.key);
-      var gc = pull(cohBySub, g.key);
-      var label = g.rows[0].subidLabel;
-      var camp = g.rows[0].campaignId;
-      subRowsForExport.push({ subid: g.key, label: label, campaign: camp, m: gm, s: gs, c: gc });
+      var gm = g.metrics, gs = pull(soldBySub, g.key), gc = pull(cohBySub, g.key);
+      var label = g.rows[0].subidLabel, camp = g.rows[0].campaignId;
+      subExport.push({ subid: g.key, label: label, campaign: camp, m: gm, s: gs, c: gc });
       var w = Math.round((gc.priorityHotRate / best) * 100);
       return '<tr>' +
         '<td><a href="' + A.linkTo('leads.html', state, { subid: g.key }) + '">' + A.esc(label) + '</a>' +
-          '<div style="font-size:11px;color:var(--ink-muted);font-family:ui-monospace,monospace">' + A.esc(g.key) + '</div></td>' +
-        '<td style="font-size:12px;color:var(--ink-2)">' + A.esc(camp) + '</td>' +
+          '<div style="font-size:12px;color:var(--ink-muted);font-family:ui-monospace,monospace">' + A.esc(g.key) + '</div></td>' +
+        '<td style="font-size:13px;color:var(--ink-2)">' + A.esc(camp) + '</td>' +
         '<td class="num">' + A.fmtInt(gm.raw) + '</td>' +
         '<td class="num">' + A.fmtInt(gm.paid) + '</td>' +
         '<td class="num">' + A.fmtPct(gm.acceptanceRate, 1) + '</td>' +
         '<td class="num">' + A.fmtInt(gs.soldPriorityHot) + '</td>' +
         (sm.hasEarnings ? '<td class="num revshare-col">' + A.fmtMoney0(gs.earnings) + '</td>' : '') +
-        '<td class="num"><span class="bar-cell">' +
-          '<span>' + A.fmtPct(gc.priorityHotRate, 1) + '</span>' +
-          '<span class="bar-track"><span class="bar-fill" style="width:' + w + '%"></span></span>' +
-        '</span></td>' +
+        '<td class="num"><span class="bar-cell"><span>' + A.fmtPct(gc.priorityHotRate, 1) + '</span>' +
+        '<span class="bar-track"><span class="bar-fill" style="width:' + w + '%"></span></span></span></td>' +
         '</tr>';
     }).join('');
 
@@ -526,14 +558,14 @@
 
     var worst = groups[groups.length - 1];
     document.getElementById('subid-foot').innerHTML = worst && groups.length > 1
-      ? 'Widest spread on the 30-day cohort: <strong>' + A.esc(groups[0].rows[0].subidLabel) + '</strong> at ' +
-        A.fmtPct(pull(cohBySub, groups[0].key).priorityHotRate, 1) + ' Priority/Hot versus <strong>' +
+      ? '<strong>' + A.esc(groups[0].rows[0].subidLabel) + '</strong> converts at ' +
+        A.fmtPct(pull(cohBySub, groups[0].key).priorityHotRate, 1) + ' versus <strong>' +
         A.esc(worst.rows[0].subidLabel) + '</strong> at ' + A.fmtPct(pull(cohBySub, worst.key).priorityHotRate, 1) +
-        '. Same account, same rate card — which is the argument for paying by publisher, not by account.'
+        ' — same account, same rate card.'
       : '';
   })();
 
-  document.getElementById('export-subid').addEventListener('click', function () {
+  A.exportControl(document.getElementById('export-subid'), function () {
     var cols = [
       { label: 'Sub-ID', value: function (r) { return r.subid; } },
       { label: 'Label', value: function (r) { return r.label; } },
@@ -546,36 +578,37 @@
       { label: 'Median days to sale', value: function (r) { return r.s.medianCycle == null ? '' : r.s.medianCycle; } },
       { label: 'Priority/Hot rate (30d cohort)', value: function (r) { return (r.c.priorityHotRate * 100).toFixed(2) + '%'; } }
     ];
-    /* Earnings columns are appended only when the projection carried them. */
     if (sm.hasEarnings) {
       cols.push({ label: 'Your earnings (USD)', value: function (r) { return r.s.earnings.toFixed(2); } });
     }
-    A.exportCsv(subRowsForExport, cols,
-      'subid-performance_' + A.isoDate(state.range.from) + '_' + A.isoDate(state.range.to) + '.csv');
+    return {
+      rows: subExport, columns: cols,
+      filename: 'subid-performance_' + A.isoDate(state.range.from) + '_' + A.isoDate(state.range.to) + '.csv',
+      toastHost: document.getElementById('export-toast')
+    };
   });
 
-  /* ---- rejection reasons ---------------------------------------------- */
+  /* ---- rejection reasons -------------------------------------------------- */
   (function () {
     var entries = Object.keys(m.rejects).map(function (k) {
       return { key: k, count: m.rejects[k] };
     }).sort(function (a, b) { return b.count - a.count; });
 
     var head = '<thead><tr><th>Reason</th><th class="num">Leads</th>' +
-      '<th class="num">% of rejected</th><th class="num">% of submitted</th><th>What fixes it</th></tr></thead>';
+      '<th class="num">% of rejected</th><th>What fixes it</th></tr></thead>';
 
+    /* Criteria labels carry THIS partner's negotiated band, not the standard
+       one — the OptiLabX 45–79 exception has already caused a $5,194 invoice
+       variance by being applied as 45–75 somewhere downstream. */
     var body = entries.map(function (e) {
-      var r = D.REJECT_REASONS[e.key];
-      return '<tr>' +
-        '<td>' + A.esc(r.label) + '</td>' +
+      return '<tr><td>' + A.esc(D.rejectLabel(e.key, state.partnerType)) + '</td>' +
         '<td class="num">' + A.fmtInt(e.count) + '</td>' +
         '<td class="num">' + A.fmtPct(m.free ? e.count / m.free : 0, 1) + '</td>' +
-        '<td class="num">' + A.fmtPct(m.raw ? e.count / m.raw : 0, 1) + '</td>' +
-        '<td style="color:var(--ink-2);font-size:12.5px">' + A.esc(r.fix) + '</td>' +
-        '</tr>';
+        '<td style="color:var(--ink-2)">' + A.esc(D.rejectFix(e.key)) + '</td></tr>';
     }).join('');
 
     document.getElementById('reject-table').innerHTML =
-      head + '<tbody>' + (body || '<tr><td colspan="5" class="empty">No rejected leads in this window.</td></tr>') + '</tbody>';
+      head + '<tbody>' + (body || '<tr><td colspan="4" class="empty">No rejected leads in this window.</td></tr>') + '</tbody>';
   })();
 
 })();
