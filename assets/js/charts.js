@@ -34,6 +34,14 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
+  /* Resolve a series colour AT RENDER TIME, not at config time.
+     Callers pass `varName: '--series-1'` rather than a literal hex, so a theme
+     change (or an OS light/dark flip mid-session) repaints with that theme's
+     own validated step instead of the one captured when the chart mounted. */
+  function seriesColor(s) {
+    return s.varName ? cssVar(s.varName) : s.color;
+  }
+
   function niceCeil(v) {
     if (v <= 5) return 5;
     var mag = Math.pow(10, Math.floor(Math.log10(v)));
@@ -202,10 +210,11 @@
           if (h <= 0.5) return;
 
           var node;
+          var fill = seriesColor(s);
           if (isTop) {
-            node = el('path', { d: topRoundedPath(x, yTop, barW, h, 4), fill: s.color });
+            node = el('path', { d: topRoundedPath(x, yTop, barW, h, 4), fill: fill });
           } else {
-            node = el('rect', { x: x, y: yTop, width: barW, height: h, fill: s.color });
+            node = el('rect', { x: x, y: yTop, width: barW, height: h, fill: fill });
           }
           svg.appendChild(node);
         });
@@ -227,7 +236,7 @@
         });
         hit.addEventListener('mouseenter', function () {
           var rows = cfg.series.map(function (s) {
-            return { color: s.color, label: s.label, value: fmtInt(d[s.key] || 0) };
+            return { color: seriesColor(s), label: s.label, value: fmtInt(d[s.key] || 0) };
           });
           if (cfg.series.length > 1) {
             rows.push({ color: null, label: 'Total', value: fmtInt(stackTotal) });
@@ -286,7 +295,7 @@
       var axisColor = cssVar('--axis');
       var muted = cssVar('--ink-muted');
       var ink = cssVar('--ink');
-      var color = cfg.color || cssVar('--series-1');
+      var color = cfg.colorVar ? cssVar(cfg.colorVar) : (cfg.color || cssVar('--series-1'));
 
       var pts = cfg.points;
       var yMin = cfg.yMin != null ? cfg.yMin : 0;
@@ -305,7 +314,7 @@
         var yTop = Y(b.to), yBot = Y(b.from);
         svg.appendChild(el('rect', {
           x: padL, y: yTop, width: plotW, height: Math.max(0, yBot - yTop),
-          fill: b.color, 'fill-opacity': 0.07
+          fill: seriesColor(b), 'fill-opacity': 0.07
         }));
       });
 

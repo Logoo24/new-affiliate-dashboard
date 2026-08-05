@@ -274,19 +274,21 @@
   var days = D.dailySeries(rows, state.range);                        /* received basis */
   var soldDays = D.dailySeries(soldRows, state.range, 'soldAt');      /* sold basis     */
 
+  /* Colours are passed by CSS variable name, not as literal hex, so charts
+     repaint with the right theme's validated step on a light/dark flip. */
   var volumeSeries = [
-    { key: 'paid', label: 'Accepted (paid)', color: C.cssVar('--series-1') },
-    { key: 'free', label: 'Rejected', color: C.cssVar('--muted-mark') }
+    { key: 'paid', label: 'Accepted (paid)', varName: '--series-1' },
+    { key: 'free', label: 'Rejected', varName: '--muted-mark' }
   ];
   var convSeries = [
-    { key: 'priority', label: 'Priority', color: C.cssVar('--series-1') },
-    { key: 'hot', label: 'Hot', color: C.cssVar('--series-2') }
+    { key: 'priority', label: 'Priority', varName: '--series-1' },
+    { key: 'hot', label: 'Hot', varName: '--series-2' }
   ];
 
   function legend(host, series) {
     document.getElementById(host).innerHTML = series.map(function (s) {
-      return '<span class="legend-item"><span class="legend-swatch" style="background:' +
-        s.color + '"></span>' + s.label + '</span>';
+      return '<span class="legend-item"><span class="legend-swatch" style="background:var(' +
+        s.varName + ')"></span>' + s.label + '</span>';
     }).join('');
   }
   legend('legend-volume', volumeSeries);

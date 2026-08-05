@@ -85,6 +85,38 @@ cannot be chosen. The selector exists here only so reviewers can see both views.
 
 ---
 
+## Brand palette
+
+Themed to the Financialize mark — navy `#1E2739`, coral `#F0604A`, white. The navigation rail
+is navy in **both** light and dark mode, because it is the strongest brand signal on the page.
+Dark mode is effectively the brand image: navy plane, navy cards, white ink, coral accent.
+
+Every colour that touches a chart was run through the palette validator against the surface it
+actually renders on. Two results worth carrying into the build:
+
+- **Brand coral is used as-is in light mode, but steps to `#E4573D` in dark.** The brand value
+  sits at lightness 0.67 — exactly on the dark-mode band ceiling — and fails. `#E4573D` is the
+  nearest passing step.
+- **Coral sits close to status-critical red** (ΔE 9.7 light, 6.8 dark, against a floor of 15).
+  This is accepted, not overlooked — the reference palette carries the same situation at ΔE 4.8.
+  The mitigation is that **no status in this UI is ever colour-alone**: every one is a dot plus a
+  text label. If a bare coloured dot with no label ever ships, that rule breaks and the two reds
+  become genuinely ambiguous.
+
+Meter bars are the one component that *does* carry meaning by colour alone, so they use their own
+contrast-safe ramps rather than the status tokens — `#fab219` is only 1.83:1 on white and cannot
+legally anchor an ordinal ramp there. All eight track/fill pairs are validated. The exact hexes
+and the re-validation command are documented at the top of `assets/css/dashboard.css`.
+
+Charts resolve their colours from CSS variables **at render time**, not at mount, so a light/dark
+flip repaints with that theme's own validated step.
+
+> **The logo is a placeholder.** `BRAND_MARK` in `assets/js/app.js` is a geometric stand-in drawn
+> to match the real mark's colours and proportions. **Drop in the actual SVG asset before this
+> goes in front of a partner.**
+
+---
+
 ## Attribution — please read this one, it is the easiest thing to get wrong
 
 Leads take 9–12 days to cook. That single fact decides how three different kinds of number have

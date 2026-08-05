@@ -13,6 +13,17 @@
 
   var D = global.FZData;
 
+  /* PLACEHOLDER MARK — a geometric stand-in for the Financialize logo, drawn
+     to match its colours and proportions so the shell reads on-brand. Replace
+     with the real SVG asset before this goes in front of a partner; do not
+     ship this as the logo. */
+  var BRAND_MARK =
+    '<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">' +
+      '<rect x="4" y="6" width="3.6" height="20" rx="1.4" fill="#FFFFFF"/>' +
+      '<path d="M6 6 h13.5 a3.4 3.4 0 0 1 0 6.8 H6 z" fill="#F0604A"/>' +
+      '<path d="M6 15.6 h9 a3.2 3.2 0 0 1 0 6.4 H6 z" fill="#FFFFFF"/>' +
+    '</svg>';
+
   var NAV = [
     { href: 'index.html',          label: 'Performance',      ico: '▤' },
     { href: 'leads.html',          label: 'Leads',            ico: '☰' },
@@ -105,8 +116,11 @@
     if (side) {
       side.innerHTML =
         '<div class="brand">' +
-          '<div class="brand-mark">Financialize</div>' +
-          '<div class="brand-sub">Partner Portal</div>' +
+          '<span class="brand-logo">' + BRAND_MARK + '</span>' +
+          '<span>' +
+            '<span class="brand-mark">Financialize</span>' +
+            '<div class="brand-sub">Partner Portal</div>' +
+          '</span>' +
         '</div>' +
         '<nav class="nav">' +
           '<div class="nav-label">Reporting</div>' +
@@ -117,8 +131,9 @@
           }).join('') +
         '</nav>' +
         '<div class="sidebar-foot">' +
-          esc(p.name) + '<br>' +
-          '<span style="opacity:.8">' + esc(p.compModel) + '</span>' +
+          '<strong>' + esc(p.name) + '</strong><br>' +
+          esc(p.compModel) +
+          '<div class="brand-tagline">Built for Agents. Backed by Purpose.<br>Driven by Growth.</div>' +
         '</div>';
     }
 

@@ -184,7 +184,9 @@
           '<span class="spacer"></span>' +
           '<span class="meter-score">' + Math.round(p.score) + '</span>' +
         '</div>' +
-        '<div class="meter-track">' +
+        /* Same severity class on both, so the track is a lighter step of the
+           fill's own hue rather than a blue track under an orange fill. */
+        '<div class="meter-track ' + H.meterClass(p.score) + '">' +
           '<div class="meter-fill ' + H.meterClass(p.score) + '" style="width:' + Math.round(p.score) + '%"></div>' +
         '</div>' +
         '<div class="meter-parts">' + parts + '</div>' +
@@ -206,21 +208,22 @@
   C.mount(trendHost, 'line', {
     points: H.trend({ partnerType: state.partnerType, campaignId: state.campaignId, subid: state.subid }),
     seriesLabel: 'Health score',
+    colorVar: '--series-1',
     yMin: 0, yMax: 100,
     ariaLabel: 'Health score over the trailing 90 days',
     bands: [
-      { from: 80, to: 100, color: C.cssVar('--good') },
-      { from: 60, to: 80,  color: C.cssVar('--series-1') },
-      { from: 45, to: 60,  color: C.cssVar('--warning') },
-      { from: 0,  to: 45,  color: C.cssVar('--critical') }
+      { from: 80, to: 100, varName: '--good' },
+      { from: 60, to: 80,  varName: '--series-1' },
+      { from: 45, to: 60,  varName: '--warning' },
+      { from: 0,  to: 45,  varName: '--critical' }
     ]
   });
   A.viewToggle(document.getElementById('toggle-trend'), trendHost);
 
   document.getElementById('tier-legend').innerHTML = H.TIERS.slice().reverse().map(function (t) {
     var color = { good: '--good', info: '--series-1', warning: '--warning', critical: '--critical' }[t.tone];
-    return '<span class="legend-item"><span class="legend-swatch" style="background:' +
-      C.cssVar(color) + ';opacity:.35"></span>' + t.label + '</span>';
+    return '<span class="legend-item"><span class="legend-swatch" style="background:var(' +
+      color + ');opacity:.35"></span>' + t.label + '</span>';
   }).join('');
 
   /* ---- coverage asks --------------------------------------------------- */

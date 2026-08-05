@@ -10,42 +10,104 @@
    mechanism, not decoration.
    ========================================================================== */
 
+/* --------------------------------------------------------------------------
+   BRAND PALETTE — Financialize
+   --------------------------------------------------------------------------
+   Navy / coral / white, taken from the brand mark. Every value below that
+   touches a chart was run through the data-viz palette validator against the
+   surface it actually renders on. Results, so nobody has to re-derive them:
+
+     light  blue #2a78d6 + coral #F0604A on #FFFFFF ......... ALL PASS
+                                    (CVD ΔE 22.1, normal ΔE 33.3)
+     dark   blue #4A90E8 + coral #E4573D on navy #1E2739 .... ALL PASS
+                                    (CVD ΔE 24.8, normal ΔE 30.8)
+     meters light #86b6ef → #1c5cab ........ ordinal PASS (light end 2.04:1)
+            dark  #3A5A8C → #4A90E8 ........ ordinal PASS (light end 2.15:1)
+     status all four clear 3:1 on the navy surface
+
+   TWO THINGS TO KNOW BEFORE CHANGING ANY OF THIS:
+
+   1. Brand coral #F0604A is used AS-IS in light mode. In dark mode it steps
+      down to #E4573D — the brand value sits at L 0.67, exactly on the dark
+      band ceiling, and fails. #E4573D is the nearest passing step.
+
+   2. Coral sits close to status-critical red (normal-vision ΔE 9.7 light,
+      6.8 dark — both below the 15 floor). This is a known and accepted
+      condition, not an oversight: the reference palette carries the same
+      situation at ΔE 4.8 between its red series and critical status. The
+      documented mitigation is that a status colour never carries meaning by
+      hue alone — every status in this UI ships as a dot PLUS a text label.
+      If you ever render a bare coloured dot with no label, that rule breaks.
+
+   Re-run before altering a series colour:
+     node scripts/validate_palette.js "<hex,hex>" --mode <light|dark> \
+          --surface <#FFFFFF | #1E2739>
+   -------------------------------------------------------------------------- */
+
 :root {
   color-scheme: light;
 
+  /* Brand constants — identical in both themes */
+  --brand-navy:   #1E2739;
+  --brand-coral:  #F0604A;
+  --brand-white:  #FFFFFF;
+
+  /* Navigation rail: always navy, in both themes. It is the strongest brand
+     signal on the page and flipping it to white would throw that away. */
+  --nav-bg:       #1E2739;
+  --nav-bg-deep:  #172032;
+  --nav-ink:      #FFFFFF;
+  --nav-ink-2:    rgba(255, 255, 255, 0.60);
+  --nav-hover:    rgba(255, 255, 255, 0.07);
+  --nav-active:   rgba(255, 255, 255, 0.11);
+  --nav-border:   rgba(255, 255, 255, 0.10);
+
   /* Surfaces & ink */
-  --plane:        #f9f9f7;
-  --surface-1:    #fcfcfb;
-  --surface-2:    #f2f1ed;
-  --ink:          #0b0b0b;
-  --ink-2:        #52514e;
-  --ink-muted:    #898781;
-  --grid:         #e1e0d9;
-  --axis:         #c3c2b7;
-  --border:       rgba(11, 11, 11, 0.10);
-  --border-strong:rgba(11, 11, 11, 0.18);
+  --plane:        #F4F6F9;
+  --surface-1:    #FFFFFF;
+  --surface-2:    #EDF1F6;
+  --ink:          #16203A;   /* navy-tinted, not neutral black */
+  --ink-2:        #4A5568;
+  --ink-muted:    #7C8798;
+  --grid:         #E4E9F0;
+  --axis:         #C4CDD9;
+  --border:       rgba(22, 32, 58, 0.11);
+  --border-strong:rgba(22, 32, 58, 0.20);
 
   /* Categorical series slots (fixed order — never cycle, never generate) */
-  --series-1:     #2a78d6;  /* blue    */
-  --series-2:     #eb6834;  /* orange  */
-  --series-3:     #1baf7a;  /* aqua    */
+  --series-1:     #2a78d6;  /* blue           */
+  --series-2:     #F0604A;  /* brand coral    */
+  --series-3:     #1baf7a;  /* aqua, reserve  */
 
-  /* Sequential blue ramp (magnitude) */
-  --seq-150:      #b7d3f6;
+  /* Sequential / ordinal blue ramp (meters, magnitude) */
+  --seq-track:    #86b6ef;
+  --seq-fill:     #1c5cab;
   --seq-250:      #86b6ef;
   --seq-400:      #3987e5;
-  --seq-550:      #1c5cab;
+
+  /* Meter ramps — one PAIR per severity, so the track is always a lighter
+     step of the fill's own hue and state reads across the whole bar.
+     A meter bar carries meaning by colour alone (no icon, no label on the
+     bar), so unlike a status badge these steps must clear contrast on their
+     own. That is why the light warning/serious fills are darker than the
+     status tokens of the same name — #fab219 is only 1.83:1 on white and
+     cannot legally anchor an ordinal ramp there. All eight pairs validated
+     with --ordinal against their own surface. */
+  --meter-track:          #86b6ef;  --meter-fill:          #1c5cab;
+  --meter-track-warning:  #D6A947;  --meter-fill-warning:  #A8730B;
+  --meter-track-serious:  #E9A184;  --meter-fill-serious:  #B04E22;
+  --meter-track-critical: #E59595;  --meter-fill-critical: #B32C2C;
 
   /* Status — reserved, never reused as a series colour */
   --good:         #0ca30c;
   --warning:      #fab219;
   --serious:      #ec835a;
   --critical:     #d03b3b;
-  --good-text:    #006300;
+  --good-text:    #047604;
   --critical-text:#b02c2c;
 
   /* De-emphasis (context marks, never an entity) */
-  --muted-mark:   #c9c8c1;
+  --muted-mark:   #BCC6D4;
 
   --radius:       10px;
   --radius-sm:    6px;
@@ -54,55 +116,62 @@
   --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
 }
 
+/* Dark mode is the brand image: navy plane, navy cards, white ink, coral
+   accent. The dark steps are selected against the navy surface, not flipped
+   from the light values. */
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
-    --plane:        #0d0d0d;
-    --surface-1:    #1a1a19;
-    --surface-2:    #232322;
-    --ink:          #ffffff;
-    --ink-2:        #c3c2b7;
-    --ink-muted:    #898781;
-    --grid:         #2c2c2a;
-    --axis:         #383835;
+    --plane:        #141C2B;
+    --surface-1:    #1E2739;
+    --surface-2:    #28334A;
+    --ink:          #FFFFFF;
+    --ink-2:        #C5CEDD;
+    --ink-muted:    #8A94A6;
+    --grid:         #2C3849;
+    --axis:         #3D4A5F;
     --border:       rgba(255, 255, 255, 0.10);
     --border-strong:rgba(255, 255, 255, 0.20);
-    --series-1:     #3987e5;
-    --series-2:     #d95926;
+    --series-1:     #4A90E8;
+    --series-2:     #E4573D;   /* brand coral, stepped into the dark band */
     --series-3:     #199e70;
-    --seq-150:      #184f95;
-    --seq-250:      #1c5cab;
-    --seq-400:      #3987e5;
-    --seq-550:      #86b6ef;
-    --good-text:    #0ca30c;
-    --critical-text:#e06a6a;
-    --muted-mark:   #4a4a47;
+    --seq-track:    #3A5A8C;
+    --seq-fill:     #4A90E8;
+    --seq-250:      #3A5A8C;
+    --seq-400:      #4A90E8;
+    --meter-track:          #3A5A8C;  --meter-fill:          #4A90E8;
+    --meter-track-warning:  #7A5C1E;  --meter-fill-warning:  #fab219;
+    --meter-track-serious:  #7D4B39;  --meter-fill-serious:  #ec835a;
+    --meter-track-critical: #933B3B;  --meter-fill-critical: #d03b3b;
+    --good-text:    #22C55E;
+    --critical-text:#F08080;
+    --muted-mark:   #46536B;
     --shadow:       none;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --plane:        #0d0d0d;
-  --surface-1:    #1a1a19;
-  --surface-2:    #232322;
-  --ink:          #ffffff;
-  --ink-2:        #c3c2b7;
-  --ink-muted:    #898781;
-  --grid:         #2c2c2a;
-  --axis:         #383835;
+  --plane:        #141C2B;
+  --surface-1:    #1E2739;
+  --surface-2:    #28334A;
+  --ink:          #FFFFFF;
+  --ink-2:        #C5CEDD;
+  --ink-muted:    #8A94A6;
+  --grid:         #2C3849;
+  --axis:         #3D4A5F;
   --border:       rgba(255, 255, 255, 0.10);
   --border-strong:rgba(255, 255, 255, 0.20);
-  --series-1:     #3987e5;
-  --series-2:     #d95926;
+  --series-1:     #4A90E8;
+  --series-2:     #E4573D;
   --series-3:     #199e70;
-  --seq-150:      #184f95;
-  --seq-250:      #1c5cab;
-  --seq-400:      #3987e5;
-  --seq-550:      #86b6ef;
-  --good-text:    #0ca30c;
-  --critical-text:#e06a6a;
-  --muted-mark:   #4a4a47;
+  --seq-track:    #3A5A8C;
+  --seq-fill:     #4A90E8;
+  --seq-250:      #3A5A8C;
+  --seq-400:      #4A90E8;
+  --good-text:    #22C55E;
+  --critical-text:#F08080;
+  --muted-mark:   #46536B;
   --shadow:       none;
 }
 
@@ -136,10 +205,10 @@ h3 { font-size: 13px; }
 .app { display: flex; min-height: 100vh; }
 
 .sidebar {
-  width: 224px;
-  flex: 0 0 224px;
-  background: var(--surface-1);
-  border-right: 1px solid var(--border);
+  width: 236px;
+  flex: 0 0 236px;
+  background: var(--nav-bg);
+  border-right: 1px solid var(--nav-border);
   display: flex;
   flex-direction: column;
   position: sticky;
@@ -148,18 +217,26 @@ h3 { font-size: 13px; }
 }
 
 .brand {
-  padding: 18px 18px 14px;
-  border-bottom: 1px solid var(--border);
+  padding: 18px 18px 16px;
+  border-bottom: 1px solid var(--nav-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+.brand-logo { flex: 0 0 26px; }
+.brand-logo svg { display: block; width: 26px; height: 26px; }
 .brand-mark {
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 17px;
+  font-weight: 550;
   letter-spacing: -0.02em;
+  color: var(--nav-ink);
+  line-height: 1.1;
 }
 .brand-sub {
-  font-size: 11px;
-  color: var(--ink-muted);
-  margin-top: 2px;
+  font-size: 10px;
+  color: var(--nav-ink-2);
+  margin-top: 1px;
+  letter-spacing: 0.01em;
 }
 
 .nav { padding: 10px 10px; flex: 1; overflow-y: auto; }
@@ -167,7 +244,7 @@ h3 { font-size: 13px; }
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ink-muted);
+  color: var(--nav-ink-2);
   padding: 12px 8px 6px;
   font-weight: 600;
 }
@@ -175,22 +252,47 @@ h3 { font-size: 13px; }
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 7px 8px;
+  padding: 7px 8px 7px 10px;
   border-radius: var(--radius-sm);
-  color: var(--ink-2);
+  color: var(--nav-ink-2);
   text-decoration: none;
   font-size: 13px;
   margin-bottom: 1px;
+  position: relative;
 }
-.nav a:hover { background: var(--surface-2); color: var(--ink); }
-.nav a.is-active { background: var(--surface-2); color: var(--ink); font-weight: 600; }
-.nav a .ico { width: 15px; text-align: center; flex: 0 0 15px; opacity: 0.75; }
+.nav a:hover { background: var(--nav-hover); color: var(--nav-ink); }
+.nav a.is-active {
+  background: var(--nav-active);
+  color: var(--nav-ink);
+  font-weight: 600;
+}
+/* The one place coral carries state in the chrome — a 3px brand rule on the
+   active item. Position, not hue, is doing the work; the coral is identity. */
+.nav a.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--brand-coral);
+}
+.nav a .ico { width: 15px; text-align: center; flex: 0 0 15px; opacity: 0.8; }
 
 .sidebar-foot {
-  padding: 12px 14px 14px;
-  border-top: 1px solid var(--border);
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--nav-border);
   font-size: 11px;
-  color: var(--ink-muted);
+  color: var(--nav-ink-2);
+}
+.sidebar-foot strong { color: var(--nav-ink); font-weight: 600; }
+.brand-tagline {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--nav-border);
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--brand-coral);
+  letter-spacing: 0.01em;
 }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -300,12 +402,14 @@ h3 { font-size: 13px; }
   cursor: pointer;
 }
 .btn:hover { background: var(--surface-2); }
+/* Coral is the brand's call-to-action colour. Safe here because a button is
+   chrome, not a data mark, and it carries a text label. */
 .btn-primary {
-  background: var(--series-1);
-  border-color: var(--series-1);
+  background: var(--brand-coral);
+  border-color: var(--brand-coral);
   color: #fff;
 }
-.btn-primary:hover { filter: brightness(0.94); background: var(--series-1); }
+.btn-primary:hover { filter: brightness(0.94); background: var(--brand-coral); }
 .btn-sm { font-size: 12px; padding: 4px 9px; }
 
 /* --------------------------------------------------------------------------
@@ -419,7 +523,7 @@ h3 { font-size: 13px; }
 .tile-northstar { border-color: var(--series-1); border-width: 1px; }
 .tile-revshare {
   border-style: dashed;
-  border-color: var(--series-3);
+  border-color: var(--border-strong);
 }
 
 /* --------------------------------------------------------------------------
@@ -506,7 +610,7 @@ table.data tfoot td {
   background: var(--surface-2);
 }
 
-.revshare-col { background: rgba(27, 175, 122, 0.06); }
+.revshare-col { background: rgba(42, 120, 214, 0.06); }
 
 .empty {
   padding: 34px 16px;
@@ -630,16 +734,23 @@ table.data tfoot td {
 .meter-weight { font-size: 11px; color: var(--ink-muted); }
 .meter-head .spacer { flex: 1; }
 .meter-score { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
+/* Track and fill carry the SAME severity class — see the meter ramp note in
+   the token block. */
 .meter-track {
   height: 8px;
   border-radius: 4px;
-  background: var(--seq-150);
+  background: var(--meter-track);
   overflow: hidden;
 }
-.meter-fill { height: 100%; border-radius: 4px; background: var(--seq-550); }
-.meter-fill.is-warning  { background: var(--warning); }
-.meter-fill.is-serious  { background: var(--serious); }
-.meter-fill.is-critical { background: var(--critical); }
+.meter-track.is-warning  { background: var(--meter-track-warning); }
+.meter-track.is-serious  { background: var(--meter-track-serious); }
+.meter-track.is-critical { background: var(--meter-track-critical); }
+
+.meter-fill { height: 100%; border-radius: 4px; background: var(--meter-fill); }
+.meter-fill.is-warning  { background: var(--meter-fill-warning); }
+.meter-fill.is-serious  { background: var(--meter-fill-serious); }
+.meter-fill.is-critical { background: var(--meter-fill-critical); }
+
 .meter-track.is-parked { background: var(--surface-2); }
 .meter-parts {
   margin-top: 6px;
