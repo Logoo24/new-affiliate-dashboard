@@ -252,13 +252,13 @@
               value: (stackTotal >= tv ? '+' : '') + fmtInt(Math.round(stackTotal - tv))
             });
           }
-          tip.show(tooltipRows(fmtDayFull(d.date), rows), cx, padT + plotH / 2);
+          host.__tip.show(tooltipRows(fmtDayFull(d.date), rows), cx, padT + plotH / 2);
           hover.setAttribute('x', padL + band * i);
           hover.setAttribute('width', Math.max(band, 1));
           hover.style.opacity = '1';
         });
         hit.addEventListener('mouseleave', function () {
-          tip.hide();
+          host.__tip.hide();
           hover.style.opacity = '0';
         });
         svg.appendChild(hit);
@@ -420,14 +420,14 @@
           cross.setAttribute('opacity', 1);
           focus.setAttribute('cx', X(i)); focus.setAttribute('cy', Y(p.score));
           focus.setAttribute('opacity', 1);
-          tip.show(tooltipRows('30 days ending ' + fmtDayFull(p.date), [
+          host.__tip.show(tooltipRows('30 days ending ' + fmtDayFull(p.date), [
             { color: color, label: cfg.seriesLabel || 'Health score', value: p.score }
           ]), X(i), Y(p.score));
         });
         hit.addEventListener('mouseleave', function () {
           cross.setAttribute('opacity', 0);
           focus.setAttribute('opacity', 0);
-          tip.hide();
+          host.__tip.hide();
         });
         svg.appendChild(hit);
       });
@@ -521,12 +521,12 @@
           fill: 'transparent', style: 'cursor:default'
         });
         hit.addEventListener('mouseenter', function () {
-          tip.show(tooltipRows(s.label, [
+          host.__tip.show(tooltipRows(s.label, [
             { color: s.color, label: 'Leads', value: fmtInt(s.value) },
             { color: null, label: 'Share', value: (frac * 100).toFixed(1) + '%' }
           ]), cx, cy - R / 2);
         });
-        hit.addEventListener('mouseleave', function () { tip.hide(); });
+        hit.addEventListener('mouseleave', function () { host.__tip.hide(); });
         svg.appendChild(hit);
 
         a0 = a1;
@@ -649,14 +649,15 @@
   /* Wiring                                                                 */
   /* ---------------------------------------------------------------------- */
 
-  var tip;
-
+  /* The tooltip belongs to ITS OWN host, stored on the element.
+     This used to be a single module-level `tip`, which meant mounting a
+     second chart overwrote the first one's reference — both charts then drove
+     the tooltip that lived inside the last-mounted wrapper. Stacked, that
+     looked like a small vertical offset; side by side on a wide screen, the
+     popup appeared in the neighbouring chart about a thousand pixels away. */
   function mount(host, kind, cfg) {
-    if (!tip || tip.__host !== host) {
-      host.querySelectorAll('.tooltip').forEach(function (n) { n.remove(); });
-    }
-    tip = makeTooltip(host);
-    tip.__host = host;
+    host.querySelectorAll('.tooltip').forEach(function (n) { n.remove(); });
+    host.__tip = makeTooltip(host);
     if (kind === 'columns') columns(host, cfg);
     else if (kind === 'pie') pie(host, cfg);
     else line(host, cfg);
