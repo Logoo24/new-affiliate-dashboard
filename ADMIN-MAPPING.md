@@ -62,8 +62,10 @@ One row per affiliate. Drives the Partnership summary screen and every criteria 
 | `products` | per-campaign only now | **EXISTS** | Removed from the Partnership summary — products and integration churn per campaign, so they render only in the campaigns table |
 | `integration_type` | per-campaign only now | **EXISTS** | Same |
 | `partner_since` | "Partner since" under the badge | **LIKELY MISSING — confirm** | Must reflect the date the partnership was actually added. **Logan flags this may not exist in the admin centre today.** If absent, backfill from contract date or first campaign creation, then store properly |
-| `billing_period` | Billing details card | **NEEDS BUILDING** | Net 7 / Net 15 / Net 30, admin-editable per partner. Most run Net 30 |
+| `billing_period` | Billing details card (sub-line) | **NEEDS BUILDING** | Net 7 / Net 15 / Net 30, admin-editable per partner. Most run Net 30 |
 | `billing_basis` | Billing details card | **NEEDS BUILDING** | Whether invoicing is on received or sold date |
+| Next payment date | Billing details card (headline) | **DERIVED** | Third business day after the most recent month close, rolling to the next close once past. Weekends excluded; **company holidays are not modelled in the mock** — production should read a holiday calendar or an explicit payout schedule if one exists |
+| Report → invoice cadence | Billing details card (note) | **CONSTANT** | We send the lead report immediately after month close; the affiliate returns their invoice on receipt. Worth an automated email later, but copy is enough for now |
 | `account_manager` | Account manager block | **PARTIAL** | Exists in the CRM, not joined to the portal. Shows name, title, email (`logan@financialize.com`), an Email button (`mailto:`), and a **Google Chat button — currently a generic chat.google.com link; production should deep-link into a DM with the manager** |
 | Billing contacts | Billing details card | **CONSTANT** | Cassie Jensen `accounting@financialize.com` (billing questions), Christine Aquino `christine.aquino@financialize.com` (invoice reports). Fine as config, not per-partner data |
 

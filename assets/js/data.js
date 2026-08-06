@@ -390,6 +390,30 @@
     return Math.round(n / 4);
   }
 
+  /**
+   * DERIVED: payment usually lands on the third business day after a month
+   * closes. Computed from the most recent month end; once that date has
+   * passed, rolls to the next month's close. Weekends excluded; company
+   * holidays are not modelled here — see ADMIN-MAPPING.md §1.
+   */
+  function nextPaymentDate() {
+    function thirdBusinessDayAfter(monthEnd) {
+      var d = new Date(monthEnd.getTime());
+      var n = 0;
+      while (n < 3) {
+        d.setDate(d.getDate() + 1);
+        var dow = d.getDay();
+        if (dow !== 0 && dow !== 6) n++;
+      }
+      return d;
+    }
+    var pay = thirdBusinessDayAfter(new Date(TODAY.getFullYear(), TODAY.getMonth(), 0));
+    if (pay < TODAY) {
+      pay = thirdBusinessDayAfter(new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0));
+    }
+    return { date: pay, isToday: dayKey(pay) === dayKey(TODAY) };
+  }
+
   function fmtSince(partnerId) {
     var iso = partner(partnerId).sinceISO;
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
@@ -1623,6 +1647,7 @@
     setPrimaryContact: setPrimaryContact,
     isPartnerActive: isPartnerActive,
     avgWeeklyVolume: avgWeeklyVolume,
+    nextPaymentDate: nextPaymentDate,
     fmtSince: fmtSince,
     leadCriteria: leadCriteria,
     campaignById: campaignById,

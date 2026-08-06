@@ -99,9 +99,10 @@
             </div>
           </div>
           <div class="card-body">
-            <div class="tile-label" style="margin-top:2px">Payment period</div>
-            <div class="tile-value" id="billing-period" style="font-size:24px">—</div>
-            <div class="tile-sub" id="billing-basis"></div>
+            <div class="tile-label" style="margin-top:2px">Next payment</div>
+            <div class="tile-value" id="billing-next" style="font-size:24px">—</div>
+            <div class="tile-sub" id="billing-terms"></div>
+            <div class="tile-sub" id="billing-cadence" style="margin-top:8px;line-height:1.5"></div>
             <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)" id="billing-contacts"></div>
           </div>
         </section>
@@ -251,8 +252,20 @@
   /* ---- billing ------------------------------------------------------------ */
   (function () {
     document.getElementById('billing-sub').textContent = 'Terms and who to ask.';
-    document.getElementById('billing-period').textContent = p.billingPeriod;
-    document.getElementById('billing-basis').textContent = p.billingBasis;
+
+    /* The DATE leads; the net terms demote to a sub-line. Derived: third
+       business day after the most recent month close, rolling forward once
+       past. */
+    var pay = D.nextPaymentDate();
+    document.getElementById('billing-next').textContent =
+      A.fmtDate(pay.date) + (pay.isToday ? ' — today' : '');
+    document.getElementById('billing-terms').textContent =
+      p.billingPeriod + ' · ' + p.billingBasis.charAt(0).toLowerCase() + p.billingBasis.slice(1) +
+      ' · payment usually lands three business days after the month closes';
+    document.getElementById('billing-cadence').innerHTML =
+      'We send your lead report immediately after the month closes — ' +
+      '<strong>please return your invoice as soon as you receive it</strong> so payment ' +
+      'is not held up.';
     document.getElementById('billing-contacts').innerHTML =
       D.BILLING_CONTACTS.map(function (c) {
         return '<div style="margin-bottom:9px">' +
