@@ -92,6 +92,65 @@
       <section class="card">
         <div class="card-head">
           <div>
+            <h2>Suppression file</h2>
+            <p class="sub">The whole exclusivity window as a file — screen your list before you spend, not at post time.</p>
+          </div>
+          <div class="spacer"></div>
+          <div id="supp-download"></div>
+        </div>
+        <div style="padding:0 18px" id="supp-toast"></div>
+        <div class="card-body">
+          <p style="margin-top:0;color:var(--ink-2);font-size:14px">
+            The lookups above answer one number at a time and are capped daily. The suppression
+            file is the bulk companion: every number currently inside the
+            <strong>365-day Priority/Hot exclusivity window</strong>, rebuilt nightly. Match your
+            list against it before you buy traffic and a duplicate never costs you an acquisition.
+          </p>
+
+          <div class="grid-2">
+            <div>
+              <h3 style="margin-bottom:8px">How to use it</h3>
+              <ul class="checklist">
+                <li><span class="mark">1</span><span><strong>Normalize</strong> every number the
+                  same way we do — 10 digits, digits only, leading 1 stripped, no formatting.
+                  <em>Most failed matches are a normalization mismatch, not a missing entry.</em></span></li>
+                <li><span class="mark">2</span><span><strong>Hash</strong> with the algorithm in
+                  the manifest, using the key issued to you.</span></li>
+                <li><span class="mark">3</span><span><strong>Match</strong> against the file and
+                  <strong>suppress the hits</strong> — do not acquire, do not post.</span></li>
+                <li><span class="mark">4</span><span><strong>Re-pull daily.</strong> Check the row
+                  count against the manifest; a short file is a truncated download, not a shrinking
+                  window.</span></li>
+              </ul>
+            </div>
+            <div>
+              <h3 style="margin-bottom:8px">This file</h3>
+              <div class="table-wrap">
+                <table class="data" id="supp-manifest"></table>
+              </div>
+            </div>
+          </div>
+
+          <div class="notice notice-info" style="margin-top:16px"><span class="ico">◆</span><div>
+            <strong>The file is a snapshot; the lookup is live.</strong> Numbers sell continuously,
+            so between one nightly build and the next some become suppressed. Use the file to screen
+            in bulk before you spend, and the lookup above for the moment-of-truth check on
+            anything high-value. Neither replaces the other.
+          </div></div>
+
+          <div class="mocknote">
+            <strong>Mock-up.</strong> The download returns a small <strong>sample</strong> with
+            fabricated digests so the format is reviewable. The real file is
+            <span id="supp-size"></span> and must be served authenticated, per affiliate, and
+            rate-limited like the lookup API.
+          </div>
+        </div>
+        <div class="card-foot" id="supp-foot"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
             <h2>What this returns, and what it does not</h2>
             <p class="sub">Worth stating plainly, because the boundary is the point.</p>
           </div>
@@ -121,6 +180,84 @@
             partner per day, log every query with the partner ID, and reject bulk jobs above the
             cap rather than truncating them silently. A partner who can query without limit can
             enumerate the database one number at a time.
+          </div>
+        </div>
+      </section>
+
+      <!-- INTERNAL. Reviewer-facing only, like every .notice-mock in this
+           prototype. Strip before a partner sees this screen. -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Open — suppression file needs Sagar</h2>
+            <p class="sub">Internal note, not partner-facing. Everything above is proposed shape, not confirmed behaviour.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="notice notice-mock"><span class="ico">✎</span><div>
+            <strong>We already run an automatic suppression file. I do not yet know how it
+            actually works</strong> — cadence, format, scope, who can reach it, or whether
+            affiliates get it at all today. Everything in the card above is the shape I am
+            proposing. <strong>Confirm with Sagar before any of it is built</strong>, because if
+            the live file already differs, the affiliate-facing version has to match it rather
+            than compete with it.
+          </div></div>
+
+          <h3 style="margin-bottom:8px">Questions for Sagar</h3>
+          <ul class="checklist">
+            <li><span class="mark">?</span><span><strong>What identifier does it key on</strong> —
+              phone only, or email too? Are both normalized, and how?</span></li>
+            <li><span class="mark">?</span><span><strong>Plaintext or hashed?</strong> If hashed,
+              which algorithm, and is it salted or keyed? A bare SHA-256 of a phone number is
+              brute-forceable — the keyspace is small enough to rainbow-table in hours, so an
+              unkeyed digest is not real protection.</span></li>
+            <li><span class="mark">?</span><span><strong>Global or per-affiliate?</strong> A shared
+              global file tells every affiliate what every other affiliate has sold. A per-affiliate
+              HMAC key fixes that and makes a leak attributable.</span></li>
+            <li><span class="mark">?</span><span><strong>Do entries expire at 365 days?</strong> If
+              the file only ever grows it over-suppresses, and affiliates quietly lose volume they
+              were entitled to send.</span></li>
+            <li><span class="mark">?</span><span><strong>How is it delivered and how often</strong>
+              — SFTP drop, signed URL, API? Full file or deltas? Full is self-healing; a missed
+              delta drifts silently.</span></li>
+            <li><span class="mark">?</span><span><strong>Is the file built from the same source as
+              the duplicate rejection rule?</strong> This is the one that matters most — see
+              below.</span></li>
+            <li><span class="mark">?</span><span><strong>Who can reach it today,</strong> and is
+              that access authenticated, logged and rate-limited?</span></li>
+          </ul>
+
+          <h3 style="margin:18px 0 8px">Proposal — close the loop on duplicate rejections</h3>
+          <p style="color:var(--ink-2);font-size:14px;margin-top:0">
+            When we reject a lead as a duplicate, that number should end up in the suppression
+            file. <strong>But it is worth being precise about why, because in the healthy case it
+            is already there.</strong> A duplicate rejection means the number is inside the
+            exclusivity window by definition — so if the file were complete, current, and correctly
+            matched, that lead should never have been sent. Every duplicate rejection is therefore
+            evidence of one of four things:
+          </p>
+          <ul class="checklist">
+            <li><span class="mark">1</span><span>The affiliate is not using the file at all.</span></li>
+            <li><span class="mark">2</span><span>They are matching against a stale copy.</span></li>
+            <li><span class="mark">3</span><span><strong>Normalization mismatch</strong> — leading 1s,
+              extensions, formatting. Their number and ours hash differently, so a real entry
+              silently fails to match. This is the most common cause and the least visible.</span></li>
+            <li><span class="mark">4</span><span><strong>The file does not cover everything the
+              rejection rule covers.</strong> Only this one is actually fixed by adding the number
+              — the other three are integration faults.</span></li>
+          </ul>
+          <p style="color:var(--ink-2);font-size:14px">
+            So the ask is: <strong>write it to the file, and record which of the four it was.</strong>
+            The write is cheap insurance; the classification is the valuable part, because it turns
+            every duplicate rejection into a free integrity test of the file. If an affiliate adopts
+            the file and their duplicate rate does not fall, something is broken — and today we
+            would have no way to tell which thing.
+          </p>
+          <div class="mocknote">
+            Worth measuring either way: <strong>duplicate rejection rate before and after an
+            affiliate starts consuming the file.</strong> That single number tells us whether the
+            file is doing its job, and it is currently the largest rejection reason on the Heritage
+            account.
           </div>
         </div>
       </section>
@@ -199,6 +336,65 @@
             'last 365 days. Safe to acquire.</div>' +
           '</div></div>';
   });
+
+  /* ---- suppression file ------------------------------------------------- */
+  (function () {
+    var man = D.suppressionManifest(state.partnerId);
+
+    /* Manifest table — the metadata an affiliate needs to trust the file. */
+    var rows = [
+      ['Generated', A.fmtDateTime(man.generatedAt) + ' ET'],
+      ['Records', A.fmtInt(man.recordCount)],
+      ['Identifier', D.SUPPRESSION.identifier],
+      ['Hashing', man.algorithm],
+      ['Normalization', man.normalization],
+      ['Window', man.windowDays + ' days, entries age out automatically'],
+      ['Rebuilt', man.cadence],
+      ['Scope', man.scope]
+    ];
+    document.getElementById('supp-manifest').innerHTML = '<tbody>' + rows.map(function (r) {
+      return '<tr><th style="width:38%;text-align:left;font-weight:600">' + A.esc(r[0]) + '</th>' +
+        '<td style="font-size:12.5px">' + A.esc(r[1]) + '</td></tr>';
+    }).join('') + '</tbody>';
+
+    document.getElementById('supp-size').textContent = man.fileSizeLabel;
+    document.getElementById('supp-foot').innerHTML =
+      'Issued to <strong>' + A.esc(man.partner) + '</strong> under your account key. ' +
+      'Do not redistribute — the file is watermarked per affiliate.';
+
+    /* Download — a SAMPLE with fabricated digests, so the format is
+       reviewable without anything real leaving the mock. */
+    document.getElementById('supp-download').innerHTML =
+      '<button type="button" class="btn btn-primary" id="supp-btn">↓ Download suppression file</button>';
+    document.getElementById('supp-btn').addEventListener('click', function () {
+      var sample = D.suppressionSample();
+      var lines = [
+        '# Financialize suppression file — SAMPLE (' + sample.length + ' of ' +
+          A.fmtInt(man.recordCount) + ' records, digests fabricated)',
+        '# generated=' + A.isoDate(man.generatedAt) + 'T03:00:00-04:00',
+        '# partner=' + man.partner,
+        '# algorithm=' + man.algorithm,
+        '# normalization=' + man.normalization,
+        '# window_days=' + man.windowDays,
+        '# records=' + A.fmtInt(man.recordCount).replace(/,/g, ''),
+        'digest'
+      ].concat(sample);
+      var blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'financialize_suppression_sample_' + A.isoDate(D.TODAY) + '.txt';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      var host = document.getElementById('supp-toast');
+      host.innerHTML = '<div class="export-toast"><span>✓</span><span>Downloaded sample — ' +
+        sample.length + ' fabricated digests. The real file is ' + A.esc(man.fileSizeLabel) +
+        ' and served per affiliate. <span style="color:var(--ink-muted)">Mock-up.</span></span></div>';
+      setTimeout(function () { host.innerHTML = ''; }, 8000);
+    });
+  })();
 
   /* ---- bulk ------------------------------------------------------------ */
   var lastResults = [];

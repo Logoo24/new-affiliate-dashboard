@@ -35,14 +35,21 @@ These are the minimum bar. Everything else is upside.
 
 | File | Module | What it covers |
 |---|---|---|
+| `partnership.html` | 0 | Partnership summary — who they are, active campaigns with CID and comp model, account terms, our operating hours |
 | `index.html` | A | Performance overview — date range, headline tiles, daily charts, campaign and sub-ID breakdown, rejection reasons |
-| `leads.html` | B | Per-lead detail, plain-language rejection reasons, CSV export |
+| `leads.html` | B | Lead table — every column available to that affiliate, plain-language rejection reasons, CSV export |
 | `duplicate-check.html` | C | 365-day Priority/Hot phone lookup, single and bulk |
-| `health.html` | D | Health score, tier badge, four pillar sub-scores, 90-day trend, coverage asks |
+| `health.html` | D | Health score, tier badge, four pillar sub-scores, 90-day trend, three coverage widgets |
 | `setup.html` | E | New-affiliate first-login walkthrough |
 
-The RevShare vs CPL difference is demonstrated with the **"Viewing as"** selector in the header.
-That selector is a **mock-up affordance only** — see the next section.
+Plus one **temporary, internal, non-partner-facing** page: `admin-preview.html`, under an "Internal
+— temporary" heading in the nav. It shows the shape of the settings the admin side needs to
+control. **Delete it and its `INTERNAL_NAV` entry in `app.js` before anything ships.** The settings
+themselves are specified in **[ADMIN-MAPPING.md](ADMIN-MAPPING.md)**, which is the document to keep
+current as fields are added.
+
+The revenue-share vs CPL difference is demonstrated with the **"Viewing as"** selector in the
+header. That selector is a **mock-up affordance only** — see the next section.
 
 ---
 
@@ -50,35 +57,65 @@ That selector is a **mock-up affordance only** — see the next section.
 
 **Visibility is a query-layer rule, not a UI toggle.**
 
-`assets/js/data.js` → `queryLeads()` builds every returned row field-by-field from a per-partner-
-type **allowlist**. A column a partner may not see is never copied onto the object, so it cannot
-be read out of the DOM, the CSV export, or the browser console. In PHP that means two different
-SELECT lists, not one SELECT plus an `if` in the template:
+`assets/js/data.js` → `queryLeads()` builds every returned row field-by-field from an
+**allowlist**. A column an affiliate may not see is never copied onto the object, so it cannot be
+read out of the DOM, the CSV export, or the browser console. In PHP that means two different SELECT
+lists, not one SELECT plus an `if` in the template:
 
 ```php
-// RevShare partner
+// Lead from a REVENUE-SHARE campaign
 SELECT l.id, l.received_at, l.subid, l.campaign_id, l.status, l.reject_reason,
        l.sold_type, l.sold_at, l.days_to_sale,
-       l.sale_amount, ROUND(l.sale_amount * p.rev_share_pct, 2) AS partner_share
-  FROM leads l JOIN partners p ON p.id = l.partner_id
+       l.sale_amount, ROUND(l.sale_amount * c.rev_share_pct, 2) AS partner_share
+  FROM leads l JOIN campaigns c ON c.id = l.campaign_id
  WHERE l.partner_id = ? AND l.received_at BETWEEN ? AND ?
 
-// Flat / tiered CPL partner — sale_amount is not in the statement AT ALL
+// Lead from a FLAT / TIERED CPL campaign — sale_amount is not in the statement AT ALL
 SELECT l.id, l.received_at, l.subid, l.campaign_id, l.status, l.reject_reason,
        l.sold_type, l.sold_at, l.days_to_sale
   FROM leads l
  WHERE l.partner_id = ? AND l.received_at BETWEEN ? AND ?
 ```
 
-Columns that appear in **neither** list, for **any** partner type including RevShare:
+Columns that appear in **neither** list, for **any** comp model including revenue share:
 
 ```
 lead_cost · margin · margin_pct · buyer_name · csr_name · call_result
 ipqs_score · ipqs_rules_fired · clawback_reason · campaign_cost
 ```
 
-**In production there is no partner-type selector.** Partner type comes off the session and
-cannot be chosen. The selector exists here only so reviewers can see both views.
+**In production there is no partner selector.** The partner comes off the session and cannot be
+chosen. The selector exists here only so reviewers can see both views.
+
+### COMP MODEL IS A PROPERTY OF THE CAMPAIGN, NOT THE ACCOUNT
+
+This changed in August. A partner can run revenue-share and CPL campaigns side by side, so the
+projection is resolved **per row**, from that row's campaign. A mixed account gets revenue columns
+on its rev-share rows and no revenue field at all on its CPL rows, in one table.
+
+Both current partners happen to run a single comp model across all their campaigns — Heritage all
+revenue share, OptiLabX all CPL, on their real terms. The schema does not assume that and neither
+does the query layer. **Do not reintroduce a single per-account branch.**
+
+### Which columns are available is admin-configurable, per comp model
+
+Two pieces, both in `data.js`:
+
+- **`LEAD_COLUMNS`** — the registry. One entry per affiliate-visible column, declaring which comp
+  models *may* see it. **Adding a column later is one entry here and nothing else** — the lead
+  table, the CSV export and the admin screen all read this list.
+- **`ADMIN_COLUMN_CONFIG`** — what an admin screen writes: per comp model, which registry columns
+  are switched on.
+
+The registry is a **hard constraint, not a default.** An admin cannot switch on a revenue column
+for a CPL campaign, because the registry does not list `cpl` on those entries. Columns marked
+`locked` — identity, status, and the rejection reason — cannot be switched off at all. A partner
+cannot fix what they cannot see, and hiding the rejection reason recreates the exact complaint this
+dashboard replaces.
+
+Storage, and the rest of the admin surface, is specified in **[ADMIN-MAPPING.md](ADMIN-MAPPING.md).
+Keep that document current** — a feature that renders but has no row there is a feature nobody
+knows how to populate in production.
 
 ### DECISION — rejected-but-sold leads ARE visible to RevShare partners
 
@@ -94,10 +131,11 @@ framing of the whole point is *"to make sure our revenue and lead amounts match 
 the July 31 leak a leak was the **Profit column, Buyer Name, CSR Name and Call Result**, all of
 which remain forbidden to everyone.
 
-In the mock data this is **276 rejected-but-sold leads worth $6,808 — about 12.6% of RevShare
+In the mock data this is **262 rejected-but-sold leads worth $6,791 — about 11.5% of revenue-share
 earnings.** Not a rounding error.
 
-**For CPL partners nothing changes: they must never learn these exist.** See the row rule below.
+**For CPL campaigns nothing changes: the affiliate must never learn these exist.** See the row rule
+below.
 
 ---
 
@@ -123,17 +161,17 @@ AND l.status = 'paid'
 Point 2 is easy to miss and it leaks on its own: if a CPL partner can run a sold-date report,
 the **row count alone** tells them we work leads we declined, even with every column nulled.
 
-**RevShare is the exact opposite** — they are paid 40% of any sale, accepted or not, so hiding
-rejected-but-sold leads would understate what we owe them. In the mock data that is **158
-rejected-but-sold leads worth $3,562, about 8.8% of total RevShare earnings.** Real money, and
-it was invisible in the first version of this prototype because the generator never let a
-rejected lead sell.
+**Revenue share is the exact opposite** — they are paid 40% of any sale, accepted or not, so hiding
+rejected-but-sold leads would understate what we owe them. Real money, and it was invisible in the
+first version of this prototype because the generator never let a rejected lead sell.
 
-Verified on the mock: across 1,560 rejected rows in the CPL projection, **zero** carry any
-outcome or revenue field, and all 1,560 retain their rejection reason. A sold-date query returns
-**zero** rejected rows. Those are the properties the build needs to preserve.
+Verified on the mock: across **1,680** rejected rows in the CPL projection, **zero** carry any
+outcome or revenue field, and all 1,680 retain their rejection reason. A sold-date query returns
+**zero** rejected rows. The CPL projection exposes 15 columns and the revenue-share projection 18,
+with none of the forbidden fields present on either. Those are the properties the build needs to
+preserve.
 
-### Acceptance means different things to the two partner types
+### Acceptance means different things to the two comp models
 
 | | CPL | RevShare |
 |---|---|---|
@@ -320,9 +358,20 @@ large low-yield one read as one mediocre campaign — the fresh-vs-aged Heritage
 example, where 3.6% of volume produced 82% of revenue. The dashboard must never reproduce that
 blending for the affiliate.
 
-**Leads.** Defaults to Last 30 days rather than 7, deliberately: at 7 days every row's sold
-column is still blank, which is the exact complaint this replaces. Export covers the full
-filtered set, not the visible page — this is the file currently assembled by hand every day.
+**Partnership summary.** The landing screen. Affiliate name and status, every active campaign with
+its CID, name, product and comp model, and a **View details** button that carries that campaign
+onto Performance with the filter already applied — the same query-string state the filter row
+writes, not a special-case route. Below that, the commercial terms (comp model, products,
+integration, **the negotiated age band**, billing, exclusivity) and our call-centre hours.
+
+**Lead table.** Renamed from "Leads" and stripped of its summary tiles — Performance is where
+aggregates belong, and having them in both places invited the two screens to disagree. It is now a
+direct table showing **every column available to that affiliate**, rendered from the registry, with
+the rejection-reason grouping kept underneath. Defaults to Last 30 days rather than 7, deliberately:
+at 7 days every row's sold column is still blank, which is the exact complaint this replaces. Export
+covers the full filtered set, not the visible page — this is the file currently assembled by hand
+every day, and it serialises the same projected rows, so it cannot carry a column the table is not
+allowed to show.
 
 **Export — CSV works, Google Drive is mocked.** The CSV path is real. The Drive path shows the
 confirmation an affiliate would see and **nothing leaves the browser**. Wiring it up needs a
@@ -334,10 +383,61 @@ made the case for it:
 
 - **Investable-asset band performance**, with $100K–$250K flagged. It converts materially better
   and holds across months — the highest-leverage targeting change most partners can make.
-- **Arrival-window performance.** 6–9a arrivals convert far better, so the coverage ask points
-  at early morning. An earlier draft asked for *evening* volume, which was backwards.
-- **Tier mix and average sale price**, explicitly requested by Heritage. RevShare sees the
+- **Arrival-window performance**, against the two ideal reception windows. See the correction
+  below — an earlier version of this asserted a 6–9a "golden window" that was invented.
+- **Tier mix and average sale price**, explicitly requested by Heritage. Revenue share sees the
   earnings column; CPL sees the mix and share only, because sale price is revenue.
+
+### CORRECTION — the 6–9a "golden window" was invented, and is gone
+
+Earlier versions of this mock asserted that 6–9a arrivals converted far better, and both the
+Performance arrival card and the health score's coverage pillar were built on it. **It was
+fabricated, it predated the real call-centre hours, and it contradicted them — the floor does not
+open until 9a.** A lead arriving at 6:30a sits for two and a half hours before anyone can dial it.
+
+The real hours, which everything about timing now derives from:
+
+| | |
+|---|---|
+| Monday–Friday | 9:00 AM – 7:00 PM local time in every timezone we cover (9:00 AM – 10:00 PM ET end to end) |
+| Saturday | 9:00 AM – 8:00 PM ET, lighter staffing |
+| Sunday | Closed |
+
+**Ideal reception windows**, consumer local time, Mon–Fri: **9:00–11:00 AM** and **3:00–7:00 PM**.
+
+The mock's arrival-window distribution and conversion lifts were reshaped to match, so the
+Performance card and the coverage widgets now agree rather than starring different hours. **This
+changes every conversion figure quoted in this document from earlier versions.**
+
+### Coverage asks are now three widgets
+
+Replacing the old two-row table on the scorecard:
+
+1. **States we need** — states carrying unfilled budget, richest first, shown as both leads needed
+   and unused dollars. Pacific and Mountain dominate because that is the standing gap.
+2. **Ideal send windows** — their actual arrival split with the two ideal windows starred.
+3. **Ideal daily split** — their weekly volume distribution against Mon 20% / Tue 19% / Wed 19% /
+   Thu 19% / Fri 15% / Sat 8% / **Sun 0%**, with the biggest gap called out.
+
+**All three are asks, not rules, and the framing is not optional.** Every rendering carries the
+note: we accept leads any day and any hour; these are the windows where our team is working hardest
+and where leads convert best, so weighting sends this way gets faster contact and a better read on
+their traffic. A partner who reads these as gates sends less, not better.
+
+Sunday is 0% because nothing sent Sunday is worked until Monday morning. In the current mock the
+demo partner sends 8% on Sunday, which is the single biggest deviation and exactly the kind of
+free improvement this widget exists to surface.
+
+**Two consequences still open with Courtney**, both flagged in ADMIN-MAPPING.md §5b:
+
+- **Saturday closes early out west.** 8 PM ET is 5 PM Pacific, so a Saturday afternoon California
+  lead has a much shorter working window than the same lead on a Tuesday. Given Pacific and
+  Mountain are already the standing coverage gap, that argues for weighting the Saturday 8% toward
+  Eastern and Central rather than spreading it evenly.
+- **The 3–7 PM local window does not hold on Saturdays** — it collapses to 3–5 PM Pacific and
+  3–6 PM Mountain. For a partner running western states the Saturday *morning* window is the one
+  that works cleanly. The dashboard shows this as a caveat, but only to partners actually running
+  western states.
 
 **Duplicate check.** Returns a boolean and at most the month it last sold. Nothing else. This is
 a suppression-list API in disguise, so the containment has to be in the design: rate-limit per
@@ -383,10 +483,17 @@ point of the step.
 
 ## What is fake
 
-Everything numeric. ~4,700 leads across four OptiLabX campaigns and 13 sub-IDs over 120 days,
-generated deterministically so every reviewer sees identical figures. Rejection-reason mixes,
-sold-type rates and sales-cycle distributions are shaped to look like real traffic, not to
-flatter anybody. Credentials, API keys and tracking URLs on the setup screen are invented.
+Everything numeric. ~10,000 leads across seven campaigns and 20 sub-IDs over 120 days, generated
+deterministically so every reviewer sees identical figures. Rejection-reason mixes, sold-type rates
+and sales-cycle distributions are shaped to look like real traffic, not to flatter anybody. The
+per-state budgets and fill rates behind the coverage widget are invented, though the shape is real:
+Pacific and Mountain are genuinely where we are short. Credentials, API keys and tracking URLs on
+the setup screen are invented.
 
 What is **not** fake: the metric definitions, the redaction rules, the attribution model, the
-scoring weights, the tier thresholds, and the field list above. Those are the deliverable.
+scoring weights, the tier thresholds, the field list above, the call-centre operating hours, and
+the ideal send windows and daily split. Those are the deliverable.
+
+Because the data is deterministic, **changing the seed, `TODAY`, or `HOUR_YIELD` in `data.js`
+changes every figure quoted in this document.** The current numbers were re-verified against the
+running mock on Aug 5 2026.

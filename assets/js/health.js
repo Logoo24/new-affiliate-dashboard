@@ -80,7 +80,7 @@
    * Score a window.
    *
    * @param {object} opts
-   *   partnerType, campaignId, subid
+   *   partnerId, campaignId, subid
    *   range       {from, to}   — rolling 30 days by default
    *   demandTarget {number}    — paid leads we want from this partner per window
    */
@@ -93,7 +93,7 @@
     var demandTarget = opts.demandTarget || 900;
 
     var rows = D.queryLeads({
-      partnerType: opts.partnerType || 'revshare',
+      partnerId: opts.partnerId || 'ahg',
       from: range.from,
       to: range.to,
       campaignId: opts.campaignId,
@@ -106,7 +106,7 @@
        never returned on the result object. */
     var internal = D._internalAggregates({
       range: range,
-      partnerType: opts.partnerType,
+      partnerId: opts.partnerId,
       campaignId: opts.campaignId,
       subid: opts.subid
     });
@@ -167,24 +167,40 @@
     var dailyCounts = daily.map(function (d) { return d.raw; });
     var cv = coefficientOfVariation(dailyCounts);
 
-    /* Two coverage gaps, and they are different kinds of gap:
-         GEOGRAPHY — underserved high-retiree states (CA, NV, AZ, NM, WA) plus
-           the ones we are currently short in (CO, UT, NE, SD, KS).
-         TIMING — 6–9a arrivals convert materially better than any other
-           window. This asks for MORE EARLY volume, not more evening volume;
-           an earlier draft of this had it backwards. */
-    var coverageStateCount = 0, earlyCount = 0;
+    /* Three coverage gaps, and they are different kinds of gap:
+         GEOGRAPHY — states carrying unfilled budget. Pacific and Mountain are
+           the standing shortfall, so they dominate.
+         TIME OF DAY — the two ideal reception windows, 9–11a and 3–7p
+           consumer local time. These are the hours the floor is busiest and
+           where leads convert best.
+         DAY OF WEEK — how close their weekly split runs to the ideal split.
+           Sunday volume is the usual culprit: nothing sent Sunday is worked
+           until Monday morning.
+
+       NOTE: an earlier version of this scored a 6–9a "early arrival" window.
+       That window was invented and contradicted the call-centre hours (the
+       floor opens at 9a), so it is gone. Do not reintroduce it. */
+    var coverageStateCount = 0, idealWindowCount = 0;
     for (var i = 0; i < rows.length; i++) {
       if (D.isCoverageState(rows[i].state)) coverageStateCount++;
-      if (rows[i].hourSegment === 'early') earlyCount++;
+      if (D.isIdealSegment(rows[i].hourSegment)) idealWindowCount++;
     }
     var coverageStateShare = rows.length ? coverageStateCount / rows.length : 0;
-    var earlyShare = rows.length ? earlyCount / rows.length : 0;
+    var idealWindowShare = rows.length ? idealWindowCount / rows.length : 0;
+
+    /* Day-of-week alignment as total variation distance from the ideal split:
+       half the sum of absolute deltas, so 0 = identical and 1 = disjoint. */
+    var split = D.dowSplit(rows);
+    var tvd = split.reduce(function (a, d) { return a + Math.abs(d.delta); }, 0) / 2;
+    var dowAlignment = 1 - tvd;
 
     var TARGET_STATES = 0.28;
-    var TARGET_EARLY = 0.18;
+    var TARGET_IDEAL_WINDOW = 0.50;
+    var TARGET_DOW_ALIGNMENT = 0.90;
+
     var coverageScore = (norm(coverageStateShare, 0.05, TARGET_STATES) +
-                         norm(earlyShare, 0.03, TARGET_EARLY)) / 2;
+                         norm(idealWindowShare, 0.20, TARGET_IDEAL_WINDOW) +
+                         norm(dowAlignment, 0.60, TARGET_DOW_ALIGNMENT)) / 3;
 
     var volParts = [
       { key: 'sufficiency', label: 'Volume vs demand', weight: 0.40,
@@ -193,9 +209,11 @@
       { key: 'consistency', label: 'Day-to-day consistency', weight: 0.25,
         score: norm(1 - cv, 0.30, 0.85),
         display: 'CV ' + cv.toFixed(2) },
-      { key: 'coverage', label: 'State & arrival-window coverage', weight: 0.35,
+      { key: 'coverage', label: 'State, window & day coverage', weight: 0.35,
         score: coverageScore,
-        display: pct(coverageStateShare) + ' focus states · ' + pct(earlyShare) + ' early arrivals' }
+        display: pct(coverageStateShare) + ' short states · ' +
+                 pct(idealWindowShare) + ' in ideal windows · ' +
+                 pct(dowAlignment) + ' day-split match' }
     ];
 
     /* ---- Pillars ------------------------------------------------------- */
@@ -244,11 +262,15 @@
       maturePaid: m.maturePaid,
       metrics: m,
       range: range,
+      rows: rows,
       coverage: {
         stateShare: coverageStateShare,
         stateTarget: TARGET_STATES,
-        earlyShare: earlyShare,
-        earlyTarget: TARGET_EARLY
+        idealWindowShare: idealWindowShare,
+        idealWindowTarget: TARGET_IDEAL_WINDOW,
+        dowAlignment: dowAlignment,
+        dowAlignmentTarget: TARGET_DOW_ALIGNMENT,
+        dowSplit: split
       }
     };
   }
@@ -264,7 +286,7 @@
       var end = D.addDays(D.TODAY, -w * 7);
       var start = D.addDays(end, -29);
       var s = score({
-        partnerType: opts.partnerType,
+        partnerId: opts.partnerId,
         campaignId: opts.campaignId,
         subid: opts.subid,
         range: { from: start, to: end },
@@ -276,26 +298,61 @@
     return points;
   }
 
-  /* Coverage asks — the "send us more of this" list. */
-  function coverageAsks(result) {
-    var asks = [];
-    if (result.coverage.stateShare < result.coverage.stateTarget) {
-      asks.push({
-        what: 'Underserved states',
-        detail: 'CA, NV, AZ, NM, WA — plus CO, UT, NE, SD, KS where we are short',
-        now: pct(result.coverage.stateShare),
-        target: pct(result.coverage.stateTarget)
-      });
-    }
-    if (result.coverage.earlyShare < result.coverage.earlyTarget) {
-      asks.push({
-        what: 'Early-morning arrivals',
-        detail: '6a–9a submitter local time — these convert materially better',
-        now: pct(result.coverage.earlyShare),
-        target: pct(result.coverage.earlyTarget)
-      });
-    }
-    return asks;
+  /**
+   * The three coverage widgets, as data.
+   *
+   * These are ASKS, not rules. We accept leads any day and any hour — see
+   * D.COVERAGE_NOTE, which every rendering of these must carry. Weighting a
+   * partner's sends this way gets faster contact and a cleaner read on their
+   * traffic; it does not gate anything.
+   */
+  function coverage(result, opts) {
+    opts = opts || {};
+    var c = result.coverage;
+
+    /* 1. States carrying unfilled budget, richest first. */
+    var states = D.stateDemand({ limit: opts.stateLimit || 6 });
+    var runsWestern = states.some(function (s) { return s.western; });
+
+    /* 2. Arrival windows — their actual split, with the two ideal ones
+          flagged. Rendered from the same rows the score was built on. */
+    var windows = D.windowSplit(result.rows || []);
+
+    /* 3. Day-of-week split against the ideal. */
+    var days = c.dowSplit;
+
+    return {
+      note: D.COVERAGE_NOTE,
+      operatingHours: D.OPERATING_HOURS,
+      states: {
+        rows: states,
+        totalUnused: states.reduce(function (a, s) { return a + s.unusedBudget; }, 0),
+        totalLeads: states.reduce(function (a, s) { return a + s.leadsNeeded; }, 0),
+        share: c.stateShare,
+        target: c.stateTarget,
+        onTarget: c.stateShare >= c.stateTarget
+      },
+      windows: {
+        rows: windows,
+        ideal: D.IDEAL_WINDOWS,
+        share: c.idealWindowShare,
+        target: c.idealWindowTarget,
+        onTarget: c.idealWindowShare >= c.idealWindowTarget,
+        /* Only surfaced when the partner actually runs western states —
+           Saturday closes at 8p ET, which is 5p Pacific. */
+        westernCaveat: runsWestern ? D.OPERATING_HOURS.saturdayWestCaveat : null
+      },
+      days: {
+        rows: days,
+        alignment: c.dowAlignment,
+        target: c.dowAlignmentTarget,
+        onTarget: c.dowAlignment >= c.dowAlignmentTarget,
+        /* The single biggest deviation, so the card can lead with it. */
+        worst: days.slice().sort(function (a, b) {
+          return Math.abs(b.delta) - Math.abs(a.delta);
+        })[0] || null
+      }
+    };
   }
 
   function pct(v) {
@@ -315,7 +372,7 @@
   global.FZHealth = {
     score: score,
     trend: trend,
-    coverageAsks: coverageAsks,
+    coverage: coverage,
     tierFor: tierFor,
     meterClass: meterClass,
     TIERS: TIERS

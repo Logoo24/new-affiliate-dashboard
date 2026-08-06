@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin settings (internal preview) — Financialize</title>
+<link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+
+<!--
+  TEMPORARY. INTERNAL. NOT PARTNER-FACING.
+
+  This page is a picture of a screen that needs building, not the screen. Its
+  job is to show Sagar and Zakira the shape of the settings described in
+  ADMIN-MAPPING.md, using the same registry the affiliate dashboard reads, so
+  the two cannot drift apart while the spec is being reviewed.
+
+  Nothing here writes anything. The toggles are disabled on purpose — a
+  half-working admin screen in a mock-up is worse than an obviously inert one,
+  because someone will assume the storage exists.
+
+  DELETE THIS FILE AND THE INTERNAL_NAV ENTRY IN app.js BEFORE SHIPPING.
+-->
+
+<div class="app">
+  <aside class="sidebar" data-shell="sidebar"></aside>
+
+  <div class="main">
+    <header class="topbar" data-shell="topbar"></header>
+
+    <div class="content">
+
+      <div class="notice notice-warn"><span class="ico">▲</span><div>
+        <strong>Internal preview — not partner-facing, and nothing here saves.</strong>
+        This page exists so the build team can see what the admin side needs to control. The
+        toggles are inert. The storage, the screen and the audit trail all need building — see
+        <strong>ADMIN-MAPPING.md</strong>. Delete this page before anything goes in front of a
+        partner.
+      </div></div>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Lead table columns</h2>
+            <p class="sub">Which columns affiliates can see, chosen per comp model.</p>
+          </div>
+        </div>
+        <div class="card-body" id="column-config"></div>
+        <div class="card-foot">
+          The registry is a <strong>hard constraint, not a default</strong>. A column that does not
+          list a comp model cannot be enabled for it at all — that is why the revenue rows below
+          have no toggle on the CPL side. Locked columns cannot be switched off.
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Columns forbidden to every comp model</h2>
+            <p class="sub">Absent from the registry entirely. There is no toggle, and there must never be one.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="pixel-log" id="forbidden"></div>
+        </div>
+        <div class="card-foot">
+          The July 31 Heritage leak was Profit, Buyer Name, CSR Name and Call Result. Those stay
+          forbidden to everyone, revenue share included.
+        </div>
+      </section>
+
+      <div class="grid-2">
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Per-campaign settings</h2>
+              <p class="sub">Comp model lives here, not on the partner.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data" id="campaign-config"></table>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Spend &amp; volume targets</h2>
+              <p class="sub">Either, or, or both. Null means not set, not zero.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data" id="target-config"></table>
+          </div>
+          <div class="card-foot">
+            A revenue-share payout target is measured on the <strong>sold</strong> date; CPL spend
+            stays on the received date. Getting this backwards reports $0 for the first ten days of
+            every month.
+          </div>
+        </section>
+      </div>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Operating hours &amp; ideal windows</h2>
+            <p class="sub">Real operating facts. These belong in configuration, not in code.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="hours-config"></table>
+        </div>
+        <div class="card-foot" id="hours-foot"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Per-state demand</h2>
+            <p class="sub">Drives the "states we need" widget on the scorecard.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="demand-config"></table>
+        </div>
+        <div class="card-foot">
+          Budget and fill rate are mock values. In production this comes off the buyer-demand table.
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/health.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = FZData, A = FZApp;
+
+  var state = A.params();
+
+  A.shell(state, {
+    active: 'admin-preview.html',
+    title: 'Admin settings',
+    subtitle: 'Internal preview of what the admin side needs to control.'
+  });
+
+  /* ---- column config ----------------------------------------------------
+     Rendered straight off LEAD_COLUMNS so this screen cannot drift away from
+     what the affiliate dashboard actually enforces. */
+  (function () {
+    var comps = ['revshare', 'cpl'];
+    var enabledByComp = {};
+    comps.forEach(function (k) {
+      enabledByComp[k] = {};
+      D.columnsFor(k).forEach(function (c) { enabledByComp[k][c.key] = true; });
+    });
+
+    var head = '<thead><tr><th>Column</th><th>Group</th>' +
+      comps.map(function (k) {
+        return '<th style="text-align:center">' + A.esc(D.COMP_MODELS[k].label) + '</th>';
+      }).join('') +
+      '</tr></thead>';
+
+    var body = D.LEAD_COLUMNS.map(function (c) {
+      var cells = comps.map(function (k) {
+        var allowed = c.comp.indexOf(k) !== -1;
+        if (!allowed) {
+          return '<td style="text-align:center;color:var(--ink-muted)" ' +
+            'title="Not permitted by the registry for this comp model">—</td>';
+        }
+        var on = !!enabledByComp[k][c.key];
+        return '<td style="text-align:center">' +
+          '<input type="checkbox" disabled' + (on ? ' checked' : '') + '>' +
+          (c.locked ? '<div class="quota" style="font-size:11px">locked</div>' : '') +
+          '</td>';
+      }).join('');
+      return '<tr>' +
+        '<td><strong>' + A.esc(c.label) + '</strong>' +
+          '<div class="quota" style="font-size:11.5px">' + A.esc(c.key) + '</div></td>' +
+        '<td>' + A.esc(c.group) + '</td>' + cells + '</tr>';
+    }).join('');
+
+    document.getElementById('column-config').innerHTML =
+      '<div class="table-wrap"><table class="data">' + head + '<tbody>' + body + '</tbody></table></div>';
+  })();
+
+  /* ---- forbidden list ---------------------------------------------------- */
+  document.getElementById('forbidden').textContent =
+    'lead_cost · margin · margin_pct · buyer_name · csr_name · call_result\n' +
+    'ipqs_score · ipqs_rules_fired · clawback_reason · campaign_cost';
+
+  /* ---- campaign config --------------------------------------------------- */
+  (function () {
+    var head = '<thead><tr><th>CID</th><th>Campaign</th><th>Partner</th>' +
+      '<th>Comp model</th><th>Active</th></tr></thead>';
+    var body = D.CAMPAIGNS.map(function (c) {
+      return '<tr>' +
+        '<td class="lead-id">' + A.esc(c.id) + '</td>' +
+        '<td>' + A.esc(c.name) + '</td>' +
+        '<td>' + A.esc(D.PARTNERS[c.partnerId].shortName) + '</td>' +
+        '<td>' + A.esc(D.COMP_MODELS[c.comp].label) + '</td>' +
+        '<td>' + (c.active ? '<span class="pill-paid">Active</span>'
+                           : '<span class="pill-free">Paused</span>') + '</td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('campaign-config').innerHTML = head + '<tbody>' + body + '</tbody>';
+  })();
+
+  /* ---- targets ----------------------------------------------------------- */
+  (function () {
+    var head = '<thead><tr><th>Partner</th><th class="num">Volume target</th>' +
+      '<th class="num">Spend target</th><th>Measured on</th></tr></thead>';
+    var body = Object.keys(D.PARTNERS).map(function (k) {
+      var p = D.PARTNERS[k], t = D.targetsFor(k);
+      /* A null target renders as "not set", never as zero. */
+      return '<tr><td>' + A.esc(p.shortName) + '</td>' +
+        '<td class="num">' + (t.volume == null
+          ? '<span class="quota">not set</span>' : A.fmtInt(t.volume)) + '</td>' +
+        '<td class="num">' + (t.spend == null
+          ? '<span class="quota">not set</span>' : A.fmtMoney0(t.spend)) + '</td>' +
+        '<td>' + (p.revSharePct > 0 ? 'Sold date' : 'Received date') + '</td></tr>';
+    }).join('');
+    document.getElementById('target-config').innerHTML = head + '<tbody>' + body + '</tbody>';
+  })();
+
+  /* ---- operating hours --------------------------------------------------- */
+  (function () {
+    var H = D.OPERATING_HOURS;
+    var rows = [
+      ['Monday – Friday', H.weekday],
+      ['Saturday', H.saturday],
+      ['Sunday', H.sunday],
+      ['Ideal windows (Mon–Fri, consumer local)',
+        D.IDEAL_WINDOWS.map(function (w) { return w.label; }).join('  ·  ')],
+      ['Ideal daily split', D.DOW_SHORT.map(function (d, i) {
+        return d + ' ' + Math.round(D.IDEAL_DOW_SPLIT[i] * 100) + '%';
+      }).slice(1).concat(D.DOW_SHORT[0] + ' 0%').join('  ·  ')]
+    ];
+    document.getElementById('hours-config').innerHTML = '<tbody>' + rows.map(function (r) {
+      return '<tr><th style="width:32%;text-align:left;font-weight:600">' + A.esc(r[0]) + '</th>' +
+        '<td>' + A.esc(r[1]) + '</td></tr>';
+    }).join('') + '</tbody>';
+
+    document.getElementById('hours-foot').innerHTML = A.esc(H.saturdayWestCaveat) +
+      ' Open with Courtney — see ADMIN-MAPPING.md §5b.';
+  })();
+
+  /* ---- state demand ------------------------------------------------------ */
+  (function () {
+    var head = '<thead><tr><th>State</th><th>TZ</th><th class="num">Monthly budget</th>' +
+      '<th class="num">Fill rate</th><th class="num">Unused</th>' +
+      '<th class="num">Leads needed</th></tr></thead>';
+    var body = D.stateDemand().map(function (s) {
+      return '<tr>' +
+        '<td><strong>' + A.esc(s.st) + '</strong> <span style="color:var(--ink-2)">' +
+          A.esc(s.name) + '</span></td>' +
+        '<td>' + A.esc(s.tz) + '</td>' +
+        '<td class="num">' + A.fmtMoney0(s.budget) + '</td>' +
+        '<td class="num">' + A.fmtPct(s.fillRate, 0) + '</td>' +
+        '<td class="num">' + A.fmtMoney0(s.unusedBudget) + '</td>' +
+        '<td class="num">' + A.fmtInt(s.leadsNeeded) + '</td>' +
+        '</tr>';
+    }).join('');
+    document.getElementById('demand-config').innerHTML = head + '<tbody>' + body + '</tbody>';
+  })();
+
+})();
+</script>
+</body>
+</html>

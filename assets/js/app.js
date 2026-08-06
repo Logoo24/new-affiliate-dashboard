@@ -25,11 +25,20 @@
     '</svg>';
 
   var NAV = [
+    { href: 'partnership.html',    label: 'Partnership summary', ico: '◇' },
     { href: 'index.html',          label: 'Performance',      ico: '▤' },
-    { href: 'leads.html',          label: 'Leads',            ico: '☰' },
+    { href: 'leads.html',          label: 'Lead table',       ico: '☰' },
     { href: 'health.html',         label: 'Health scorecard', ico: '◈' },
     { href: 'duplicate-check.html',label: 'Duplicate check',  ico: '⌕' },
     { href: 'setup.html',          label: 'Setup & docs',     ico: '⚙' }
+  ];
+
+  /* TEMPORARY AND INTERNAL. Not part of the partner portal — it exists so the
+     dev team can see the shape of the admin settings described in
+     ADMIN-MAPPING.md. A partner must never see this group.
+     DELETE BOTH THIS AND admin-preview.html BEFORE ANYTHING SHIPS. */
+  var INTERNAL_NAV = [
+    { href: 'admin-preview.html', label: 'Admin settings', ico: '⚑' }
   ];
 
   /* ---------------------------------------------------------------------- */
@@ -48,13 +57,16 @@
        tab. The sessionStorage fallback keeps the switcher working when the
        page is opened somewhere that drops query strings (some preview panes
        and embedded viewers do). In production none of this exists — the
-       partner comes off the session and cannot be chosen at all. */
-    var partnerType = q.get('partner');
-    if (partnerType !== 'cpl' && partnerType !== 'revshare') {
-      try { partnerType = sessionStorage.getItem('fz_partner'); } catch (e) { partnerType = null; }
+       partner comes off the session and cannot be chosen at all.
+
+       resolvePartnerId() still accepts the legacy 'revshare' / 'cpl' values
+       that used to double as partner ids, so old links keep working. */
+    var partnerId = q.get('partner');
+    if (!partnerId) {
+      try { partnerId = sessionStorage.getItem('fz_partner'); } catch (e) { partnerId = null; }
     }
-    partnerType = partnerType === 'cpl' ? 'cpl' : 'revshare';
-    try { sessionStorage.setItem('fz_partner', partnerType); } catch (e) {}
+    partnerId = D.resolvePartnerId(partnerId);
+    try { sessionStorage.setItem('fz_partner', partnerId); } catch (e) {}
     var rangeKey = q.get('range') || fallback;
     if (!D.RANGES[rangeKey]) rangeKey = fallback;
 
@@ -63,8 +75,12 @@
     var range = D.resolveRange(rangeKey, from, to);
 
     return {
-      partnerType: partnerType,
-      partner: D.PARTNER_TYPES[partnerType],
+      partnerId: partnerId,
+      partner: D.PARTNERS[partnerId],
+      /* Comp models this partner is currently running. Length > 1 means a
+         mixed account and the lead table will carry heterogeneous rows. */
+      comps: D.compsFor(partnerId),
+      rateBasis: D.rateBasisFor(partnerId),
       rangeKey: rangeKey,
       range: range,
       campaignId: q.get('campaign') || 'all',
@@ -91,7 +107,7 @@
   /* Carry the current context onto another page. */
   function linkTo(href, state, extra) {
     var q = new URLSearchParams();
-    q.set('partner', state.partnerType);
+    q.set('partner', state.partnerId);
     q.set('range', state.rangeKey);
     if (state.rangeKey === 'custom') {
       q.set('from', isoDate(state.range.from));
@@ -129,10 +145,19 @@
               (n.href === active ? ' class="is-active"' : '') + '>' +
               '<span class="ico">' + n.ico + '</span>' + n.label + '</a>';
           }).join('') +
+          '<div class="nav-label" style="margin-top:18px">Internal — temporary</div>' +
+          INTERNAL_NAV.map(function (n) {
+            return '<a href="' + linkTo(n.href, state) + '"' +
+              (n.href === active ? ' class="is-active"' : '') + '>' +
+              '<span class="ico">' + n.ico + '</span>' + n.label + '</a>';
+          }).join('') +
         '</nav>' +
+        /* No comp model here. It is set PER CAMPAIGN, so putting one model
+           beside the account name misrepresents any partner running more than
+           one — see the Partnership summary for the per-campaign breakdown. */
         '<div class="sidebar-foot">' +
           '<strong>' + esc(p.name) + '</strong><br>' +
-          esc(p.compModel) +
+          esc(p.status) + ' · ' + D.activeCampaignsFor(state.partnerId).length + ' active campaigns' +
           '<div class="brand-tagline">Built for Agents. Backed by Purpose.<br>Driven by Growth.</div>' +
         '</div>';
     }
@@ -143,11 +168,15 @@
           '<h1>' + esc(opts.title) + '</h1>' +
           (opts.subtitle ? '<p>' + opts.subtitle + '</p>' : '') +
         '</div>' +
-        '<div class="ctx" title="Mock-up affordance only. In production the partner type comes from the session, and the two views are two different SQL projections — see HANDOFF.md.">' +
+        /* Built from PARTNERS rather than hardcoded, so the names cannot
+           drift out of step with the data the way they previously did. */
+        '<div class="ctx" title="Mock-up affordance only. In production the partner comes from the session, and each comp model is a different SQL projection — see HANDOFF.md.">' +
           '<span class="ctx-label">Viewing as</span>' +
           '<select id="ctx-partner">' +
-            '<option value="revshare"' + (state.partnerType === 'revshare' ? ' selected' : '') + '>RevShare partner — OptiLabX Media</option>' +
-            '<option value="cpl"' + (state.partnerType === 'cpl' ? ' selected' : '') + '>CPL partner — Cardinal Reach LLC</option>' +
+            Object.keys(D.PARTNERS).map(function (k) {
+              return '<option value="' + k + '"' + (state.partnerId === k ? ' selected' : '') + '>' +
+                esc(D.PARTNERS[k].name) + '</option>';
+            }).join('') +
           '</select>' +
         '</div>';
 
@@ -177,7 +206,7 @@
     var isCustom = state.rangeKey === 'custom';
 
     var html = '<form class="filters" method="get" id="filter-form">' +
-      '<input type="hidden" name="partner" value="' + state.partnerType + '">';
+      '<input type="hidden" name="partner" value="' + state.partnerId + '">';
 
     if (fields.indexOf('range') !== -1) {
       html += '<div class="field"><label for="f-range">Date range</label>' +
@@ -197,7 +226,7 @@
     }
 
     /* Campaigns belong to the partner, so the list is scoped to them. */
-    var myCampaigns = D.campaignsFor(state.partnerType);
+    var myCampaigns = D.campaignsFor(state.partnerId);
 
     if (fields.indexOf('campaign') !== -1) {
       html += '<div class="field"><label for="f-campaign">Campaign</label>' +
@@ -326,6 +355,65 @@
     };
     return '<span class="badge ' + (map[soldType] || '') + '"><span class="dot"></span>' +
       D.SOLD_TYPES[soldType].label + '</span>';
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Registry-driven lead cells                                             */
+  /* ---------------------------------------------------------------------- */
+
+  /* data.js owns WHICH columns exist for a comp model — that is the security
+     boundary. This owns how each one LOOKS. Both the table and the CSV render
+     through here, so a new registry entry shows up in both with one addition.
+
+     Every branch treats a missing key as an em dash. That is not defensive
+     padding: for a CPL row that was rejected, the outcome keys are genuinely
+     absent from the object, and `'soldType' in row` is the permission check. */
+  function leadCell(col, row, state) {
+    switch (col.key) {
+      case 'receivedAt':   return fmtDateTime(row.receivedAt);
+      case 'id':           return '<span class="lead-id">' + esc(row.id) + '</span>';
+      case 'campaignId':   return '<span style="color:var(--ink-2)">' + esc(row.campaignId) + '</span>';
+      case 'assetBand':
+        var band = D.ASSET_BY_KEY[row.assetBand];
+        return esc(band ? band.label : '—');
+      case 'hourSegment':  return esc(D.HOUR_SEGMENT_LABEL[row.hourSegment] || '—');
+      case 'dow':          return esc(D.DOW_SHORT[row.dow] || '—');
+      case 'status':
+        return row.status === 'paid'
+          ? '<span class="pill-paid">Paid</span>'
+          : '<span class="pill-free">Free</span>';
+      case 'rejectReason':
+        if (!row.rejectReason) return '—';
+        return '<span style="color:var(--ink-2)" title="' + esc(D.rejectFix(row.rejectReason)) + '">' +
+          esc(D.rejectLabel(row.rejectReason, state.partnerId)) + '</span>';
+      case 'soldType':     return 'soldType' in row ? soldBadge(row.soldType) : '—';
+      case 'soldAt':       return row.soldAt ? fmtDate(row.soldAt) : '—';
+      case 'daysToSale':   return row.daysToSale == null ? '—' : String(row.daysToSale);
+      case 'saleAmount':   return row.saleAmount ? fmtMoney(row.saleAmount) : '—';
+      case 'partnerShare': return row.partnerShare ? fmtMoney(row.partnerShare) : '—';
+      default:             return esc(row[col.key] == null ? '—' : row[col.key]);
+    }
+  }
+
+  /** Same column, as a flat CSV value. */
+  function leadCsvValue(col, row, state) {
+    switch (col.key) {
+      case 'receivedAt':   return row.receivedAt.toISOString();
+      case 'assetBand':
+        var band = D.ASSET_BY_KEY[row.assetBand];
+        return band ? band.label : '';
+      case 'hourSegment':  return D.HOUR_SEGMENT_LABEL[row.hourSegment] || '';
+      case 'dow':          return D.DOW_LABEL[row.dow] || '';
+      case 'status':       return row.status === 'paid' ? 'Paid' : 'Free';
+      case 'rejectReason':
+        return row.rejectReason ? D.rejectLabel(row.rejectReason, state.partnerId) : '';
+      case 'soldType':     return row.soldType ? D.SOLD_TYPES[row.soldType].label : '';
+      case 'soldAt':       return row.soldAt ? isoDate(row.soldAt) : '';
+      case 'daysToSale':   return row.daysToSale == null ? '' : row.daysToSale;
+      case 'saleAmount':   return row.saleAmount ? row.saleAmount.toFixed(2) : '';
+      case 'partnerShare': return row.partnerShare ? row.partnerShare.toFixed(2) : '';
+      default:             return row[col.key] == null ? '' : row[col.key];
+    }
   }
 
   function deltaHtml(current, prior, opts) {
@@ -470,6 +558,8 @@
     fmtDate: fmtDate,
     fmtDateTime: fmtDateTime,
     soldBadge: soldBadge,
+    leadCell: leadCell,
+    leadCsvValue: leadCsvValue,
     deltaHtml: deltaHtml,
     exportCsv: exportCsv,
     exportControl: exportControl,

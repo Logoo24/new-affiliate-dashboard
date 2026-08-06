@@ -182,7 +182,10 @@
   var D = FZData, A = FZApp, C = FZCharts, H = FZHealth;
 
   var state = A.params();
-  var isRev = state.partnerType === 'revshare';
+  /* Comp model is per campaign now, so this is "does this account have any
+     revenue-share campaign in scope" rather than "is this a RevShare partner".
+     It drives copy and which tiles appear — never which fields exist. */
+  var isRev = state.comps.some(function (c) { return c.seesRevenue; });
 
   A.shell(state, {
     active: 'index.html',
@@ -195,9 +198,9 @@
      outcomes on the sold date, rates on the trailing matured cohort.
      A RevShare partner is paid on ANY sale, so their rate denominator is
      every lead submitted; a CPL partner's is accepted leads only. */
-  var mOpts = { rateBasis: isRev ? 'all' : 'paid' };
+  var mOpts = { rateBasis: state.rateBasis };
   var scope = {
-    partnerType: state.partnerType,
+    partnerId: state.partnerId,
     campaignId: state.campaignId, subid: state.subid
   };
 
@@ -216,10 +219,13 @@
   var targets = D.targetProgress(Object.assign({ rateBasis: mOpts.rateBasis, cplRate: 90 }, scope));
 
   /* ---- context notice -------------------------------------------------- */
+  /* Rate comes off the partner rather than a hardcoded 40% — annuity.org runs
+     at 85%. */
   document.getElementById('ctx-notice').innerHTML = isRev
     ? '<div class="notice notice-info"><span class="ico">◆</span><div>' +
-      'You earn 40% of any lead that sells — <strong>accepted or not</strong>. Acceptance rate ' +
-      'here is a quality signal, not a payment gate.</div></div>'
+      'You earn ' + Math.round(state.partner.revSharePct * 100) + '% of any lead that sells — ' +
+      '<strong>accepted or not</strong>. Acceptance rate here is a quality signal, not a ' +
+      'payment gate.</div></div>'
     : '<div class="notice notice-info"><span class="ico">◆</span><div>' +
       'You are paid per accepted lead, so acceptance rate drives your invoice. Rejected leads ' +
       'show their reason and nothing further.</div></div>';
@@ -268,7 +274,7 @@
       delta: A.deltaHtml(sm.medianCycle, psm.medianCycle, { lowerIsBetter: true }) }
   ];
 
-  var hs = H.score({ partnerType: state.partnerType, campaignId: state.campaignId, subid: state.subid });
+  var hs = H.score({ partnerId: state.partnerId, campaignId: state.campaignId, subid: state.subid });
   tiles.push({
     label: 'Health score', value: String(hs.score),
     sub: '<span class="badge ' + hs.tier.badge + '"><span class="dot"></span>' + hs.tier.label + '</span>',
@@ -349,7 +355,7 @@
 
   var volHost = document.getElementById('chart-volume');
   var convHost = document.getElementById('chart-conv');
-  var dailyTarget = D.dailyVolumeTarget(state.partnerType);
+  var dailyTarget = D.dailyVolumeTarget(state.partnerId);
   C.mount(volHost, 'columns', {
     days: days, series: volumeSeries,
     targetLine: dailyTarget ? { value: dailyTarget, label: 'Target ' + Math.round(dailyTarget) + '/day' } : null,
@@ -407,9 +413,12 @@
       var bucket = segs[k] || { raw: 0, mature: 0, ph: 0 };
       var r = rate(bucket);
       var w = Math.round((r / best) * 100);
-      var isEarly = k === 'early';
-      return '<tr' + (isEarly ? ' style="background:var(--surface-2)"' : '') + '>' +
-        '<td>' + D.HOUR_SEGMENT_LABEL[k] + (isEarly ? ' <strong style="color:var(--good-text)">★</strong>' : '') + '</td>' +
+      /* Starred windows are the two IDEAL ones — 9–11a and 3–7p, which are
+         the hours the floor is busiest. An earlier version starred 6–9a,
+         which was invented and contradicted our own operating hours. */
+      var isIdeal = D.isIdealSegment(k);
+      return '<tr' + (isIdeal ? ' style="background:var(--surface-2)"' : '') + '>' +
+        '<td>' + D.HOUR_SEGMENT_LABEL[k] + (isIdeal ? ' <strong style="color:var(--good-text)">★</strong>' : '') + '</td>' +
         '<td class="num">' + A.fmtInt(bucket.raw) + '</td>' +
         '<td class="num"><span class="bar-cell"><span>' + A.fmtPct(r, 1) + '</span>' +
         '<span class="bar-track"><span class="bar-fill" style="width:' + w + '%"></span></span></span></td>' +
@@ -423,9 +432,11 @@
       if (!bestDow || rate(dows[d]) > rate(dows[bestDow])) bestDow = d;
     });
     document.getElementById('window-foot').innerHTML =
-      '<span>★ Early arrivals convert materially better.' +
+      '<span>★ ' + D.IDEAL_WINDOWS.map(function (w) { return A.esc(w.label); }).join(' and ') +
+      ' are the hours our floor is busiest, so they convert best. Not a restriction — ' +
+      'we accept leads any hour.' +
       (bestDow != null ? ' Your strongest day is <strong>' + D.DOW_LABEL[bestDow] + '</strong>.' : '') +
-      '</span>';
+      ' <a href="' + A.linkTo('health.html', state) + '">Coverage asks →</a></span>';
   })();
 
   /* ---- tier mix --------------------------------------------------------- */
@@ -471,7 +482,7 @@
   var cohByCampaign = indexBy(coh.rows, function (r) { return r.campaignId; });
 
   (function () {
-    var mine = D.campaignsFor(state.partnerType).filter(function (c) {
+    var mine = D.campaignsFor(state.partnerId).filter(function (c) {
       return state.campaignId === 'all' || c.id === state.campaignId;
     });
 
@@ -601,7 +612,7 @@
        one — the OptiLabX 45–79 exception has already caused a $5,194 invoice
        variance by being applied as 45–75 somewhere downstream. */
     var body = entries.map(function (e) {
-      return '<tr><td>' + A.esc(D.rejectLabel(e.key, state.partnerType)) + '</td>' +
+      return '<tr><td>' + A.esc(D.rejectLabel(e.key, state.partnerId)) + '</td>' +
         '<td class="num">' + A.fmtInt(e.count) + '</td>' +
         '<td class="num">' + A.fmtPct(m.free ? e.count / m.free : 0, 1) + '</td>' +
         '<td style="color:var(--ink-2)">' + A.esc(D.rejectFix(e.key)) + '</td></tr>';

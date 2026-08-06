@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "npx",
+      "_comment": [
+        "http-server, NOT `serve`. `serve` rewrites /index.html to /index with a 301",
+        "and DROPS THE QUERY STRING in the redirect, which silently breaks every link",
+        "in this prototype - filter state, and the campaign a View details button",
+        "carries, all live in the query string. http-server serves paths as-is."
+      ],
+      "runtimeArgs": ["--yes", "http-server", "-p", "3000", "-c-1", "--silent", "."],
+      "port": 3000
+    }
+  ]
+}
