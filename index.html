@@ -172,6 +172,7 @@
   </div>
 </div>
 
+<script src="assets/data/dataset.js"></script>
 <script src="assets/js/data.js"></script>
 <script src="assets/js/health.js"></script>
 <script src="assets/js/charts.js"></script>
@@ -401,8 +402,18 @@
       'It is the highest-leverage targeting change available to most partners.</span>';
   })();
 
-  /* ---- arrival window --------------------------------------------------- */
+  /* ---- arrival window ---------------------------------------------------
+     The lead export carries date only — TimeStamp is empty on every row — so
+     arrival window is genuinely unknown. Say so rather than plotting zeros. */
   (function () {
+    var notes = D.datasetNotes && D.datasetNotes();
+    if (notes && notes.noTimeOfDay) {
+      A.unsupported(document.getElementById('window-table').closest('.card'),
+        'Arrival window needs a timestamp',
+        'The lead export records a date but no time of day, so we cannot tell when in the ' +
+        'day your leads arrive. Adding a time component to the export turns this on.');
+      return;
+    }
     var segs = coh.metrics.bySegment;
     var best = 0;
     D.HOUR_SEGMENT_ORDER.forEach(function (k) { best = Math.max(best, rate(segs[k])); });
@@ -528,6 +539,19 @@
   /* ---- sub-IDs ----------------------------------------------------------- */
   var subExport = [];
   (function () {
+    /* Sub-ID drilldown is only meaningful if the partner actually passes one.
+       In the current export only Madrivo does, at 99%; Heritage and OptiLabX
+       pass none at all. Rendering a single "(none)" row would look like a
+       finding about their traffic rather than a gap in what they send. */
+    var passing = rows.filter(function (r) { return r.subid; }).length;
+    if (rows.length && passing / rows.length < 0.02) {
+      A.unsupported(document.getElementById('subid-table').closest('.card'),
+        'No sub-IDs on these leads',
+        'This account is not passing a sub-ID on its posts, so we cannot break performance ' +
+        'down by placement or publisher — only by campaign. Passing a stable sub-ID on every ' +
+        'lead is the single change that unlocks per-publisher feedback and pricing.');
+      return;
+    }
     var soldBySub = indexBy(soldRows, function (r) { return r.subid; });
     var cohBySub = indexBy(coh.rows, function (r) { return r.subid; });
     var groups = D.groupBy(rows, function (r) { return r.subid; }, mOpts);

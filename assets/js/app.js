@@ -43,7 +43,8 @@
      ADMIN-MAPPING.md. A partner must never see this group.
      DELETE BOTH THIS AND admin-preview.html BEFORE ANYTHING SHIPS. */
   var INTERNAL_NAV = [
-    { href: 'admin-preview.html', label: 'Admin settings', ico: '⚑' }
+    { href: 'admin-preview.html', label: 'Admin settings', ico: '⚑' },
+    { href: 'data-source.html',   label: 'Data source',    ico: '⌸' }
   ];
 
   /* ---------------------------------------------------------------------- */
@@ -357,6 +358,13 @@
     return '$' + Math.round(n).toLocaleString('en-US');
   }
   function fmtDateTime(d) {
+    if (!d) return '—';
+    /* When the source carries no clock, every row would render "12:00 AM",
+       which looks like data rather than the absence of it. */
+    var notes = D.datasetNotes && D.datasetNotes();
+    if (notes && notes.noTimeOfDay) {
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
       d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   }
@@ -474,6 +482,24 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
+  /**
+   * Replace a card's body with an honest "this export cannot support it"
+   * state. A widget fed a field the data does not carry renders zeros, and
+   * zeros read as a finding — "your early-morning volume is 0%" is a lie when
+   * the truth is "the export has no clock."
+   */
+  function unsupported(cardEl, title, reason) {
+    if (!cardEl) return;
+    cardEl.querySelectorAll('.table-wrap, .card-body, .card-foot').forEach(function (n) { n.remove(); });
+    var d = document.createElement('div');
+    d.className = 'card-body';
+    d.innerHTML =
+      '<div class="notice notice-warn" style="margin:6px 0 0">' +
+        '<span class="ico">▲</span><div><strong>' + esc(title) + '</strong><br>' +
+        esc(reason) + '</div></div>';
+    cardEl.appendChild(d);
+  }
+
   function quote(v) {
     if (v == null) return '';
     var s = String(v);
@@ -584,6 +610,7 @@
     deltaHtml: deltaHtml,
     exportCsv: exportCsv,
     exportControl: exportControl,
+    unsupported: unsupported,
     viewToggle: viewToggle
   };
 

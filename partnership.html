@@ -112,6 +112,7 @@
   </div>
 </div>
 
+<script src="assets/data/dataset.js"></script>
 <script src="assets/js/data.js"></script>
 <script src="assets/js/health.js"></script>
 <script src="assets/js/charts.js"></script>
@@ -139,7 +140,9 @@
   document.getElementById('hero-status').innerHTML =
     '<span class="badge ' + (act.active ? 'badge-good' : 'badge-warn') + '" style="font-size:13px;padding:4px 12px">' +
     '<span class="dot"></span>' + (act.active ? 'Active' : 'Inactive') + '</span>' +
-    '<div class="quota" style="margin-top:8px">Partner since ' + A.esc(D.fmtSince(state.partnerId)) + '</div>' +
+    (D.fmtSince(state.partnerId)
+      ? '<div class="quota" style="margin-top:8px">Partner since ' + A.esc(D.fmtSince(state.partnerId)) + '</div>'
+      : '<div class="quota" style="margin-top:8px" title="The lead export does not carry a partnership start date — see the Data source page.">Partner since — <em>not in the export</em></div>') +
     (!act.active && act.lastAcceptedAt
       ? '<div class="quota" style="margin-top:2px">Last accepted lead ' + A.fmtDate(act.lastAcceptedAt) + '</div>'
       : '');

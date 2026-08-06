@@ -7,6 +7,34 @@ the *where*.
 
 ---
 
+## RUNNING ON REAL DATA AS OF AUG 6 2026 — and what that changed
+
+The prototype now loads a real lead export (`Lead-Report-08-06-26.csv`, 71,725 rows,
+Jun 1 – Aug 6 2026) instead of generated data. `tools/ingest.py` converts it to
+`assets/data/dataset.js`; every affiliate in the export is a selectable partner view.
+**Consumer PII and internal cost/margin columns are never emitted by the ingest** — the
+script asserts it before writing.
+
+Three things this document listed as **NEEDS BUILDING — blocking** turned out to already
+exist in the export. That is good news and it changes the build order:
+
+| Was documented as | Actually |
+|---|---|
+| `sold_type` — blocking, the whole scorecard waits on it | **EXISTS.** `priority` / `hot_lead` / `auction` / `marketplace`, 1,483 sold rows. Prices confirm it: Priority median **$500**, Hot **$456**, Auction $49, Marketplace $41 |
+| `speed_to_lead` — missing, ops pillar parked | **EXISTS but is unusable.** Populated on every row, values run from **−113,426,741 to 4,109,200** with a median of 0. Parked for a different reason than we thought: the field is broken, not absent |
+| `call_attempts_to_convert` — missing | **EXISTS and looks sane.** Median 0 (most leads are Pending), p90 4, max 66 |
+
+And one thing we assumed was fine is not:
+
+| Assumption | Reality |
+|---|---|
+| Leads carry a timestamp | **They do not.** `TimeStamp` is empty on all 71,725 rows and `Created On` is date-only. **Every hour-of-day feature is impossible today** — the arrival-window widget is switched off and the window component is dropped from the health score rather than scored as zero. Adding a time component to the export turns all of it on |
+
+The full list of what the export can and cannot support is rendered in the app on the
+internal **Data source** page, so it is reviewable rather than buried here.
+
+---
+
 ## What this document is
 
 Every element in the affiliate dashboard is driven by something: a field on a table, a setting an
@@ -394,6 +422,23 @@ what §1 and §5 already list.
 | Targeting — call-centre hours, ideal windows, day split | §5b / §5c configuration | **NEEDS BUILDING** as config |
 | Targeting — lead criteria per product | standard criteria + the partner's `age_band` override (§1) | age band **NEEDS BUILDING**; the rest is constant criteria that should live in config, not code |
 | Targeting — states-we-need widget | §5a state demand | **NEEDS BUILDING** |
+
+---
+
+## 7b. Data quality found in the real export
+
+Every item here is a real finding from `Lead-Report-08-06-26.csv`, not a mock-up artefact.
+They are rendered in-app on the Data source page.
+
+| Finding | Evidence | Consequence |
+|---|---|---|
+| **$1 phantom COGS — confirmed live** | All **41,627** accepted rows carry a non-zero Lead Cost with a median of exactly **$1.00** | Margin is fabricated. The health score's margin input is **excluded** rather than computed on it |
+| **Reject Reason is not a controlled field** | **2,917 distinct values.** The tail is raw XML filter responses written into the reason column — ~2,400 rows on Heritage alone | Bucketed on ingest into a `filter_error` category, surfaced to the affiliate as *"Filter response error — our side"* so they are not blamed for our fault. Needs a controlled vocabulary at source |
+| **Affiliate name mismatch** | Export says `ObtilabX`; the tracker says OptiLabX | Mapped on ingest. Ungrouped it splits one partner into two |
+| **Assets1 is free text** | 29 spelling variants, mojibake dashes, duplicate ranges. **81.6% of all rows sit in the single band `$50 000 - $100 000`** | Parsed to bands on ingest. The concentration is worth investigating — it looks like a default rather than a distribution |
+| **Sold but no sold type** | 16 rows marked Sold with an empty Sold Type | Invisible to any tier-based metric |
+| **Rev-share rate not in the export** | Revenue Share column holds 40% / 0% / 4% / 1.75%. annuity.org's 85% does not appear at all | Comp model is inferred from campaign name plus the Revenue Share column. **annuity.org therefore reads as CPL and is wrong** — it needs its rate on the campaign record |
+| **Sub-IDs almost entirely absent** | 0.4% fill overall. Madrivo 99%; **Heritage and OptiLabX 0%** | Per-publisher scoring is impossible for the two accounts that matter most. The sub-ID card switches itself off with an explanation rather than showing an empty table |
 
 ---
 

@@ -152,6 +152,27 @@
     contact: {
       label: 'Bad contact — wrong number or disconnected',
       fix: 'Tighten phone verification at the source.'
+    },
+    income: {
+      label: 'Household income below criteria',
+      fix: 'Life leads need $40,000+ household income.'
+    },
+    interest: {
+      label: 'Consumer not interested',
+      fix: 'Usually a creative or expectation-setting issue upstream of the form.'
+    },
+    /* Buckets that only appear with a real export. `filter_error` is OUR
+       problem, not the affiliate's — the reject-reason column contains raw
+       XML filter responses on ~2,400 Heritage rows. Named plainly rather
+       than dressed up as a lead-quality reason. */
+    filter_error: {
+      label: 'Filter response error — our side',
+      fix: 'Not a lead-quality problem. The filter wrote a raw error into the reason field; ' +
+           'flagged for the dev team.'
+    },
+    other: {
+      label: 'Other',
+      fix: 'Uncategorised reason text. Ask your account manager for specifics.'
     }
   };
 
@@ -300,11 +321,13 @@
      'cpl' values that used to double as partner ids so old bookmarks and
      query strings keep working. */
   var PARTNER_ALIASES = { revshare: 'ahg', cpl: 'opx' };
+  /* Reassigned by the dataset loader — partner ids come from the data. */
+  var DEFAULT_PARTNER = 'ahg';
 
   function resolvePartnerId(id) {
     if (PARTNERS[id]) return id;
-    if (PARTNER_ALIASES[id]) return PARTNER_ALIASES[id];
-    return 'ahg';
+    if (PARTNER_ALIASES[id] && PARTNERS[PARTNER_ALIASES[id]]) return PARTNER_ALIASES[id];
+    return DEFAULT_PARTNER;
   }
 
   function partner(partnerId) {
@@ -417,7 +440,9 @@
   function fmtSince(partnerId) {
     var iso = partner(partnerId).sinceISO;
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
-    if (!m) return '—';
+    /* The lead export cannot answer this — its earliest row is the start of
+       the export window, not the start of the relationship. */
+    if (!m) return null;
     return new Date(+m[1], +m[2] - 1, +m[3])
       .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }
@@ -972,7 +997,182 @@
                             'Summit Wealth Partners', 'Brightwater Group']);
   }
 
-  var ALL_LEADS = generate();
+  /* ======================================================================
+     REAL DATA LOADER
+     ----------------------------------------------------------------------
+     If assets/data/dataset.js loaded before this file, window.FZ_DATASET holds
+     a real lead export and we build PARTNERS, CAMPAIGNS and ALL_LEADS from it.
+     Otherwise everything above stands and the mock generator runs, so the
+     prototype still works with no data file present.
+
+     The loader emits records in EXACTLY the shape makeLead() produces, so the
+     query layer, the firewall and every metric downstream are untouched by the
+     swap. Fields the export cannot supply are left null rather than defaulted
+     — see DATASET_NOTES and the Data source page.
+     ====================================================================== */
+
+  var DATASET = global.FZ_DATASET || null;
+  var DATASET_NOTES = null;
+  var USING_REAL_DATA = false;
+  var REKEY_TARGETS = null;
+
+  function loadDataset(ds) {
+    var f = {};
+    ds.fields.forEach(function (name, i) { f[name] = i; });
+
+    var epochParts = ds.epoch.split('-');
+    var epoch = new Date(+epochParts[0], +epochParts[1] - 1, +epochParts[2]);
+    function dayToDate(n) {
+      return n < 0 ? null : addDays(epoch, n);
+    }
+
+    /* ---- partners ---- */
+    var partners = {};
+    ds.partners.forEach(function (p) {
+      var camps = ds.campaigns.filter(function (c) { return c.partnerId === p.id; });
+      var rev = camps.filter(function (c) { return c.comp === 'revshare'; })[0];
+      partners[p.id] = {
+        id: p.id,
+        name: p.name,
+        shortName: p.name.split(' ')[0],
+        affiliateId: p.affiliateId,
+        rateCard: rev ? ('Revenue share — ' + Math.round(rev.revSharePct * 100) + '%')
+                      : 'Cost per lead',
+        revSharePct: rev ? rev.revSharePct : 0,
+        /* Not in the export. OptiLabX's negotiated 45–79 is carried from the
+           commercial record; everyone else falls back to standard. */
+        ageBand: /optilabx/i.test(p.name) ? '45–79' : '45–75',
+        ageBandNote: /optilabx/i.test(p.name)
+          ? 'Negotiated exception — wider than the standard 45–75.'
+          : 'Standard criteria.',
+        products: (function () {
+          var set = {};
+          camps.forEach(function (c) { set[c.product] = 1; });
+          return Object.keys(set).sort().join(' + ') || 'Annuity';
+        })(),
+        integration: '—',
+        integrationNote: 'Not in the lead export.',
+        /* NOT DERIVABLE: the export starts at its own first row, so the
+           earliest lead is a floor on the relationship, not its start date. */
+        sinceISO: null,
+        billingPeriod: 'Net 30',
+        billingBasis: 'Invoiced monthly',
+        exclusivity: '365-day Priority/Hot exclusivity window',
+        users: [
+          { id: p.id + '-u1', name: 'Primary contact', title: 'Not in the lead export',
+            email: 'contact@' + p.id + '.example', isPrimary: true, away: false, avatar: null }
+        ]
+      };
+    });
+
+    /* ---- campaigns ---- */
+    var campaigns = ds.campaigns.map(function (c) {
+      return {
+        id: c.cid, name: c.name, partnerId: c.partnerId, comp: c.comp,
+        active: c.active, launched: c.lastLead ? '' : '',
+        product: c.product, kind: /aged|6m|pq/i.test(c.name) ? 'aged' : 'fresh',
+        revSharePct: c.revSharePct,
+        lastLead: c.lastLead,
+        subids: []
+      };
+    });
+
+    /* ---- leads ---- */
+    var bandKeys = ds.assetBands.map(function (b) { return b.key; });
+    var campById = {};
+    campaigns.forEach(function (c) { campById[c.id] = c; });
+
+    var leads = ds.leads.map(function (row) {
+      var cid = row[f.campaign] >= 0 ? ds.campaigns[row[f.campaign]].cid : '';
+      var camp = campById[cid];
+      var recv = dayToDate(row[f.recv]);
+      var soldOn = dayToDate(row[f.soldOn]);
+      var st = row[f.soldType] >= 0 ? ds.soldTypes[row[f.soldType]] : null;
+      var paid = row[f.paid] === 1;
+      var sub = row[f.subid] >= 0 ? ds.subids[row[f.subid]] : null;
+
+      return {
+        id: String(row[f.leadId]),
+        receivedAt: recv,
+        partnerId: ds.partners[row[f.partner]].id,
+        comp: camp ? camp.comp : 'cpl',
+        campaignId: cid,
+        campaignName: camp ? camp.name : cid,
+        campaignKind: camp ? camp.kind : 'fresh',
+        product: camp ? camp.product : 'Annuity',
+        subid: sub,
+        subidLabel: sub || null,
+        state: row[f.state] >= 0 ? ds.states[row[f.state]] : '',
+        /* The export has no time component at all, so arrival window is
+           genuinely unknown. null, never a fabricated bucket. */
+        hourSegment: null,
+        assetBand: row[f.assetBand] >= 0 ? bandKeys[row[f.assetBand]] : null,
+        status: paid ? 'paid' : 'free',
+        rejectReason: row[f.reject] >= 0 ? ds.rejects[row[f.reject]] : null,
+        soldType: st,
+        soldAt: soldOn,
+        daysToSale: (soldOn && recv) ? daysBetween(recv, soldOn) : null,
+        saleAmount: row[f.revenueCents] / 100,
+        partnerShare: row[f.shareCents] / 100,
+
+        /* Internal-only. The export's Lead Cost is the $1 phantom COGS, so
+           margin is not computable from it — left at 0 and reported as
+           unavailable rather than rendered as a real number. */
+        _leadCost: 0,
+        _margin: 0,
+        _buyerName: null,
+        _csrName: null,
+        _callResult: null,
+        _ipqsScore: null,
+        _clawback: row[f.returned] === 1,
+        _badContact: false,
+        _attempts: row[f.attempts]
+      };
+    });
+
+    return { partners: partners, campaigns: campaigns, leads: leads };
+  }
+
+  var ALL_LEADS;
+  if (DATASET && DATASET.leads && DATASET.leads.length) {
+    var loaded = loadDataset(DATASET);
+    PARTNERS = loaded.partners;
+    CAMPAIGNS = loaded.campaigns;
+    ALL_LEADS = loaded.leads;
+    DATASET_NOTES = DATASET.notes;
+    USING_REAL_DATA = true;
+
+    CAMPAIGN_BY_ID = {};
+    CAMPAIGNS.forEach(function (c) { CAMPAIGN_BY_ID[c.id] = c; });
+
+    /* TODAY must follow the data, not the wall clock, or every window is
+       empty. Pin it to the last day the export covers. */
+    var dtParts = DATASET.notes.dateTo.split('-');
+    TODAY = new Date(+dtParts[0], +dtParts[1] - 1, +dtParts[2]);
+
+    /* Partner ids changed, so the legacy aliases point at the two accounts
+       the old query strings meant. */
+    var firstRev = null, firstCpl = null;
+    Object.keys(PARTNERS).forEach(function (k) {
+      var hasRev = CAMPAIGNS.some(function (c) { return c.partnerId === k && c.comp === 'revshare'; });
+      if (hasRev && !firstRev) firstRev = k;
+      if (!hasRev && !firstCpl) firstCpl = k;
+    });
+    PARTNER_ALIASES = {
+      revshare: firstRev || Object.keys(PARTNERS)[0],
+      cpl: firstCpl || Object.keys(PARTNERS)[0],
+      ahg: Object.keys(PARTNERS)[0],
+      opx: firstCpl || Object.keys(PARTNERS)[0]
+    };
+    DEFAULT_PARTNER = Object.keys(PARTNERS)[0];
+
+    /* Targets are hard-coded demo values with no home in the export. Re-key
+       them onto the two largest accounts so the feature still demonstrates;
+       every other partner correctly shows "not set". */
+    REKEY_TARGETS = [firstRev, firstCpl];
+  } else {
+    ALL_LEADS = generate();
+  }
 
   /* ====================================================================== */
   /* THE FIREWALL                                                           */
@@ -1454,8 +1654,24 @@
     opx: { volume: 1400, spend: null, spendLabel: 'Spend' }
   };
 
+  /* Set by the dataset loader: [revsharePartnerId, cplPartnerId]. Scaled to
+     the real volumes in the export so the pace maths is not nonsense. */
+  if (typeof REKEY_TARGETS !== 'undefined' && REKEY_TARGETS) {
+    if (REKEY_TARGETS[0]) {
+      TARGETS[REKEY_TARGETS[0]] = { volume: 26000, spend: 9000, spendLabel: 'Revenue share payout' };
+    }
+    if (REKEY_TARGETS[1]) {
+      TARGETS[REKEY_TARGETS[1]] = { volume: 2400, spend: null, spendLabel: 'Spend' };
+    }
+  }
+
+  /* Targets are admin-set and exist for almost nobody today, so an unknown
+     partner returns nulls — "not set" — rather than undefined. A null target
+     must not render and must not count as a missed target. */
+  var NO_TARGETS = { volume: null, spend: null, spendLabel: 'Spend' };
+
   function targetsFor(partnerId) {
-    return TARGETS[resolvePartnerId(partnerId)];
+    return TARGETS[resolvePartnerId(partnerId)] || NO_TARGETS;
   }
 
   function targetProgress(opts) {
@@ -1648,6 +1864,8 @@
     isPartnerActive: isPartnerActive,
     avgWeeklyVolume: avgWeeklyVolume,
     nextPaymentDate: nextPaymentDate,
+    usingRealData: function () { return USING_REAL_DATA; },
+    datasetNotes: function () { return DATASET_NOTES; },
     fmtSince: fmtSince,
     leadCriteria: leadCriteria,
     campaignById: campaignById,

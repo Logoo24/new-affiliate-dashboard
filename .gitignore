@@ -31,3 +31,9 @@ desktop.ini
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+
+# Raw lead exports — real consumer PII. NEVER commit these.
+# Run tools/ingest.py against one to regenerate assets/data/dataset.js,
+# which is PII-free by construction.
+*.csv
+Lead-Report-*.csv

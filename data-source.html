@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data source (internal) — Financialize Partner Portal</title>
+<link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar" data-shell="sidebar"></aside>
+
+  <div class="main">
+    <header class="topbar" data-shell="topbar"></header>
+
+    <div class="content">
+
+      <div class="notice notice-warn">
+        <span class="ico">▲</span>
+        <div>
+          <strong>Internal — temporary, not partner-facing.</strong>
+          What the dashboard is running on, and exactly which widgets the current export
+          cannot support. Delete this page along with the other internal ones before anything
+          ships. The connection work is specified in <code>ADMIN-MAPPING.md</code>.
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <section class="card">
+          <div class="card-head"><div><h2>Source</h2><p class="sub">What was ingested.</p></div></div>
+          <div class="table-wrap"><table class="data" id="src-table"></table></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><div><h2>Capability gaps</h2>
+            <p class="sub">Widgets switched off because the export cannot feed them.</p></div></div>
+          <div class="table-wrap"><table class="data" id="gap-table"></table></div>
+        </section>
+      </div>
+
+      <section class="card">
+        <div class="card-head"><div><h2>Partner views built from the data</h2>
+          <p class="sub">Every affiliate in the export becomes a selectable view.</p></div></div>
+        <div class="table-wrap"><table class="data" id="partner-table"></table></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><div><h2>Data quality found in this export</h2>
+          <p class="sub">Real findings, not mock-up artefacts. Each one needs a decision.</p></div></div>
+        <div class="table-wrap"><table class="data" id="quality-table"></table></div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/data/dataset.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/health.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = FZData, A = FZApp;
+  var state = A.params();
+
+  A.shell(state, {
+    active: 'data-source.html',
+    title: 'Data source',
+    subtitle: 'Internal — what this prototype is running on.'
+  });
+
+  var n = D.datasetNotes && D.datasetNotes();
+
+  function kv(id, rows) {
+    document.getElementById(id).innerHTML = '<tbody>' + rows.map(function (r) {
+      return '<tr><th style="width:44%;text-align:left;font-weight:600">' + A.esc(r[0]) + '</th>' +
+        '<td>' + r[1] + '</td></tr>';
+    }).join('') + '</tbody>';
+  }
+
+  if (!n) {
+    kv('src-table', [['Mode', '<strong>Generated mock data</strong> — no export loaded.']]);
+    kv('gap-table', [['—', 'Not applicable.']]);
+    document.getElementById('partner-table').innerHTML =
+      '<tbody><tr><td class="empty">No dataset loaded.</td></tr></tbody>';
+    document.getElementById('quality-table').innerHTML =
+      '<tbody><tr><td class="empty">No dataset loaded.</td></tr></tbody>';
+    return;
+  }
+
+  kv('src-table', [
+    ['Export file', '<code>' + A.esc(n.sourceFile) + '</code>'],
+    ['Rows in export', A.fmtInt(n.rowsInExport)],
+    ['Rows used', A.fmtInt(n.rowsUsed)],
+    ['House / test rows excluded', A.fmtInt(n.houseRowsExcluded) +
+      ' <span style="color:var(--ink-muted)">(Internal, Dev_test, paid search, house properties)</span>'],
+    ['Date range', A.esc(n.dateFrom) + ' → ' + A.esc(n.dateTo)],
+    ['Partner views', A.fmtInt(Object.keys(D.PARTNERS).length)],
+    ['Campaigns', A.fmtInt(D.CAMPAIGNS.length)],
+    ['PII in this dataset', '<strong style="color:var(--good-text)">None.</strong> Name, address, ' +
+      'phone, email, zip and IP are never emitted by <code>tools/ingest.py</code>.']
+  ]);
+
+  kv('gap-table', [
+    ['Arrival window', '<strong>Off.</strong> The export has a date but no time of day ' +
+      '(<code>TimeStamp</code> is empty on every row), so hour-of-day cannot be derived.'],
+    ['Sub-ID drilldown', '<strong>Off for most partners.</strong> Only ' +
+      n.subidFillPct + '% of rows carry a sub-ID. Madrivo passes them; the two largest ' +
+      'accounts pass none.'],
+    ['Speed to lead', '<strong>Unusable.</strong> The column is populated but the values are ' +
+      'not — negatives and a median of zero. Operations pillar stays parked.'],
+    ['Margin in the health score', '<strong>Excluded.</strong> Lead Cost is the $1 phantom ' +
+      'COGS, so margin computed from it would be fiction.'],
+    ['Partner since', '<strong>Not derivable.</strong> The earliest row is the start of the ' +
+      'export window, not of the relationship.'],
+    ['Billing terms, contacts, users', '<strong>Not in the export.</strong> Placeholders until ' +
+      'the admin fields exist.']
+  ]);
+
+  /* ---- partners ---- */
+  (function () {
+    var ids = Object.keys(D.PARTNERS);
+    var rows = ids.map(function (id) {
+      var p = D.PARTNERS[id];
+      var camps = D.campaignsFor(id);
+      var act = D.isPartnerActive(id);
+      var comps = D.compsFor(id).map(function (c) { return c.label; }).join(', ') || '—';
+      var lc = D.queryLeads({ partnerId: id, from: D.addDays(D.TODAY, -400), to: D.TODAY });
+      var m = D.computeMetrics(lc, null, { rateBasis: D.rateBasisFor(id) });
+      return { id: id, p: p, camps: camps.length, comps: comps, act: act, m: m };
+    }).sort(function (a, b) { return b.m.raw - a.m.raw; });
+
+    document.getElementById('partner-table').innerHTML =
+      '<thead><tr><th>Affiliate</th><th>Aff ID</th><th class="num">Leads</th>' +
+      '<th class="num">Accepted</th><th class="num">Sold</th><th class="num">Campaigns</th>' +
+      '<th>Comp model</th><th>Status</th><th></th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr>' +
+          '<td><strong>' + A.esc(r.p.name) + '</strong></td>' +
+          '<td class="lead-id">' + A.esc(r.p.affiliateId || '—') + '</td>' +
+          '<td class="num">' + A.fmtInt(r.m.raw) + '</td>' +
+          '<td class="num">' + A.fmtInt(r.m.paid) + '</td>' +
+          '<td class="num">' + A.fmtInt(r.m.soldAny) + '</td>' +
+          '<td class="num">' + r.camps + '</td>' +
+          '<td>' + A.esc(r.comps) + '</td>' +
+          '<td><span class="badge ' + (r.act.active ? 'badge-good' : 'badge-warn') + '">' +
+            '<span class="dot"></span>' + (r.act.active ? 'Active' : 'Inactive') + '</span></td>' +
+          '<td style="text-align:right"><a class="btn btn-sm" href="' +
+            A.linkTo('partnership.html', state, { partner: r.id }) + '">View →</a></td>' +
+        '</tr>';
+      }).join('') + '</tbody>';
+  })();
+
+  /* ---- data quality ---- */
+  document.getElementById('quality-table').innerHTML =
+    '<thead><tr><th>Finding</th><th>Detail</th><th>What it means</th></tr></thead><tbody>' +
+    [
+      ['$1 phantom COGS — <strong>confirmed live</strong>',
+       'All 41,627 accepted rows carry a non-zero Lead Cost with a median of exactly $1.00.',
+       'Margin on rev-share campaigns is fabricated. Must be $0 before any margin metric means anything.'],
+      ['Reject Reason is not a clean field',
+       '2,917 distinct values. Most of the tail is raw XML filter responses written into the reason column.',
+       'Normalised into buckets on ingest. The field needs a controlled vocabulary at source.'],
+      ['Affiliate name mismatch',
+       'The export says <code>ObtilabX</code>; the tracker says OptiLabX.',
+       'Mapped on ingest. Ungrouped, it splits one partner into two.'],
+      ['No time of day anywhere',
+       '<code>TimeStamp</code> is empty on all 71,725 rows; <code>Created On</code> is date-only.',
+       'Arrival-window analysis is impossible. Adding a time component unlocks it.'],
+      ['Speed to Lead is populated but invalid',
+       'Range runs from &minus;113,426,741 to 4,109,200 with a median of 0.',
+       'Cannot be used. The operations pillar stays parked on this field.'],
+      ['Sub-IDs almost entirely absent',
+       n.subidFillPct + '% fill overall. Madrivo 99%; Heritage and OptiLabX 0%.',
+       'Per-publisher scoring is impossible for the accounts that matter most.'],
+      ['Assets1 is free text',
+       '29 spelling variants including mojibake dashes and duplicate ranges. 81.6% sit in one band.',
+       'Parsed to bands on ingest, but the concentration in one band is worth checking at source.'],
+      ['Sold with no sold type',
+       A.fmtInt(n.soldMarkedSoldButNoType) + ' rows are marked Sold but carry no Sold Type.',
+       'Small, but they are invisible to any tier-based metric.']
+    ].map(function (r) {
+      return '<tr><td style="width:24%"><strong>' + r[0] + '</strong></td>' +
+        '<td style="width:36%">' + r[1] + '</td>' +
+        '<td style="color:var(--ink-2)">' + r[2] + '</td></tr>';
+    }).join('') + '</tbody>';
+
+})();
+</script>
+</body>
+</html>

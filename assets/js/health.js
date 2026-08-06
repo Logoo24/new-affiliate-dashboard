@@ -180,13 +180,18 @@
        NOTE: an earlier version of this scored a 6–9a "early arrival" window.
        That window was invented and contradicted the call-centre hours (the
        floor opens at 9a), so it is gone. Do not reintroduce it. */
-    var coverageStateCount = 0, idealWindowCount = 0;
+    var coverageStateCount = 0, idealWindowCount = 0, haveClock = 0;
     for (var i = 0; i < rows.length; i++) {
       if (D.isCoverageState(rows[i].state)) coverageStateCount++;
+      if (rows[i].hourSegment) haveClock++;
       if (D.isIdealSegment(rows[i].hourSegment)) idealWindowCount++;
     }
     var coverageStateShare = rows.length ? coverageStateCount / rows.length : 0;
-    var idealWindowShare = rows.length ? idealWindowCount / rows.length : 0;
+    /* If the source carries no clock, the window component is unknowable.
+       Measure it over the rows that DO have one, and drop it from the score
+       entirely when none do — scoring an absent field as zero would penalise
+       a partner for a gap in our export. */
+    var idealWindowShare = haveClock ? idealWindowCount / haveClock : 0;
 
     /* Day-of-week alignment as total variation distance from the ideal split:
        half the sum of absolute deltas, so 0 = identical and 1 = disjoint. */
@@ -198,9 +203,12 @@
     var TARGET_IDEAL_WINDOW = 0.50;
     var TARGET_DOW_ALIGNMENT = 0.90;
 
-    var coverageScore = (norm(coverageStateShare, 0.05, TARGET_STATES) +
-                         norm(idealWindowShare, 0.20, TARGET_IDEAL_WINDOW) +
-                         norm(dowAlignment, 0.60, TARGET_DOW_ALIGNMENT)) / 3;
+    var coverageParts = [
+      norm(coverageStateShare, 0.05, TARGET_STATES),
+      norm(dowAlignment, 0.60, TARGET_DOW_ALIGNMENT)
+    ];
+    if (haveClock) coverageParts.push(norm(idealWindowShare, 0.20, TARGET_IDEAL_WINDOW));
+    var coverageScore = coverageParts.reduce(function (a, b) { return a + b; }, 0) / coverageParts.length;
 
     var volParts = [
       { key: 'sufficiency', label: 'Volume vs demand', weight: 0.40,
@@ -212,7 +220,7 @@
       { key: 'coverage', label: 'State, window & day coverage', weight: 0.35,
         score: coverageScore,
         display: pct(coverageStateShare) + ' short states · ' +
-                 pct(idealWindowShare) + ' in ideal windows · ' +
+                 (haveClock ? pct(idealWindowShare) + ' in ideal windows · ' : '') +
                  pct(dowAlignment) + ' day-split match' }
     ];
 
