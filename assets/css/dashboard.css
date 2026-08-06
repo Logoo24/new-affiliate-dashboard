@@ -320,7 +320,17 @@ h3 { font-size: 15px; }
   color: var(--ink-muted);
 }
 
-.content { padding: 24px 28px 56px; max-width: 1460px; width: 100%; }
+/* No max-width. The old 1460px cap left dead space either side on anything
+   wider than a laptop, which is where this is actually read — tables and
+   charts want every pixel. Padding scales with the viewport instead, so a
+   wide screen gets more breathing room rather than a narrower column.
+   Long-form text is capped individually (see .hero-note, .notice) so line
+   length stays readable even when the page itself is 3,000px wide. */
+.content {
+  padding: clamp(16px, 1.6vw, 34px) clamp(14px, 1.8vw, 44px) 64px;
+  width: 100%;
+  max-width: none;
+}
 
 /* --------------------------------------------------------------------------
    Partner context switcher (mock-up affordance — see note in HANDOFF.md)
@@ -455,10 +465,19 @@ h3 { font-size: 15px; }
   flex-wrap: wrap;
 }
 
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-@media (max-width: 1080px) {
-  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+/* auto-fit + a min track means these reflow continuously instead of snapping
+   at one breakpoint: three across on a wide monitor, two on a laptop, one on
+   a phone, with no media query. `min(100%, …)` stops the track from forcing
+   horizontal overflow when the viewport is narrower than the minimum. */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
+  gap: clamp(14px, 1.2vw, 22px);
+}
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
+  gap: clamp(14px, 1.2vw, 22px);
 }
 
 /* --------------------------------------------------------------------------
@@ -494,7 +513,7 @@ h3 { font-size: 15px; }
 
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 196px), 1fr));
   gap: 14px;
   margin-bottom: 20px;
 }
@@ -1132,6 +1151,93 @@ body.is-col-resizing { cursor: col-resize; user-select: none; }
 /* --------------------------------------------------------------------------
    Print
    -------------------------------------------------------------------------- */
+
+/* --------------------------------------------------------------------------
+   Responsive — narrow screens
+   --------------------------------------------------------------------------
+   The vertical nav rail is the only piece that cannot simply reflow: at
+   236px it eats a third of a phone screen. Below 900px it becomes a sticky
+   header — brand and account on one row, the nav as a horizontal scroll
+   strip underneath — and the content column takes the full width.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .app { display: block; }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    width: 100%;
+    height: auto;
+    flex: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--nav-border);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "brand foot" "nav nav";
+    align-items: center;
+  }
+
+  .brand { grid-area: brand; border-bottom: 0; padding: 10px 14px; }
+  .brand-sub { display: none; }
+
+  .sidebar-foot {
+    grid-area: foot;
+    border-top: 0;
+    padding: 10px 14px;
+    text-align: right;
+    font-size: 12px;
+  }
+  .brand-tagline { display: none; }
+
+  .nav {
+    grid-area: nav;
+    display: flex;
+    gap: 4px;
+    padding: 0 10px 10px;
+    overflow-x: auto;
+    flex: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav-label { display: none; }
+  .nav a { white-space: nowrap; margin-bottom: 0; padding: 7px 12px; }
+  /* The active marker moves from a left rule to an underline, because a
+     left rule reads as nothing once the items sit side by side. */
+  .nav a.is-active::before {
+    top: auto;
+    bottom: 0;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    height: 3px;
+    border-radius: 2px 2px 0 0;
+  }
+
+  .topbar { padding: 12px 14px; }
+  .hero { gap: 18px; }
+  .hero-figure { font-size: clamp(38px, 11vw, 58px); }
+}
+
+@media (max-width: 560px) {
+  .tiles { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+  .tile-value { font-size: 26px; }
+  .filters { padding: 12px; }
+  .field select,
+  .field input[type="date"],
+  .field input[type="text"],
+  .field input[type="search"] { min-width: 0; width: 100%; }
+  .field { flex: 1 1 100%; }
+  .card-head { padding: 14px 14px 10px; }
+  .card-body { padding: 6px 14px 14px; }
+  .card-foot { padding: 12px 14px; }
+  table.data th, table.data td { padding: 10px; }
+}
+
+/* Long-form text keeps a readable measure no matter how wide the page is —
+   the page stretches, prose does not. */
+.notice > div { max-width: 120ch; }
+.card-foot > span { max-width: 130ch; display: inline-block; }
 
 @media print {
   .sidebar, .filters, .ctx, .view-toggle, .btn { display: none !important; }
