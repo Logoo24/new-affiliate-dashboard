@@ -293,29 +293,85 @@ rejected-but-sold leads worth $7,694.**
 
 ---
 
-## 4. Spend & volume targets
+## 4. Spend & volume targets — CPL ONLY
 
-Affiliate-facing half is mocked (targets card on Performance, dashed target line on Leads by day).
-**The admin side does not exist.**
+**Confirmed by Logan, Aug 2026: revenue-share partners get no target at all.** They can send as
+much or as little volume as they want — more is generally better to us, but nothing here governs
+them. Their only governance mechanism is the lead health score, which already exists. Every
+function in the engine (`assets/js/data.js`) returns `null` immediately for a revenue-share
+partner rather than computing a number nobody asked for. This table, and everything below it,
+applies to CPL campaigns only.
+
+Affiliate-facing half is mocked (targets card on Performance, per-day dashed reference on Leads by
+day) and the admin side is mocked as a read-only illustration on `admin-preview.html`. **Neither
+half has real storage or a real input form yet.**
+
+### The core relationship: margin and CPL are the same lever, twice
 
 ```
-partner_targets
-  partner_id     required
-  campaign_id    optional — settable per campaign or account-wide
-  period         calendar month to start with
-  volume_target  INT      NULL = not set
-  spend_target   DECIMAL  NULL = not set
+margin = (R − CPL) / R          CPL = R × (1 − margin)
+```
+
+`R` is our expected revenue per **accepted** lead — a trailing, internal-only figure computed from
+matured sold outcomes (`revenuePerAcceptedLead()`). It never reaches the affiliate side of the
+query layer, same as margin itself never does. Admin sets **either** a target margin **or** a
+target CPL; whichever field was last edited is treated as the source of truth and the other is
+recomputed from it — never the reverse, which is what makes "either/or" well-defined instead of a
+fight over which stale number wins.
+
+Volume and spend are the **second** either/or pair, linked through the derived CPL:
+`Spend = Volume × CPL`. **Volume is defined in accepted leads**, matching how CPL is actually
+invoiced — not raw submitted, which would need a separate acceptance-rate assumption this design
+deliberately avoids. (`R` and target CPL are internal/derived; `target_cpl` is a *planning* figure
+and is a distinct field from a campaign's actual contracted `cpl_rate` — the admin screen shows
+both side by side so a gap between "what we're planning to" and "what we're actually paying" is
+visible, not silently absorbed.)
+
+### Cadence: weekly, not monthly
+
+Targets are **Sunday–Saturday weeks**, matching the real Friday-night budget-distribution cadence
+— not calendar months, which the first version of this mock incorrectly assumed.
+
+### Daily figure: day-of-week weighted, Sunday defaults to 0
+
+The reference mark on the affiliate's "Leads by day" chart is **not one flat number**. It is the
+weekly volume target × that day's share of a day-of-week split, so the day pattern is visible on
+the chart itself — Sunday sits at zero unless a partner's split is explicitly overridden, every
+other day gets its own dashed tick rather than a single misleading horizontal line. Default split
+is the company-wide `IDEAL_DOW_SPLIT` already used on the Targeting page (Sun 0% / Mon 20% / Tue–Thu
+19% / Fri 15% / Sat 8%), overridable per partner.
+
+### Storage this needs
+
+```
+partner_targets                              (CPL comp model only)
+  partner_id             required
+  campaign_id            optional — NULL = account-wide; per-campaign targets share this shape
+                          but the mock only builds the account-wide picker
+  week_start             DATE, the Sunday the week begins
+  target_margin_pct      NUMERIC  NULL = not set — INTERNAL ONLY, never affiliate-visible
+  target_cpl             NUMERIC  NULL = not set — affiliate-visible; synced with margin via R
+  target_volume          INT      NULL = not set — ACCEPTED leads; either/or with spend
+  target_spend           NUMERIC  NULL = not set — either/or with volume
+  revenue_per_lead_override  NUMERIC NULL — admin override of the auto-computed R
+                                            (e.g. an anticipated price change), INTERNAL ONLY
+  updated_by, updated_at
+
+partner_dow_weights                           (optional override; default = company IDEAL_DOW_SPLIT)
+  partner_id             required
+  weights                NUMERIC[7]           index 0 = Sunday, matching Date#getDay()
 ```
 
 | Rule | Why |
 |---|---|
-| Either, or, or both | The mock shows both states — Heritage has volume + payout, OptiLabX volume only |
-| A null target means *not set*, not zero | It must not render at all, and must not count as a missed target |
-| Severity is judged against **pace**, not the monthly total | 14% of a monthly target on day 5 of 31 is on track, not critical |
-| A revenue-share payout target is measured on the **sold** date | On the received basis it reports $0 for the first ten days of every month |
-| A CPL spend target stays on the **received** date | We owe on acceptance |
+| Revenue share gets no target, ever | Confirmed above — they are governed by the health score only |
+| A null target means *not set*, not zero | Must not render at all, and must not count as a missed target |
+| Target margin is never shown to the affiliate | Same redaction rule as margin everywhere else in this system |
+| `R` (revenue per accepted lead) is internal only | It is derived from `saleAmount`, deliberately **not** `lead_cost` — see the $1 phantom COGS problem below, which would corrupt any figure that touched it |
+| Severity is judged against **pace within the week**, not the weekly total | 14% of a weekly target on day 1 of 7 can still be on track |
+| A minimum matured sample gates `R` | Below ~20 matured accepted leads the trailing average is not reliable enough to derive a CPL from — the mock's threshold is `MIN_SAMPLE = 20`, tune with real volume |
 
-Status: **NEEDS BUILDING.**
+Status: **NEEDS BUILDING** — both the storage and a real (non-inert) admin form.
 
 ---
 

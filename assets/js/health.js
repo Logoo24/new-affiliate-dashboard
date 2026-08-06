@@ -120,14 +120,24 @@
       from: D.addDays(D.TODAY, -29),
       to: D.TODAY
     };
-    /* Volume target for this partner. Prefer the admin-set monthly target;
-       fall back to a flat 900 only when nothing is configured. Without this,
-       a partner sending 36,000 leads was scored against a hardcoded 900 and
-       the card read "36329 / 900", which is meaningless. */
+    /* Volume reference for the "Volume vs target" score component.
+       CPL targets are weekly and account for ACCEPTED leads (see
+       cplWeeklyProgress in data.js) — not the right shape for a 30-day RAW
+       submission count. Revenue-share partners have no target at all by
+       design: "more is generally better," governed only by this score, not
+       by a number they're expected to hit.
+
+       So the reference here is always SELF-referential — this partner's own
+       trailing 4-week average, scaled to 30 days — for both comp models.
+       That is also just a better question for a health score to ask than "did
+       you hit an admin's number": "are you sending more or less than your own
+       recent normal," which rewards real growth without requiring a target to
+       exist at all. Falls back to a flat 900 only when there is no history
+       yet to be self-referential against. */
     var demandTarget = opts.demandTarget;
     if (!demandTarget) {
-      var t = D.targetsFor(opts.partnerId);
-      demandTarget = (t && t.volume) || 900;
+      var selfBaseline = D.avgWeeklyVolume(opts.partnerId) * (30 / 7);
+      demandTarget = selfBaseline > 0 ? Math.round(selfBaseline) : 900;
     }
 
     var rows = D.queryLeads({

@@ -346,34 +346,37 @@ annuity.org runs at 85%.
 
 ---
 
-## Spend & volume targets — NOT BUILT, needs an admin screen
+## Spend & volume targets — CPL only, NOT BUILT, needs an admin screen
 
-The affiliate-facing half is mocked (targets card on Performance, plus a dashed target line on
-Leads by day). **The admin side does not exist and needs building.** What it needs to store:
+**Revenue-share partners get no target at all — confirmed by Logan, Aug 2026.** They can send as
+much or as little as they want; the lead health score is what governs them. This whole feature is
+CPL-only, and it's built that way from the query layer up: every function returns `null`
+immediately for a revenue-share partner.
 
-| Field | Notes |
-|---|---|
-| `partner_id` | required |
-| `campaign_id` | optional — targets should be settable per campaign or account-wide |
-| `period` | calendar month to start with |
-| `volume_target` | integer, nullable |
-| `spend_target` | decimal, nullable |
+The affiliate-facing half is mocked (targets card on Performance, per-day dashed reference on
+Leads by day) and the admin side is mocked as a **read-only illustration** on `admin-preview.html`.
+**Neither has real storage or a working input form yet — full spec in `ADMIN-MAPPING.md` §4,**
+including the schema, the day-of-week weighting, and the internal `R` figure the math runs on.
+The short version:
 
-**Either, or, or both.** A null target means *not set*, not zero — it must not render at all, and
-must not count as a missed target. The mock shows both states: the RevShare partner has volume
-and payout targets, the CPL partner has volume only.
+- **Margin and CPL are the same lever, twice.** `CPL = R × (1 − margin)`, where `R` is our
+  trailing revenue per accepted lead — internal only, exactly like margin itself. Admin sets
+  either one and the other is derived.
+- **Volume and spend are the second either/or pair**, linked through CPL: `Spend = Volume × CPL`.
+  Volume is defined in **accepted** leads, matching how CPL is invoiced.
+- **Weekly, not monthly** — Sunday–Saturday, matching the real Friday-night budget-distribution
+  cadence. An earlier version of this mock assumed calendar months; that was wrong.
+- **The daily chart reference varies by day of week and defaults Sunday to 0%,** rather than one
+  flat number — a partner who is told "0 on Sunday" should be able to see that on the chart, not
+  just read it in a sentence.
 
 Two things the mock settled that are worth keeping:
 
-- **Pace, not just progress.** "209 / 1,500" on day 5 of 31 is not useful on its own. The card
+- **Pace, not just progress.** "209 / 1,500" on day 1 of 7 is not useful on its own. The card
   shows expected-by-today, ahead/behind, and the daily rate needed to close the gap.
-- **Severity is judged against pace, not against the monthly total.** My first pass flagged 14%
-  of a monthly target as critical on day 5, which is nonsense — it was on track. Severity now
-  compares actual against expected-to-date.
-
-Note that a RevShare payout target must be measured on the **sold** date, not the received date,
-or it reports $0 for the first ten days of every month. CPL spend stays on the received basis
-because we owe on acceptance. Same attribution rule as everything else below.
+- **Severity is judged against pace, not against the period total.** Flagging 14% of a weekly
+  target as critical on day 1 would be nonsense if day 1 is actually on track. Severity compares
+  actual against expected-to-date within the week.
 
 ---
 

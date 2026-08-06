@@ -22,6 +22,31 @@
   var GAP = 2;               /* the surface gap, in px */
   var MAX_BAR = 24;
 
+  /* A column chart's target can be ONE flat number (cfg.targetLine.value) or
+     a PER-DAY array (cfg.targetLine.values, same length as cfg.days) — the
+     latter is what a day-of-week-weighted target needs, since Sunday can
+     legitimately be 0 while every other day is not. Callers that only have a
+     single number keep working unchanged; day i simply reads values[i] when
+     an array is supplied. Returns null when there is no target that day. */
+  function targetForDay(cfg, i) {
+    if (!cfg.targetLine) return null;
+    if (cfg.targetLine.values) {
+      var v = cfg.targetLine.values[i];
+      return (v == null) ? null : v;
+    }
+    return cfg.targetLine.value;
+  }
+
+  /* What a target is measured AGAINST for a given day: the full stacked
+     total by default, or one named series (cfg.targetLine.compareKey) when
+     the target is defined in terms of a sub-segment — an accepted-lead
+     target should compare against the accepted series, not accepted+
+     rejected combined. */
+  function compareValueForDay(cfg, d, stackTotal) {
+    if (cfg.targetLine && cfg.targetLine.compareKey) return d[cfg.targetLine.compareKey] || 0;
+    return stackTotal;
+  }
+
   function el(name, attrs) {
     var node = document.createElementNS(SVG_NS, name);
     for (var k in attrs) {
@@ -146,14 +171,15 @@
       var n = days.length || 1;
 
       var max = 0;
-      days.forEach(function (d) {
+      days.forEach(function (d, i) {
         var t = 0;
         cfg.series.forEach(function (s) { t += d[s.key] || 0; });
         if (t > max) max = t;
+        /* Keep every day's target inside the plot — a reference mark drawn
+           off the top of the chart is worse than no reference at all. */
+        var tv = targetForDay(cfg, i);
+        if (tv != null && tv > max) max = tv;
       });
-      /* Keep the target inside the plot — a reference line drawn off the top
-         of the chart is worse than no reference line. */
-      if (cfg.targetLine && cfg.targetLine.value > max) max = cfg.targetLine.value;
       var yMax = niceCeil(max || 1);
 
       var svg = el('svg', {
@@ -244,12 +270,13 @@
           if (cfg.series.length > 1) {
             rows.push({ color: null, label: 'Total', value: fmtInt(stackTotal) });
           }
-          if (cfg.targetLine) {
-            var tv = cfg.targetLine.value;
-            rows.push({ color: null, label: 'Target', value: fmtInt(Math.round(tv)) });
+          var dayTarget = targetForDay(cfg, i);
+          if (dayTarget != null) {
+            var cmp = compareValueForDay(cfg, d, stackTotal);
+            rows.push({ color: null, label: cfg.targetLine.compareLabel || 'Target', value: fmtInt(Math.round(dayTarget)) });
             rows.push({
-              color: null, label: stackTotal >= tv ? 'Over target' : 'Under target',
-              value: (stackTotal >= tv ? '+' : '') + fmtInt(Math.round(stackTotal - tv))
+              color: null, label: cmp >= dayTarget ? 'Over target' : 'Under target',
+              value: (cmp >= dayTarget ? '+' : '') + fmtInt(Math.round(cmp - dayTarget))
             });
           }
           host.__tip.show(tooltipRows(fmtDayFull(d.date), rows), cx, padT + plotH / 2);
@@ -264,23 +291,45 @@
         svg.appendChild(hit);
       });
 
-      /* --- target reference line --------------------------------------- */
-      /* Dashed ON PURPOSE. The no-dashing rule applies to gridlines and axes,
+      /* --- target reference ---------------------------------------------
+         Dashed ON PURPOSE. The no-dashing rule applies to gridlines and axes,
          where dashing falsely implies a threshold. Here it IS a threshold, so
-         the dash is what separates it from the grid it crosses. */
-      if (cfg.targetLine && cfg.targetLine.value > 0) {
-        var ty = padT + plotH - (cfg.targetLine.value / yMax) * plotH;
-        svg.appendChild(el('line', {
-          x1: padL, x2: padL + plotW, y1: ty, y2: ty,
-          stroke: cssVar('--ink-2'), 'stroke-width': 1.5,
-          'stroke-dasharray': '5 4', 'stroke-linecap': 'round'
-        }));
-        var tlbl = el('text', {
-          x: padL + plotW, y: ty - 6, 'text-anchor': 'end',
-          fill: cssVar('--ink-2'), 'font-size': 10.5, 'font-weight': 650
+         the dash is what separates it from the grid it crosses.
+
+         Drawn per DAY, not as one flat line across the whole chart. A target
+         that varies by day of week — Sunday genuinely at 0 while weekdays are
+         not — cannot be represented by a single height, and a flat line
+         would either misstate Sunday or misstate every other day. Each day
+         gets its own short tick spanning that day's band, at that day's
+         target height; days are deliberately NOT connected to each other,
+         since a connecting line would imply a smooth ramp between Saturday
+         and Sunday that is not real — the drop is a step, not a slope. */
+      if (cfg.targetLine) {
+        var labelled = false;
+        days.forEach(function (d, i) {
+          var tv = targetForDay(cfg, i);
+          if (tv == null) return;
+          var ty = padT + plotH - (tv / yMax) * plotH;
+          var x0 = padL + band * i + band * 0.08;
+          var x1 = padL + band * (i + 1) - band * 0.08;
+          svg.appendChild(el('line', {
+            x1: x0, x2: x1, y1: ty, y2: ty,
+            stroke: cssVar('--ink-2'), 'stroke-width': 1.5,
+            'stroke-dasharray': '4 3', 'stroke-linecap': 'round'
+          }));
+          /* Label the first tick only — repeating it on every day would be
+             the "a number on every point" anti-pattern the rest of this
+             chart deliberately avoids. */
+          if (!labelled) {
+            labelled = true;
+            var tlbl = el('text', {
+              x: x0, y: ty - 6, 'text-anchor': 'start',
+              fill: cssVar('--ink-2'), 'font-size': 10.5, 'font-weight': 650
+            });
+            tlbl.textContent = cfg.targetLine.label;
+            svg.appendChild(tlbl);
+          }
         });
-        tlbl.textContent = cfg.targetLine.label;
-        svg.appendChild(tlbl);
       }
 
       /* hover wash sits behind the hit rects but above the bars' background */
@@ -608,7 +657,7 @@
     head += '</tr></thead>';
 
     var body = '<tbody>';
-    cfg.days.forEach(function (d) {
+    cfg.days.forEach(function (d, i) {
       body += '<tr><td>' + fmtDayFull(d.date) + '</td>';
       var total = 0;
       cfg.series.forEach(function (s) {
@@ -617,10 +666,16 @@
       });
       if (cfg.series.length > 1) body += '<td class="num">' + fmtInt(total) + '</td>';
       if (cfg.targetLine) {
-        var tv = Math.round(cfg.targetLine.value);
-        var diff = total - tv;
-        body += '<td class="num">' + fmtInt(tv) + '</td>' +
-                '<td class="num">' + (diff >= 0 ? '+' : '') + fmtInt(diff) + '</td>';
+        var dayTarget = targetForDay(cfg, i);
+        if (dayTarget == null) {
+          body += '<td class="num">—</td><td class="num">—</td>';
+        } else {
+          var tv = Math.round(dayTarget);
+          var cmp = Math.round(compareValueForDay(cfg, d, total));
+          var diff = cmp - tv;
+          body += '<td class="num">' + fmtInt(tv) + '</td>' +
+                  '<td class="num">' + (diff >= 0 ? '+' : '') + fmtInt(diff) + '</td>';
+        }
       }
       body += '</tr>';
     });

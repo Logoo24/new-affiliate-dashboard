@@ -86,17 +86,20 @@
         <section class="card">
           <div class="card-head">
             <div>
-              <h2>Spend &amp; volume targets</h2>
-              <p class="sub">Either, or, or both. Null means not set, not zero.</p>
+              <h2>Spend &amp; volume targets — CPL only</h2>
+              <p class="sub">Weekly. Set margin or CPL, then volume or spend — the paired field fills in.</p>
             </div>
           </div>
           <div class="table-wrap">
             <table class="data" id="target-config"></table>
           </div>
           <div class="card-foot">
-            A revenue-share payout target is measured on the <strong>sold</strong> date; CPL spend
-            stays on the received date. Getting this backwards reports $0 for the first ten days of
-            every month.
+            <strong>Margin and CPL are the same lever, twice:</strong> CPL = R × (1 − margin), where R is
+            our trailing revenue per accepted lead — internal only, never shown to the affiliate.
+            <strong>Volume and spend are the second pair:</strong> Spend = Volume × CPL. Volume is defined
+            in <strong>accepted</strong> leads, matching how CPL is invoiced. The daily figure on the
+            affiliate's chart is this weekly volume × a day-of-week split that defaults to
+            <strong>Sunday 0%</strong> and is overridable per partner — see ADMIN-MAPPING.md §4.
           </div>
         </section>
       </div>
@@ -214,20 +217,59 @@
     document.getElementById('campaign-config').innerHTML = head + '<tbody>' + body + '</tbody>';
   })();
 
-  /* ---- targets ----------------------------------------------------------- */
+  /* ---- targets -------------------------------------------------------------
+     CPL only, per Logan (Aug 2026): revenue-share partners get no volume or
+     spend target — they can send as much or as little as they want, and the
+     lead health score is what governs them instead. This table shows why: it
+     is impossible to set an independent target margin for a partner whose
+     cost is a fixed contracted percentage of revenue (rev share = 1 minus
+     that percentage, not an admin lever), so a "target margin" column for
+     them would just restate their contract back at them. */
   (function () {
-    var head = '<thead><tr><th>Partner</th><th class="num">Volume target</th>' +
-      '<th class="num">Spend target</th><th>Measured on</th></tr></thead>';
+    var head = '<thead><tr><th>Partner</th><th class="num">R — revenue / accepted lead</th>' +
+      '<th class="num">Target margin</th><th class="num">Target CPL</th>' +
+      '<th class="num">vs. actual rate</th>' +
+      '<th class="num">Target volume/wk</th><th class="num">Target spend/wk</th></tr></thead>';
+
     var body = Object.keys(D.PARTNERS).map(function (k) {
-      var p = D.PARTNERS[k], t = D.targetsFor(k);
-      /* A null target renders as "not set", never as zero. */
+      var p = D.PARTNERS[k];
+
+      if (!D.isCplPartner(k)) {
+        return '<tr style="opacity:.65"><td>' + A.esc(p.shortName) + '</td>' +
+          '<td class="num" colspan="6" style="text-align:left;color:var(--ink-2)">' +
+          'Revenue share — no target. Governed by the lead health score only.</td></tr>';
+      }
+
+      var t = D.cplTargetsFor(k);
+      /* The ACTUAL contracted rate on file, for comparison — target_cpl is a
+         planning figure and can legitimately differ from it; this column is
+         what tells an admin whether the two already agree or a rate
+         conversation is implied. */
+      var actualRates = D.campaignsFor(k)
+        .map(function (c) { return c.cplRate; })
+        .filter(function (r) { return r != null; });
+      var actualRate = actualRates.length
+        ? actualRates.reduce(function (a, b) { return a + b; }, 0) / actualRates.length
+        : null;
+
+      var notSet = '<span class="quota">not set</span>';
       return '<tr><td>' + A.esc(p.shortName) + '</td>' +
-        '<td class="num">' + (t.volume == null
-          ? '<span class="quota">not set</span>' : A.fmtInt(t.volume)) + '</td>' +
-        '<td class="num">' + (t.spend == null
-          ? '<span class="quota">not set</span>' : A.fmtMoney0(t.spend)) + '</td>' +
-        '<td>' + (p.revSharePct > 0 ? 'Sold date' : 'Received date') + '</td></tr>';
+        '<td class="num">' + (t.revenuePerLeadUsable
+          ? A.fmtMoney(t.revenuePerLead) + '<div class="quota">n=' + t.maturedSample + '</div>'
+          : '<span class="quota">not enough matured history</span>') + '</td>' +
+        '<td class="num">' + (t.marginPct == null ? notSet : A.fmtPct(t.marginPct, 0)) + '</td>' +
+        '<td class="num">' + (t.targetCpl == null ? notSet : A.fmtMoney(t.targetCpl)) + '</td>' +
+        '<td class="num">' + ((t.targetCpl == null || actualRate == null) ? '—'
+          : (Math.abs(t.targetCpl - actualRate) < 0.5
+              ? '<span style="color:var(--good-text)">on rate</span>'
+              : (t.targetCpl < actualRate ? 'rate is ' : 'rate is ') +
+                A.fmtMoney(Math.abs(actualRate - t.targetCpl)) +
+                (t.targetCpl < actualRate ? ' over target' : ' under target'))) + '</td>' +
+        '<td class="num">' + (t.volume == null ? notSet : A.fmtInt(t.volume)) + '</td>' +
+        '<td class="num">' + (t.spend == null ? notSet : A.fmtMoney0(t.spend)) + '</td>' +
+        '</tr>';
     }).join('');
+
     document.getElementById('target-config').innerHTML = head + '<tbody>' + body + '</tbody>';
   })();
 

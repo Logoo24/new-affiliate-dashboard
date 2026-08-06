@@ -1205,9 +1205,11 @@
     };
     DEFAULT_PARTNER = Object.keys(PARTNERS)[0];
 
-    /* Targets are hard-coded demo values with no home in the export. Re-key
-       them onto the two largest accounts so the feature still demonstrates;
-       every other partner correctly shows "not set". */
+    /* CPL targets have no home in the export — they're a planning decision,
+       not a lead-level fact. Re-key the demo seed onto the largest CPL
+       account so the feature demonstrates against real volume; every other
+       partner correctly shows "not set". Revenue-share partners never get a
+       seed — see the note above cplTargetsFor(). */
     REKEY_TARGETS = [firstRev, firstCpl];
   } else {
     ALL_LEADS = generate();
@@ -1684,98 +1686,274 @@
   /* Spend & volume targets                                                 */
   /* ---------------------------------------------------------------------- */
 
-  /* NOT YET BUILT — no admin UI sets these. Hard-coded so the affiliate-facing
-     half can be reviewed. Volume and/or spend, either or both; a null target
-     means "not set" and must not render. Always worded as a TARGET, never a
-     cap — partners hear "cap" as a limit and go quiet. */
-  var TARGETS = {
-    ahg: { volume: 1500, spend: 9000, spendLabel: 'Revenue share payout' },
-    opx: { volume: 1400, spend: null, spendLabel: 'Spend' }
-  };
+  /* ==========================================================================
+     SPEND & VOLUME TARGETS — CPL ONLY
+     --------------------------------------------------------------------------
+     Confirmed by Logan, Aug 2026: revenue-share partners get NO volume or
+     spend target. They can send as much or as little as they want — more is
+     generally better, but nothing here governs them. Their only governance
+     mechanism is the lead health score, which already exists. Every function
+     below returns null immediately for a revenue-share partner, on purpose,
+     rather than silently computing a number nobody asked for.
 
-  /* Set by the dataset loader: [revsharePartnerId, cplPartnerId]. Scaled to
-     the real volumes in the export so the pace maths is not nonsense. */
-  if (typeof REKEY_TARGETS !== 'undefined' && REKEY_TARGETS) {
-    if (REKEY_TARGETS[0]) {
-      TARGETS[REKEY_TARGETS[0]] = { volume: 26000, spend: 9000, spendLabel: 'Revenue share payout' };
-    }
-    if (REKEY_TARGETS[1]) {
-      TARGETS[REKEY_TARGETS[1]] = { volume: 2400, spend: null, spendLabel: 'Spend' };
-    }
+     For a CPL partner, margin and CPL are THE SAME LEVER expressed two ways:
+
+         margin = (R − CPL) / R          CPL = R × (1 − margin)
+
+     where R is our expected revenue per ACCEPTED lead — a historical,
+     internal-only figure (revenuePerAcceptedLead(), below). Admin sets EITHER
+     a target margin OR a target CPL and the other is derived; whichever field
+     was last touched is the one treated as the source of truth going forward.
+     R itself is never shown to the affiliate — only the CPL, volume and spend
+     that fall out of it, same as target margin never is.
+
+     Volume and spend are the second either/or pair, linked by the derived
+     CPL: Spend = Volume × CPL. Volume is defined in ACCEPTED leads, matching
+     how CPL is actually invoiced — not raw submitted, which would need a
+     separate acceptance-rate assumption this design deliberately avoids.
+
+     Targets are WEEKLY (Sunday–Saturday), matching the real Friday-night
+     budget-distribution cadence, not calendar months. The daily figure used
+     for the "Leads by day" reference line is the weekly volume target times
+     that day's share of a default day-of-week split — Sunday is 0% by
+     default, so a Sunday's target is genuinely zero unless a partner's split
+     is explicitly overridden.
+     ========================================================================== */
+
+  function isCplPartner(partnerId) {
+    var pid = resolvePartnerId(partnerId);
+    return compsFor(pid).some(function (c) { return !c.seesRevenue; });
   }
 
-  /* Targets are admin-set and exist for almost nobody today, so an unknown
-     partner returns nulls — "not set" — rather than undefined. A null target
-     must not render and must not count as a missed target. */
-  var NO_TARGETS = { volume: null, spend: null, spendLabel: 'Spend' };
-
-  function targetsFor(partnerId) {
-    return TARGETS[resolvePartnerId(partnerId)] || NO_TARGETS;
+  /* Sunday-start week containing `d`, at local midnight. */
+  function startOfWeek(d) {
+    return addDays(new Date(d.getFullYear(), d.getMonth(), d.getDate()), -d.getDay());
   }
 
-  function targetProgress(opts) {
-    var t = targetsFor(opts.partnerId);
-    var monthStart = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
-    var monthEnd = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0);
-    var daysInMonth = monthEnd.getDate();
-    var daysElapsed = TODAY.getDate();
-    var daysLeft = daysInMonth - daysElapsed;
+  function weekLabel(sunday) {
+    /* Always carries month on BOTH ends — "Week of Aug 2–Aug 8, 2026" rather
+       than trying to omit the repeated month for a same-month week. That
+       shorter form needs an Intl.DateTimeFormat call with only {day,year}
+       and no {month}, which is a combination some engines format oddly
+       (seen rendering literal field names instead of a date). Simpler and
+       unambiguous beats slightly shorter. */
+    var sat = addDays(sunday, 6);
+    var f = sunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    var t = sat.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return 'Week of ' + f + '–' + t + ', ' + sat.getFullYear();
+  }
 
-    var rows = queryLeads({
-      partnerId: opts.partnerId,
-      from: monthStart, to: TODAY,
-      campaignId: opts.campaignId, subid: opts.subid
-    });
-    var m = computeMetrics(rows, TODAY, { rateBasis: opts.rateBasis });
-    var volumeActual = m.raw;
+  function currentWeek() {
+    var start = startOfWeek(TODAY);
+    var end = addDays(start, 6);
+    var elapsed = Math.min(7, daysBetween(start, TODAY) + 1);
+    return {
+      start: start, end: end, to: TODAY < end ? TODAY : end,
+      daysElapsed: elapsed, daysInWeek: 7, daysLeft: Math.max(0, 7 - elapsed)
+    };
+  }
 
-    /* Payout is an OUTCOME for revenue share — they are paid when a lead
-       SELLS, 9–12 days after it arrives. On the received basis this reports $0
-       for the first week and a half of every month. CPL is the opposite: we
-       owe on acceptance, so it stays on the received basis. */
-    var spendActual = null;
-    if (m.hasEarnings) {
-      var soldMtd = queryLeadsBySold({
-        partnerId: opts.partnerId,
-        from: monthStart, to: TODAY,
-        campaignId: opts.campaignId, subid: opts.subid
-      });
-      spendActual = computeMetrics(soldMtd, TODAY, { rateBasis: opts.rateBasis }).earnings;
-    } else if (opts.cplRate) {
-      spendActual = round2(m.paid * opts.cplRate);
+  /* Day-of-week share of the week's volume. Index matches Date#getDay() — 0
+     is Sunday — which is exactly how IDEAL_DOW_SPLIT is already laid out, so
+     the company default and the target engine can never disagree about which
+     index means Sunday. Per-partner overrides persist to sessionStorage; in
+     production this is a stored column on partner_targets, not a fallback
+     table nobody can change — see ADMIN-MAPPING.md §4. */
+  function dowWeightsFor(partnerId) {
+    var pid = resolvePartnerId(partnerId);
+    try {
+      var raw = sessionStorage.getItem('fz_dow_' + pid);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return IDEAL_DOW_SPLIT.slice();
+  }
+  function saveDowWeights(partnerId, weights) {
+    try { sessionStorage.setItem('fz_dow_' + resolvePartnerId(partnerId), JSON.stringify(weights)); } catch (e) {}
+  }
+
+  /**
+   * INTERNAL ONLY — never returned from queryLeads(), never rendered to an
+   * affiliate. Our expected revenue per ACCEPTED lead, trailing `lookbackDays`
+   * (default 90), matured only (see MATURITY_DAYS — an unsold lead still
+   * inside its cook window is not evidence of anything yet). Reads ALL_LEADS
+   * directly rather than the redacted projection, the same pattern
+   * _internalAggregates() uses and for the same reason: this number touches
+   * our margin, which must never reach the affiliate side of the query layer.
+   *
+   * Deliberately does NOT depend on Lead Cost, so the $1 phantom COGS problem
+   * (see ADMIN-MAPPING §6) does not corrupt it — it only sums saleAmount,
+   * which is trustworthy.
+   */
+  function revenuePerAcceptedLead(opts) {
+    opts = opts || {};
+    var pid = resolvePartnerId(opts.partnerId);
+    var from = addDays(TODAY, -(opts.lookbackDays || 90));
+    var revenue = 0, matured = 0;
+    for (var i = 0; i < ALL_LEADS.length; i++) {
+      var l = ALL_LEADS[i];
+      if (l.partnerId !== pid || l.status !== 'paid') continue;
+      if (l.comp === 'revshare') continue;               /* R is a CPL-economics concept */
+      if (opts.campaignId && opts.campaignId !== 'all' && l.campaignId !== opts.campaignId) continue;
+      if (l.receivedAt < from) continue;
+      if (!isMature(l, TODAY)) continue;
+      matured++;
+      revenue += l.saleAmount || 0;
     }
+    var MIN_SAMPLE = 20;
+    return {
+      matured: matured,
+      revenue: round2(revenue),
+      revenuePerLead: matured ? round2(revenue / matured) : null,
+      usable: matured >= MIN_SAMPLE
+    };
+  }
+
+  /* The margin↔CPL and volume↔spend math, as pure functions so the admin
+     mock, the engine and (eventually) real form handlers all call the same
+     arithmetic and cannot drift apart. */
+  function cplFromMargin(revenuePerLead, marginPct) {
+    if (revenuePerLead == null || marginPct == null) return null;
+    return round2(revenuePerLead * (1 - marginPct));
+  }
+  function marginFromCpl(revenuePerLead, cpl) {
+    if (!revenuePerLead || cpl == null) return null;
+    return Math.round((1 - (cpl / revenuePerLead)) * 1000) / 1000;
+  }
+  function spendFromVolume(volume, cpl) {
+    return (volume != null && cpl != null) ? round2(volume * cpl) : null;
+  }
+  function volumeFromSpend(spend, cpl) {
+    return (spend != null && cpl) ? Math.round(spend / cpl) : null;
+  }
+
+  function targetStoreKey(partnerId, campaignId) {
+    return 'fz_cpltarget_' + resolvePartnerId(partnerId) + '_' + (campaignId || 'all');
+  }
+  function blankCplTarget() {
+    return { marginPct: null, targetCpl: null, volume: null, spend: null, revenuePerLeadOverride: null };
+  }
+
+  /**
+   * The stored target record for a partner (optionally scoped to one
+   * campaign), merged with the live-computed R. `campaignId` is optional —
+   * targets are account-wide by default, per Logan's "input the volume
+   * target for an affiliate" framing; per-campaign is the same storage shape
+   * with campaignId set, left for a later build rather than a full picker
+   * in this mock.
+   */
+  function cplTargetsFor(partnerId, campaignId) {
+    var pid = resolvePartnerId(partnerId);
+    var rec = blankCplTarget();
+    try {
+      var raw = sessionStorage.getItem(targetStoreKey(pid, campaignId));
+      if (raw) rec = JSON.parse(raw);
+    } catch (e) {}
+
+    var rpl = revenuePerAcceptedLead({ partnerId: pid, campaignId: campaignId });
+    var effectiveR = rec.revenuePerLeadOverride != null ? rec.revenuePerLeadOverride : rpl.revenuePerLead;
+
+    return {
+      partnerId: pid, campaignId: campaignId || 'all',
+      marginPct: rec.marginPct, targetCpl: rec.targetCpl,
+      volume: rec.volume, spend: rec.spend,
+      revenuePerLead: effectiveR,
+      revenuePerLeadAuto: rpl.revenuePerLead,
+      revenuePerLeadOverride: rec.revenuePerLeadOverride,
+      revenuePerLeadUsable: rpl.usable,
+      maturedSample: rpl.matured,
+      isSet: rec.volume != null || rec.spend != null
+    };
+  }
+
+  /**
+   * Write one field of a target and derive its paired field. `changedField`
+   * is whichever input the admin just edited — that is the source of truth;
+   * the other half of its pair is recomputed from it, never the reverse,
+   * which is what makes the either/or behaviour well-defined instead of a
+   * fight over which stale number wins.
+   *
+   *   changedField 'marginPct' or 'targetCpl'  → recomputes the other of that pair
+   *   changedField 'volume' or 'spend'         → recomputes the other of that pair,
+   *                                               using whatever targetCpl is on file
+   */
+  function saveCplTarget(partnerId, campaignId, patch, changedField) {
+    var pid = resolvePartnerId(partnerId);
+    var current = cplTargetsFor(pid, campaignId);
+    var rec = {
+      marginPct: current.marginPct, targetCpl: current.targetCpl,
+      volume: current.volume, spend: current.spend,
+      revenuePerLeadOverride: current.revenuePerLeadOverride
+    };
+    for (var k in patch) rec[k] = patch[k];
+
+    var R = rec.revenuePerLeadOverride != null ? rec.revenuePerLeadOverride : current.revenuePerLeadAuto;
+
+    if (changedField === 'marginPct') rec.targetCpl = cplFromMargin(R, rec.marginPct);
+    else if (changedField === 'targetCpl') rec.marginPct = marginFromCpl(R, rec.targetCpl);
+
+    if (changedField === 'volume') rec.spend = spendFromVolume(rec.volume, rec.targetCpl);
+    else if (changedField === 'spend') rec.volume = volumeFromSpend(rec.spend, rec.targetCpl);
+
+    try { sessionStorage.setItem(targetStoreKey(pid, campaignId), JSON.stringify(rec)); } catch (e) {}
+    return cplTargetsFor(pid, campaignId);
+  }
+
+  /**
+   * This week's pace against target — the CPL replacement for the old
+   * monthly targetProgress(). Returns null for a revenue-share partner
+   * (always) or a CPL partner with nothing configured (correctly — a null
+   * target must not render, not render as zero).
+   */
+  function cplWeeklyProgress(opts) {
+    opts = opts || {};
+    var pid = resolvePartnerId(opts.partnerId);
+    if (!isCplPartner(pid)) return null;
+
+    var t = cplTargetsFor(pid, opts.campaignId);
+    if (!t.isSet) return null;
+
+    var wk = currentWeek();
+    var rows = queryLeads({ partnerId: pid, campaignId: opts.campaignId, from: wk.start, to: wk.to });
+    var acceptedActual = computeMetrics(rows, TODAY, { rateBasis: 'paid' }).paid;
+    var spendActual = t.targetCpl != null ? round2(acceptedActual * t.targetCpl) : null;
 
     function pace(actual, target) {
-      if (target == null || !target) return null;
-      var expected = target * (daysElapsed / daysInMonth);
-      /* Severity is judged against where they should be TODAY, not against
-         the full month — at day 5 of 31, 14% of a monthly target is fine. */
+      if (target == null) return null;
+      var expected = target * (wk.daysElapsed / wk.daysInWeek);
       var ratio = expected ? actual / expected : 1;
       return {
-        target: target, actual: actual, pct: actual / target,
+        target: target, actual: actual, pct: target ? actual / target : 0,
         expected: expected, ratio: ratio, aheadBy: actual - expected,
         onPace: ratio >= 0.97,
         severity: ratio >= 0.97 ? '' : ratio >= 0.85 ? 'is-warning'
                 : ratio >= 0.70 ? 'is-serious' : 'is-critical',
-        perDayNeeded: daysLeft > 0 ? Math.max(0, (target - actual) / daysLeft) : 0,
-        projected: daysElapsed ? (actual / daysElapsed) * daysInMonth : 0
+        perDayNeeded: wk.daysLeft > 0 ? Math.max(0, (target - actual) / wk.daysLeft) : 0
       };
     }
 
     return {
-      monthLabel: TODAY.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      daysElapsed: daysElapsed, daysInMonth: daysInMonth, daysLeft: daysLeft,
-      spendLabel: t.spendLabel,
-      volume: pace(volumeActual, t.volume),
-      spend: spendActual == null ? null : pace(spendActual, t.spend)
+      weekLabel: weekLabel(wk.start), daysElapsed: wk.daysElapsed, daysInWeek: 7, daysLeft: wk.daysLeft,
+      targetCpl: t.targetCpl,
+      volume: pace(acceptedActual, t.volume),
+      spend: (t.spend == null || spendActual == null) ? null : pace(spendActual, t.spend)
     };
   }
 
-  function dailyVolumeTarget(partnerId) {
-    var t = targetsFor(partnerId);
-    if (!t.volume) return null;
-    var daysInMonth = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0).getDate();
-    return t.volume / daysInMonth;
+  /**
+   * The reference value for one calendar day on the "Leads by day" chart —
+   * this week's ACCEPTED-lead volume target times that day's share of the
+   * day-of-week split. null for revenue share (always) and for CPL partners
+   * with no volume target set. Applies the CURRENT week's target to every
+   * day shown, including past weeks in a longer date range — target history
+   * / versioning is a further need, not built into this mock.
+   */
+  function dailyCplTarget(partnerId, date, campaignId) {
+    var pid = resolvePartnerId(partnerId);
+    if (!isCplPartner(pid)) return null;
+    var t = cplTargetsFor(pid, campaignId);
+    if (t.volume == null) return null;
+    var weights = dowWeightsFor(pid);
+    return t.volume * (weights[date.getDay()] || 0);
   }
 
   /* ---------------------------------------------------------------------- */
@@ -1880,6 +2058,48 @@
     };
   }
 
+  /* Seed ONE illustrative CPL target so the feature demonstrates with real
+     numbers instead of an empty state everywhere. 50% is a target margin
+     comfortably above the 45% campaign floor; volume is set to roughly the
+     partner's own trailing 4-week accepted average, computed live, so the
+     pace tracker opens close to on-pace rather than looking broken by an
+     arbitrary round number. Every other partner is correctly "not set".
+
+     THIS MUST RUN LAST, after every `var CONST = value` in the module has
+     actually executed its assignment — not merely been hoisted. It was
+     originally placed right after the dataset loader (much earlier in the
+     file) and silently computed zero matured leads for every partner: it
+     called isMature(), which compares against MATURITY_DAYS, but
+     MATURITY_DAYS is declared with `var` further down the file. `var`
+     hoists the DECLARATION to the top of the module, not the assignment —
+     so at that point MATURITY_DAYS existed but was still `undefined`, and
+     `30 >= undefined` is `false` for every lead, no matter how mature it
+     really was. Function DECLARATIONS (`function foo(){}`) are fully
+     hoisted with their bodies and are safe to call from anywhere in the
+     module; plain `var` constants are not — only their empty declaration
+     is. Keep this seed here, after everything, rather than re-introducing
+     that bug. */
+  (function seedOneCplTarget() {
+    /* Real data names its own CPL partner via the dataset loader; the mock
+       generator always has a fixed 'opx' as its CPL demo id (see PARTNERS
+       above), so both paths get a working illustration. */
+    var seedPid = (typeof REKEY_TARGETS !== 'undefined' && REKEY_TARGETS && REKEY_TARGETS[1])
+      ? REKEY_TARGETS[1]
+      : (PARTNERS.opx ? 'opx' : null);
+    if (!seedPid || !isCplPartner(seedPid)) return;
+    if (cplTargetsFor(seedPid, undefined).isSet) return;   /* an admin (or a prior run) already set one */
+
+    var rpl = revenuePerAcceptedLead({ partnerId: seedPid });
+    if (!rpl.usable) return;   /* not enough matured history to derive a CPL from margin */
+
+    var trailing = queryLeads({ partnerId: seedPid, from: addDays(TODAY, -27), to: TODAY });
+    var weeklyAcceptedAvg = Math.round(computeMetrics(trailing, TODAY, { rateBasis: 'paid' }).paid / 4);
+    if (!weeklyAcceptedAvg) return;
+
+    saveCplTarget(seedPid, undefined, { marginPct: 0.50 }, 'marginPct');
+    saveCplTarget(seedPid, undefined, { volume: weeklyAcceptedAvg }, 'volume');
+  })();
+
   /* ---------------------------------------------------------------------- */
   /* Exports                                                                */
   /* ---------------------------------------------------------------------- */
@@ -1954,9 +2174,20 @@
     queryLeads: queryLeads,
     queryLeadsBySold: queryLeadsBySold,
     cohort: cohort,
-    targetsFor: targetsFor,
-    targetProgress: targetProgress,
-    dailyVolumeTarget: dailyVolumeTarget,
+    isCplPartner: isCplPartner,
+    dowWeightsFor: dowWeightsFor,
+    saveDowWeights: saveDowWeights,
+    revenuePerAcceptedLead: revenuePerAcceptedLead,
+    cplFromMargin: cplFromMargin,
+    marginFromCpl: marginFromCpl,
+    spendFromVolume: spendFromVolume,
+    volumeFromSpend: volumeFromSpend,
+    cplTargetsFor: cplTargetsFor,
+    saveCplTarget: saveCplTarget,
+    cplWeeklyProgress: cplWeeklyProgress,
+    dailyCplTarget: dailyCplTarget,
+    currentWeek: currentWeek,
+    weekLabel: weekLabel,
     resolveRange: resolveRange,
     priorWindow: priorWindow,
     computeMetrics: computeMetrics,

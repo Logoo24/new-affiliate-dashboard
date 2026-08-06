@@ -36,10 +36,14 @@
 
       <div class="tiles" id="tiles"></div>
 
+      <!-- Revenue-share partners never get one of these — see the
+           D.isCplPartner() gate in the script below. They can send as much
+           or as little volume as they want; the health score is what
+           governs them, not a target. -->
       <section class="card" id="targets-card" style="display:none">
         <div class="card-head">
           <div>
-            <h2>This month's targets</h2>
+            <h2>This week's target</h2>
             <p class="sub" id="targets-sub"></p>
           </div>
         </div>
@@ -51,7 +55,7 @@
           <div class="card-head">
             <div>
               <h2>Leads by day</h2>
-              <p class="sub">Submitted leads against your daily target.</p>
+              <p class="sub" id="volume-chart-sub">Submitted leads, split by accepted and rejected.</p>
             </div>
             <div class="spacer"></div>
             <div id="toggle-volume"></div>
@@ -230,7 +234,9 @@
   var pm = D.computeMetrics(priorRows, null, mOpts);
   var psm = D.computeMetrics(priorSold, null, mOpts);
 
-  var targets = D.targetProgress(Object.assign({ rateBasis: mOpts.rateBasis, cplRate: 90 }, scope));
+  /* Targets are a CPL-only concept — null for revenue share, and null for a
+     CPL partner with nothing configured yet. Both cases hide the card. */
+  var weeklyProgress = D.cplWeeklyProgress(scope);
 
   /* ---- hero: everything on this bar is about Priority & Hot -------------
      The band used to be one number with dead space beside it. It is now the
@@ -359,8 +365,13 @@
       '<div class="tile-sub">' + t.sub + '</div>' + (t.delta || '') + '</div>';
   }).join('');
 
-  /* ---- targets --------------------------------------------------------- */
+  /* ---- targets -----------------------------------------------------------
+     CPL only. weeklyProgress is null for revenue share (always) and for a
+     CPL partner with nothing configured — both cases leave the card hidden,
+     which is correct: a partner with no target has no pace to report. */
   (function () {
+    if (!weeklyProgress) return;
+
     var blocks = [];
     function block(t, label, fmt, unit) {
       if (!t) return;
@@ -378,16 +389,21 @@
             '<span style="color:' + (t.onPace ? 'var(--good-text)' : 'var(--critical-text)') + ';font-weight:600">' +
               (t.onPace ? '✓ On pace' : '▲ Behind by ' + fmt(Math.round(Math.abs(t.aheadBy)))) + '</span>' +
             '<span>Expected by today: ' + fmt(Math.round(t.expected)) + '</span>' +
-            '<span>Need ' + fmt(Math.ceil(t.perDayNeeded)) + unit + ' for the remaining ' + targets.daysLeft + ' days</span>' +
+            '<span>Need ' + fmt(Math.ceil(t.perDayNeeded)) + unit + ' for the remaining ' + weeklyProgress.daysLeft + ' days</span>' +
           '</div>' +
         '</div>');
     }
-    block(targets.volume, 'Lead volume', A.fmtInt, '/day');
-    block(targets.spend, targets.spendLabel, A.fmtMoney0, '/day');
+    /* "Accepted leads," not "Lead volume" — this target is defined in
+       accepted-lead terms, same as how CPL is actually invoiced, and that is
+       a different number from the "Leads submitted (volume)" tile above. */
+    block(weeklyProgress.volume, 'Accepted leads', A.fmtInt, '/day');
+    block(weeklyProgress.spend, 'Spend', A.fmtMoney0, '/day');
     if (!blocks.length) return;
+
     document.getElementById('targets-card').style.display = '';
     document.getElementById('targets-sub').textContent =
-      targets.monthLabel + ' · day ' + targets.daysElapsed + ' of ' + targets.daysInMonth;
+      weeklyProgress.weekLabel + ' · day ' + weeklyProgress.daysElapsed + ' of 7' +
+      (weeklyProgress.targetCpl != null ? ' · ' + A.fmtMoney(weeklyProgress.targetCpl) + ' target CPL' : '');
     document.getElementById('targets-body').innerHTML = blocks.join('');
   })();
 
@@ -415,11 +431,34 @@
 
   var volHost = document.getElementById('chart-volume');
   var convHost = document.getElementById('chart-conv');
-  var dailyTarget = D.dailyVolumeTarget(state.partnerId);
+
+  /* Per-day target, not one flat number — Sunday can genuinely be 0 while
+     the rest of the week is not, and a single horizontal line cannot show
+     that. Compared against the ACCEPTED (paid) segment specifically, since
+     that is what the target is defined in — the dashed mark sits partway up
+     each stacked bar, at the height the blue portion needs to reach. */
+  var cplTargetValues = null;
+  if (D.isCplPartner(state.partnerId)) {
+    var sawTarget = false;
+    cplTargetValues = days.map(function (d) {
+      var v = D.dailyCplTarget(state.partnerId, d.date, state.campaignId);
+      if (v != null) sawTarget = true;
+      return v;
+    });
+    if (!sawTarget) cplTargetValues = null;
+  }
+  if (cplTargetValues) {
+    document.getElementById('volume-chart-sub').textContent =
+      'Accepted leads against your weekly target — varies by day, 0 on Sunday unless set otherwise.';
+  }
   C.mount(volHost, 'columns', {
     days: days, series: volumeSeries,
-    targetLine: dailyTarget ? { value: dailyTarget, label: 'Target ' + Math.round(dailyTarget) + '/day' } : null,
-    ariaLabel: 'Leads submitted per day against daily target'
+    targetLine: cplTargetValues ? {
+      values: cplTargetValues,
+      compareKey: 'paid',
+      label: 'Target (accepted)'
+    } : null,
+    ariaLabel: 'Leads submitted per day against your accepted-lead target'
   });
   C.mount(convHost, 'columns', { days: soldDays, series: convSeries, ariaLabel: 'Priority and Hot sales per day' });
   A.viewToggle(document.getElementById('toggle-volume'), volHost);
