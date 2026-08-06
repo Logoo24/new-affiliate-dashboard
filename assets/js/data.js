@@ -594,6 +594,44 @@
     return campaignsFor(partnerId).filter(function (c) { return !c.active; });
   }
 
+  /**
+   * What a set of leads is worth TO THE AFFILIATE — their revenue, not ours.
+   *
+   *   revenue-share rows → their share of the sale, on every lead that sold
+   *   CPL rows           → accepted leads × that campaign's rate
+   *
+   * This is the affiliate's own invoice line, so it is not a redaction
+   * concern: a partner knows their own rate card. It is deliberately NOT our
+   * cost, margin, or per-lead spend.
+   *
+   * Returns `known:false` when no rate is on file for the CPL campaigns in
+   * scope — better to say "we do not have your rate card wired up" than to
+   * show a confident $0. Rate cards are a NEEDS BUILDING field; see
+   * ADMIN-MAPPING.md.
+   */
+  function affiliatePayout(rows) {
+    var total = 0, ratedLeads = 0, unratedAccepted = 0, sawCpl = false;
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (r.partnerShare !== undefined && r.soldType) {
+        total += r.partnerShare || 0;
+        continue;
+      }
+      if (r.status !== 'paid') continue;
+      var camp = CAMPAIGN_BY_ID[r.campaignId];
+      if (!camp || camp.comp === 'revshare') continue;
+      sawCpl = true;
+      if (camp.cplRate != null) { total += camp.cplRate; ratedLeads++; }
+      else unratedAccepted++;
+    }
+    return {
+      total: round2(total),
+      known: !sawCpl || ratedLeads > 0,
+      ratedLeads: ratedLeads,
+      unratedAccepted: unratedAccepted
+    };
+  }
+
   /** Partner-facing billing label for a campaign — the MODEL only, no rates.
       Rates live behind "View details", not in the summary table. */
   function compLabelForCampaign(c) {
@@ -1072,6 +1110,7 @@
         active: c.active, launched: c.lastLead ? '' : '',
         product: c.product, kind: /aged|6m|pq/i.test(c.name) ? 'aged' : 'fresh',
         revSharePct: c.revSharePct,
+        cplRate: c.cplRate == null ? null : c.cplRate,
         lastLead: c.lastLead,
         subids: []
       };
@@ -1854,6 +1893,7 @@
     activeCampaignsFor: activeCampaignsFor,
     inactiveCampaignsFor: inactiveCampaignsFor,
     compLabelForCampaign: compLabelForCampaign,
+    affiliatePayout: affiliatePayout,
 
     ACCOUNT_MANAGER: ACCOUNT_MANAGER,
     BILLING_CONTACTS: BILLING_CONTACTS,

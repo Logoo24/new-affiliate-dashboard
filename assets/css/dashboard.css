@@ -98,6 +98,13 @@
   --meter-track-serious:  #E9A184;  --meter-fill-serious:  #B04E22;
   --meter-track-critical: #E59595;  --meter-fill-critical: #B32C2C;
 
+  /* Pie ramp — ORDERED, darkest = biggest slice. A pie compares every slice
+     against every other, which is the case the categorical palette caps at
+     three, so this is a single-hue ordinal ramp instead of six hues.
+     Validated with --ordinal: light end 2.11:1 on white, all ΔL gaps ≥ 0.06. */
+  --pie-1: #08244a;  --pie-2: #104281;  --pie-3: #1c5cab;
+  --pie-4: #2a78d6;  --pie-5: #5598e7;  --pie-6: #86b6ef;
+
   /* Status — reserved, never reused as a series colour */
   --good:         #0ca30c;
   --warning:      #fab219;
@@ -143,6 +150,9 @@
     --meter-track-warning:  #7A5C1E;  --meter-fill-warning:  #fab219;
     --meter-track-serious:  #7D4B39;  --meter-fill-serious:  #ec835a;
     --meter-track-critical: #933B3B;  --meter-fill-critical: #d03b3b;
+    /* Dark pie ramp, validated on the navy surface: light end 2.15:1. */
+    --pie-1: #cde2fb;  --pie-2: #9ec5f4;  --pie-3: #6da7ec;
+    --pie-4: #3987e5;  --pie-5: #256abf;  --pie-6: #3A5A8C;
     --good-text:    #22C55E;
     --critical-text:#F08080;
     --muted-mark:   #46536B;
@@ -173,6 +183,8 @@
   --meter-track-warning:  #7A5C1E;  --meter-fill-warning:  #fab219;
   --meter-track-serious:  #7D4B39;  --meter-fill-serious:  #ec835a;
   --meter-track-critical: #933B3B;  --meter-fill-critical: #d03b3b;
+  --pie-1: #cde2fb;  --pie-2: #9ec5f4;  --pie-3: #6da7ec;
+  --pie-4: #3987e5;  --pie-5: #256abf;  --pie-6: #3A5A8C;
   --good-text:    #22C55E;
   --critical-text:#F08080;
   --muted-mark:   #46536B;
@@ -401,10 +413,17 @@ h3 { font-size: 15px; }
 .field input[type="date"] { min-width: 140px; }
 
 .filters .spacer { flex: 1; }
+/* Apply + the window summary as one centred row, so the date reads on the
+   same line as the button label rather than sitting below it. */
+.filters-apply {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .filters .applied {
   font-size: 13px;
   color: var(--ink-muted);
-  align-self: center;
 }
 
 .btn {

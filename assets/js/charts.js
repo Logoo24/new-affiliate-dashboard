@@ -439,6 +439,159 @@
   }
 
   /* ---------------------------------------------------------------------- */
+  /* Pie — part-to-whole                                                    */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Deliberately a SEQUENTIAL RAMP, not categorical colours. The slices are
+   * an ordered set (biggest reason first), and a pie compares every slice
+   * against every other, which is the case the categorical palette caps at
+   * three. One hue ordered dark→light carries "biggest" without needing six
+   * hues that would fail the colourblind gates.
+   *
+   * Segments are separated by a 2px stroke in the surface colour — the same
+   * surface-gap rule as stacked bars, never a border drawn around a mark.
+   *
+   * @param cfg.slices [{label, value}]  pre-sorted or not; sorted here
+   * @param cfg.maxSlices  fold the tail into "Other" beyond this (default 6)
+   */
+  function pie(host, cfg) {
+    host.__cfg = cfg;
+    host.__kind = 'pie';
+    render();
+
+    function render() {
+      host.querySelectorAll('svg, .chart-table, .pie-legend').forEach(function (n) { n.remove(); });
+      if (host.__mode === 'table') { host.appendChild(buildPieTable(cfg)); return; }
+
+      var slices = prepare(cfg);
+      var total = slices.reduce(function (a, s) { return a + s.value; }, 0);
+      if (!total) {
+        host.innerHTML = '<div class="empty">Nothing to chart in this window.</div>';
+        return;
+      }
+
+      var W = Math.max(260, Math.min(host.clientWidth || 420, 520));
+      var H = 260, cx = W / 2, cy = H / 2, R = 96;
+      var surface = cssVar('--surface-1');
+      var ink = cssVar('--ink');
+
+      var svg = el('svg', {
+        width: W, height: H, viewBox: '0 0 ' + W + ' ' + H,
+        role: 'img', 'aria-label': cfg.ariaLabel || 'Share of rejections by reason'
+      });
+
+      var a0 = -Math.PI / 2;   /* start at 12 o'clock */
+      slices.forEach(function (s, i) {
+        var frac = s.value / total;
+        var a1 = a0 + frac * Math.PI * 2;
+        var large = frac > 0.5 ? 1 : 0;
+        var x0 = cx + R * Math.cos(a0), y0 = cy + R * Math.sin(a0);
+        var x1 = cx + R * Math.cos(a1), y1 = cy + R * Math.sin(a1);
+
+        var d = (frac >= 0.999)
+          /* A single 100% slice cannot be drawn as an arc — it is a circle. */
+          ? null
+          : 'M' + cx + ',' + cy + ' L' + x0.toFixed(1) + ',' + y0.toFixed(1) +
+            ' A' + R + ',' + R + ' 0 ' + large + ',1 ' + x1.toFixed(1) + ',' + y1.toFixed(1) + ' Z';
+
+        var node = d
+          ? el('path', { d: d, fill: s.color, stroke: surface, 'stroke-width': 2 })
+          : el('circle', { cx: cx, cy: cy, r: R, fill: s.color });
+        svg.appendChild(node);
+
+        /* Label only slices with room for one; the rest read off the legend. */
+        if (frac >= 0.08) {
+          var mid = (a0 + a1) / 2;
+          var lx = cx + (R * 0.62) * Math.cos(mid);
+          var ly = cy + (R * 0.62) * Math.sin(mid);
+          var t = el('text', {
+            x: lx.toFixed(1), y: (ly + 4).toFixed(1), 'text-anchor': 'middle',
+            'font-size': 12.5, 'font-weight': 650,
+            /* Ink or white by slice luminance, the one case where text sits
+               inside a filled mark. */
+            fill: s.dark ? '#fff' : ink
+          });
+          t.textContent = Math.round(frac * 100) + '%';
+          svg.appendChild(t);
+        }
+
+        var hit = el('path', {
+          d: d || ('M' + cx + ',' + cy + ' m' + (-R) + ',0 a' + R + ',' + R + ' 0 1,0 ' + (R * 2) + ',0 a' + R + ',' + R + ' 0 1,0 ' + (-R * 2) + ',0'),
+          fill: 'transparent', style: 'cursor:default'
+        });
+        hit.addEventListener('mouseenter', function () {
+          tip.show(tooltipRows(s.label, [
+            { color: s.color, label: 'Leads', value: fmtInt(s.value) },
+            { color: null, label: 'Share', value: (frac * 100).toFixed(1) + '%' }
+          ]), cx, cy - R / 2);
+        });
+        hit.addEventListener('mouseleave', function () { tip.hide(); });
+        svg.appendChild(hit);
+
+        a0 = a1;
+      });
+
+      host.appendChild(svg);
+
+      var legend = document.createElement('div');
+      legend.className = 'legend pie-legend';
+      legend.innerHTML = slices.map(function (s) {
+        return '<span class="legend-item"><span class="legend-swatch" style="background:' +
+          s.color + '"></span>' + s.label + ' <span style="color:var(--ink-muted)">' +
+          fmtInt(s.value) + '</span></span>';
+      }).join('');
+      host.appendChild(legend);
+    }
+
+    host.__render = render;
+  }
+
+  /* Sort desc, fold the tail into Other, and assign ramp steps. */
+  function prepare(cfg) {
+    var max = cfg.maxSlices || 6;
+    var all = cfg.slices.slice()
+      .filter(function (s) { return s.value > 0; })
+      .sort(function (a, b) { return b.value - a.value; });
+
+    var slices = all;
+    if (all.length > max) {
+      var head = all.slice(0, max - 1);
+      var tail = all.slice(max - 1);
+      head.push({
+        label: 'Other (' + tail.length + ')',
+        value: tail.reduce(function (a, s) { return a + s.value; }, 0)
+      });
+      slices = head;
+    }
+
+    /* Ordered ramp, darkest = biggest. Steps come from the validated blue
+       ordinal ramp; the light end still clears the surface. */
+    var ramp = ['--pie-1', '--pie-2', '--pie-3', '--pie-4', '--pie-5', '--pie-6'];
+    slices.forEach(function (s, i) {
+      s.color = cssVar(ramp[Math.min(i, ramp.length - 1)]);
+      s.dark = i < 3;
+    });
+    return slices;
+  }
+
+  function buildPieTable(cfg) {
+    var slices = prepare(cfg);
+    var total = slices.reduce(function (a, s) { return a + s.value; }, 0) || 1;
+    var wrap = document.createElement('div');
+    wrap.className = 'chart-table table-wrap';
+    var t = document.createElement('table');
+    t.className = 'data';
+    t.innerHTML = '<thead><tr><th>Reason</th><th class="num">Leads</th><th class="num">Share</th></tr></thead>' +
+      '<tbody>' + slices.map(function (s) {
+        return '<tr><td>' + s.label + '</td><td class="num">' + fmtInt(s.value) +
+          '</td><td class="num">' + ((s.value / total) * 100).toFixed(1) + '%</td></tr>';
+      }).join('') + '</tbody>';
+    wrap.appendChild(t);
+    return wrap;
+  }
+
+  /* ---------------------------------------------------------------------- */
   /* Table-view twins                                                       */
   /* ---------------------------------------------------------------------- */
 
@@ -504,7 +657,9 @@
     }
     tip = makeTooltip(host);
     tip.__host = host;
-    if (kind === 'columns') columns(host, cfg); else line(host, cfg);
+    if (kind === 'columns') columns(host, cfg);
+    else if (kind === 'pie') pie(host, cfg);
+    else line(host, cfg);
     registerResize(host);
   }
 

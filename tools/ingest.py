@@ -155,6 +155,39 @@ def comp_for_campaign(name, rev_share_pct):
     return 'cpl'
 
 
+# Flat CPL rates encoded in the campaign name, e.g. "[Email - $150]".
+# The export carries no rate card, so this is the only rate available from the
+# file itself.
+RATE_IN_NAME = re.compile(r'\$\s?([\d]+(?:[.,]\d+)?)')
+
+# Tiered rates that are NOT in the export at all — they come from the
+# commercial record. Only partners whose rate card we actually hold are listed;
+# nothing here is inferred. Production must read these from the campaign record
+# rather than a lookup keyed on the campaign name. See ADMIN-MAPPING.md.
+# Keyed on the NORMALISED partner name (after NAME_FIXES), not the raw export
+# spelling — matching "obtilabx" here silently matches nothing.
+TIER_RATES = {
+    'optilabx': {'high tier': 102.0, 'mid tier': 90.0, 'low tier': 27.0, 'spanish': 80.0},
+}
+
+
+def cpl_rate_for(name, affiliate):
+    """Flat CPL for a campaign, or None when we do not hold the rate."""
+    low = (name or '').lower()
+    m = RATE_IN_NAME.search(name or '')
+    if m:
+        try:
+            return float(m.group(1).replace(',', ''))
+        except ValueError:
+            pass
+    card = TIER_RATES.get((affiliate or '').lower().replace(' media', ''))
+    if card:
+        for key, rate in card.items():
+            if key in low:
+                return rate
+    return None
+
+
 def product_for_campaign(name):
     low = (name or '').lower()
     if 'life' in low:
@@ -280,6 +313,7 @@ def main():
             'partnerId': pid_by_aff.get(meta['partner'], ''),
             'comp': comp,
             'revSharePct': modal_rs if comp == 'revshare' else 0.0,
+            'cplRate': None if comp == 'revshare' else cpl_rate_for(meta['name'], meta['partner']),
             'product': product_for_campaign(meta['name']),
         })
     campaigns.sort(key=lambda c: (c['partnerId'], c['name']))

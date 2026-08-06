@@ -160,9 +160,14 @@
             <h2>Why leads were rejected</h2>
             <p class="sub">Plain language, with the fix.</p>
           </div>
+          <div class="spacer"></div>
+          <div id="reject-toggle"></div>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" id="reject-table-wrap">
           <table class="data" id="reject-table"></table>
+        </div>
+        <div class="card-body" id="reject-chart-wrap" style="display:none">
+          <div class="chart-wrap" id="reject-chart"></div>
         </div>
       </section>
 
@@ -186,7 +191,9 @@
   'use strict';
   var D = FZData, A = FZApp, C = FZCharts, H = FZHealth;
 
-  var state = A.params();
+  /* 30 days by default: outcomes take 9–12 days to cook, so a 7-day window
+     opens on a page where most of what was sent has not resolved yet. */
+  var state = A.params({ defaultRange: '30d' });
   /* Comp model is per campaign now, so this is "does this account have any
      revenue-share campaign in scope" rather than "is this a RevShare partner".
      It drives copy and which tiles appear — never which fields exist. */
@@ -218,53 +225,81 @@
   var coh = D.cohort(Object.assign({ rateBasis: mOpts.rateBasis }, scope));
 
   var prior = D.priorWindow(state.range);
-  var pm = D.computeMetrics(D.queryLeads(Object.assign({ from: prior.from, to: prior.to }, scope)), null, mOpts);
-  var psm = D.computeMetrics(D.queryLeadsBySold(Object.assign({ from: prior.from, to: prior.to }, scope)), null, mOpts);
+  var priorRows = D.queryLeads(Object.assign({ from: prior.from, to: prior.to }, scope));
+  var priorSold = D.queryLeadsBySold(Object.assign({ from: prior.from, to: prior.to }, scope));
+  var pm = D.computeMetrics(priorRows, null, mOpts);
+  var psm = D.computeMetrics(priorSold, null, mOpts);
 
   var targets = D.targetProgress(Object.assign({ rateBasis: mOpts.rateBasis, cplRate: 90 }, scope));
 
-  /* ---- context notice -------------------------------------------------- */
-  /* Rate comes off the partner rather than a hardcoded 40% — annuity.org runs
-     at 85%. */
-  document.getElementById('ctx-notice').innerHTML = isRev
-    ? '<div class="notice notice-info"><span class="ico">◆</span><div>' +
-      'You earn ' + Math.round(state.partner.revSharePct * 100) + '% of any lead that sells — ' +
-      '<strong>accepted or not</strong>. Acceptance rate here is a quality signal, not a ' +
-      'payment gate.</div></div>'
-    : '<div class="notice notice-info"><span class="ico">◆</span><div>' +
-      'You are paid per accepted lead, so acceptance rate drives your invoice. Rejected leads ' +
-      'show their reason and nothing further.</div></div>';
+  /* ---- hero: everything on this bar is about Priority & Hot -------------
+     The band used to be one number with dead space beside it. It is now the
+     full Priority/Hot picture — count, split, what share of all sales they
+     were, conversion rate and speed — so the width earns its keep. Metrics
+     unrelated to sold type live in the tiles below, where they belong. */
+  (function () {
+    var phRows = soldRows.filter(function (r) {
+      return r.soldType === 'priority' || r.soldType === 'hot';
+    });
+    var phCycle = D.median(phRows.map(function (r) { return r.daysToSale; })
+      .filter(function (v) { return v != null; }));
+    var phEarnings = phRows.reduce(function (a, r) { return a + (r.partnerShare || 0); }, 0);
+    var phPrices = phRows.map(function (r) { return r.saleAmount; })
+      .filter(function (v) { return v; });
+    var phAvg = phPrices.length
+      ? phPrices.reduce(function (a, b) { return a + b; }, 0) / phPrices.length : null;
 
-  /* ---- hero ------------------------------------------------------------ */
-  document.getElementById('hero-figure').textContent = A.fmtInt(sm.soldPriorityHot);
-  document.getElementById('hero-detail').innerHTML =
-    '<div style="font-size:16px;font-weight:600;margin-bottom:4px">' +
-      A.fmtInt(sm.soldPriorityHot) + ' of ' + A.fmtInt(sm.soldAny) + ' leads that sold in this window' +
-    '</div>' +
-    A.deltaHtml(sm.soldPriorityHot, psm.soldPriorityHot, { periodLabel: 'period' }) +
-    (isRev && sm.rejectedSoldPriorityHot
-      ? '<div style="font-size:13.5px;color:var(--ink-2);margin-top:8px">' +
-        '<strong>' + A.fmtInt(sm.rejectedSoldPriorityHot) + '</strong> came from leads we did not ' +
-        'accept — you are paid on those too.</div>'
-      : '') +
-    '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:flex;gap:32px;flex-wrap:wrap">' +
-      '<div><div style="font-size:13px;color:var(--ink-muted)">Conversion rate · 30-day cohort</div>' +
-      '<div style="font-size:24px;font-weight:650;margin-top:2px">' + A.fmtPct(coh.metrics.priorityHotRate, 1) + '</div>' +
-      '<div style="font-size:12.5px;color:var(--ink-muted)">of ' + A.fmtInt(coh.metrics.rateDenominator) +
-      (isRev ? ' matured leads sent' : ' matured paid leads') + '</div></div>' +
-      (sm.avgSalePrice != null
-        ? '<div><div style="font-size:13px;color:var(--ink-muted)">Average sale price</div>' +
-          '<div style="font-size:24px;font-weight:650;margin-top:2px">' + A.fmtMoney0(sm.avgSalePrice) + '</div>' +
-          '<div style="font-size:12.5px;color:var(--ink-muted)">across all tiers sold</div></div>'
+    function stat(label, value, sub) {
+      return '<div style="min-width:150px">' +
+        '<div style="font-size:13px;color:var(--ink-muted)">' + label + '</div>' +
+        '<div style="font-size:24px;font-weight:650;margin-top:2px">' + value + '</div>' +
+        '<div style="font-size:12.5px;color:var(--ink-muted)">' + sub + '</div></div>';
+    }
+
+    document.getElementById('hero-figure').textContent = A.fmtInt(sm.soldPriorityHot);
+
+    document.getElementById('hero-detail').innerHTML =
+      '<div style="font-size:16px;font-weight:600;margin-bottom:4px">' +
+        A.fmtInt(sm.priority) + ' Priority · ' + A.fmtInt(sm.hot) + ' Hot' +
+      '</div>' +
+      A.deltaHtml(sm.soldPriorityHot, psm.soldPriorityHot, { periodLabel: 'period' }) +
+      (isRev && sm.rejectedSoldPriorityHot
+        ? '<div style="font-size:13.5px;color:var(--ink-2);margin-top:8px">' +
+          '<strong>' + A.fmtInt(sm.rejectedSoldPriorityHot) + '</strong> came from leads we did not ' +
+          'accept — you are paid on those too.</div>'
         : '') +
-      '<div><div style="font-size:13px;color:var(--ink-muted)">Sell-through</div>' +
-      '<div style="font-size:24px;font-weight:650;margin-top:2px">' + A.fmtPct(coh.metrics.sellThrough, 1) + '</div>' +
-      '<div style="font-size:12.5px;color:var(--ink-muted)">of matured paid leads sold at any tier</div></div>' +
-    '</div>';
+      '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);' +
+        'display:flex;gap:28px 40px;flex-wrap:wrap">' +
+        stat('Share of everything sold',
+             A.fmtPct(sm.soldAny ? sm.soldPriorityHot / sm.soldAny : 0, 1),
+             A.fmtInt(sm.soldPriorityHot) + ' of ' + A.fmtInt(sm.soldAny) + ' sales') +
+        stat('Conversion rate · 30-day cohort',
+             A.fmtPct(coh.metrics.priorityHotRate, 1),
+             'of ' + A.fmtInt(coh.metrics.rateDenominator) +
+             (isRev ? ' matured leads sent' : ' matured paid leads')) +
+        stat('Time to a Priority/Hot sale',
+             phCycle == null ? '—' : (phCycle < 1 ? 'Same day' : phCycle + (phCycle === 1 ? ' day' : ' days')),
+             'median, received → sold') +
+        (phAvg != null
+          ? stat('Average Priority/Hot price', A.fmtMoney0(phAvg),
+                 'against ' + A.fmtMoney0(sm.avgSalePrice) + ' across all tiers')
+          : '') +
+        (isRev && phEarnings
+          ? stat('Earned from Priority/Hot', A.fmtMoney0(phEarnings),
+                 A.fmtPct(sm.earnings ? phEarnings / sm.earnings : 0, 0) + ' of your earnings')
+          : '') +
+      '</div>';
+  })();
 
   /* ---- tiles ----------------------------------------------------------- */
+  /* What this window is worth to the AFFILIATE — their invoice line, not our
+     cost. Rev share reads real per-lead shares; CPL multiplies accepted leads
+     by the campaign rate card where we hold one. */
+  var payout = D.affiliatePayout(sm.hasEarnings ? soldRows : rows);
+  var priorPayout = D.affiliatePayout(sm.hasEarnings ? priorSold : priorRows);
+
   var tiles = [
-    { label: 'Leads submitted', value: A.fmtInt(m.raw), sub: 'Raw posts in window',
+    { label: 'Leads submitted (volume)', value: A.fmtInt(m.raw), sub: 'Everything you posted in this window',
       delta: A.deltaHtml(m.raw, pm.raw, {}) },
     { label: isRev ? 'Accepted' : 'Accepted (paid)', value: A.fmtInt(m.paid),
       sub: isRev ? A.fmtInt(m.free) + ' not accepted — still earn if they sell'
@@ -274,7 +309,9 @@
       sub: isRev ? 'Quality signal' : 'Drives your invoice',
       delta: A.deltaHtml(m.acceptanceRate, pm.acceptanceRate, {}) },
     { label: 'Median sales cycle',
-      value: sm.medianCycle == null ? '—' : sm.medianCycle + ' days',
+      value: sm.medianCycle == null ? '—'
+        : (sm.medianCycle < 1 ? 'Same day'
+          : sm.medianCycle + (sm.medianCycle === 1 ? ' day' : ' days')),
       sub: 'Received → sold',
       delta: A.deltaHtml(sm.medianCycle, psm.medianCycle, { lowerIsBetter: true }) }
   ];
@@ -291,9 +328,27 @@
       label: 'Your earnings', value: A.fmtMoney0(sm.earnings),
       sub: sm.rejectedEarnings
         ? A.fmtMoney0(sm.rejectedEarnings) + ' from leads we did not accept'
-        : '40% of leads sold in window',
+        : Math.round(state.partner.revSharePct * 100) + '% of leads sold in window',
       delta: A.deltaHtml(sm.earnings, psm.earnings, {}),
       cls: 'tile-revshare'
+    });
+  } else if (payout.known) {
+    /* CPL side: what this window is worth to them. Their own rate card, so
+       not a redaction concern — this is their invoice, not our margin. */
+    tiles.push({
+      label: 'Your earnings', value: A.fmtMoney0(payout.total),
+      sub: A.fmtInt(payout.ratedLeads) + ' accepted leads at your rate card' +
+        (payout.unratedAccepted
+          ? ' · ' + A.fmtInt(payout.unratedAccepted) + ' on campaigns with no rate on file'
+          : ''),
+      delta: A.deltaHtml(payout.total, priorPayout.total, {}),
+      cls: 'tile-revshare'
+    });
+    tiles.push({
+      label: 'Effective cost per lead', value: m.raw ? A.fmtMoney(payout.total / m.raw) : '—',
+      sub: 'Across every lead you sent, accepted or not',
+      delta: A.deltaHtml(m.raw ? payout.total / m.raw : 0,
+                         pm.raw ? priorPayout.total / pm.raw : 0, {})
     });
   }
 
@@ -380,30 +435,56 @@
   function pull(idx, key) { return idx[key] ? idx[key].metrics : EMPTY; }
   function rate(b) { return b && b.mature ? b.ph / b.mature : 0; }
 
-  /* ---- investable assets ----------------------------------------------- */
+  /* ---- investable assets -------------------------------------------------
+     The bar is now a TRUE PROPORTION of the band's own leads: blue is the
+     share that sold Priority or Hot, grey is everything that did not. It used
+     to be scaled to whichever band converted best, which made a 0.3% band
+     look like a full bar just because it led a weak field.
+
+     Rates here can be a fraction of a percent, so the blue slice is sometimes
+     invisible — which is why the Priority/Hot COUNT sits beside it. "Which
+     band produced the most top-tier sales" is answerable from the count even
+     when the percentage is too small to see. */
   (function () {
     var bands = coh.metrics.byBand;
-    var best = 0;
-    D.ASSET_BANDS.forEach(function (b) { best = Math.max(best, rate(bands[b.key])); });
-    best = best || 1;
 
-    var head = '<thead><tr><th>Band</th><th class="num">Leads</th><th class="num">Priority/Hot</th></tr></thead>';
-    var body = D.ASSET_BANDS.map(function (b) {
+    var stats = D.ASSET_BANDS.map(function (b) {
       var bucket = bands[b.key] || { raw: 0, mature: 0, ph: 0 };
-      var r = rate(bucket);
-      var w = Math.round((r / best) * 100);
-      return '<tr' + (b.focus ? ' style="background:var(--surface-2)"' : '') + '>' +
-        '<td>' + A.esc(b.label) + (b.focus ? ' <strong style="color:var(--good-text)">★</strong>' : '') +
-          (!b.payable ? '<div style="font-size:12px;color:var(--ink-muted)">never pays</div>' : '') + '</td>' +
-        '<td class="num">' + A.fmtInt(bucket.raw) + '</td>' +
-        '<td class="num"><span class="bar-cell"><span>' + A.fmtPct(r, 1) + '</span>' +
-        '<span class="bar-track"><span class="bar-fill" style="width:' + w + '%"></span></span></span></td>' +
+      return { band: b, bucket: bucket, rate: rate(bucket), ph: bucket.ph };
+    });
+    /* The star marks the band that actually converts best for THIS partner,
+       rather than a hardcoded favourite. */
+    var bestRate = stats.reduce(function (a, s) {
+      return (s.bucket.mature > 0 && s.rate > a) ? s.rate : a;
+    }, 0);
+    var topPh = stats.reduce(function (a, s) { return Math.max(a, s.ph); }, 0);
+
+    var head = '<thead><tr><th>Band</th><th class="num">Leads</th>' +
+      '<th class="num">P/H sales</th><th class="num">Converted to Priority/Hot</th></tr></thead>';
+
+    var body = stats.map(function (s) {
+      var isBest = bestRate > 0 && s.rate === bestRate && s.bucket.mature > 0;
+      var pctW = Math.min(100, s.rate * 100);
+      return '<tr' + (isBest ? ' style="background:var(--surface-2)"' : '') + '>' +
+        '<td>' + A.esc(s.band.label) +
+          (isBest ? ' <strong style="color:var(--good-text)" title="Your best-converting band">★</strong>' : '') +
+          (!s.band.payable ? '<div style="font-size:12px;color:var(--ink-muted)">never pays</div>' : '') + '</td>' +
+        '<td class="num">' + A.fmtInt(s.bucket.raw) + '</td>' +
+        '<td class="num"' + (s.ph && s.ph === topPh ? ' style="font-weight:650"' : '') + '>' +
+          A.fmtInt(s.ph) + '</td>' +
+        '<td class="num"><span class="bar-cell">' +
+          '<span>' + A.fmtPct(s.rate, 1) + '</span>' +
+          '<span class="bar-track" title="' + A.fmtPct(s.rate, 1) + ' of matured leads in this band sold Priority or Hot">' +
+            '<span class="bar-fill" style="width:' + pctW.toFixed(2) + '%"></span>' +
+          '</span></span></td>' +
         '</tr>';
     }).join('');
+
     document.getElementById('band-table').innerHTML = head + '<tbody>' + body + '</tbody>';
     document.getElementById('band-foot').innerHTML =
-      '<span>★ <strong>$100K–$250K</strong> converts best and holds across months. ' +
-      'It is the highest-leverage targeting change available to most partners.</span>';
+      '<span>Blue is the share of that band\'s matured leads that sold Priority or Hot; ' +
+      'grey is everything that did not. ★ is your best-converting band. ' +
+      'We see the strongest results overall in <strong>$100K–$250K</strong>.</span>';
   })();
 
   /* ---- arrival window ---------------------------------------------------
@@ -456,7 +537,14 @@
 
   /* ---- tier mix --------------------------------------------------------- */
   (function () {
-    var order = ['livetransfer', 'appointment', 'priority', 'hot', 'auction', 'marketplace'];
+    /* Sorted by volume, biggest first, so the tier that actually carries the
+       account is the first thing read. Tiers with no sales keep their tier
+       order at the bottom rather than shuffling on noise. */
+    var order = ['livetransfer', 'appointment', 'priority', 'hot', 'auction', 'marketplace']
+      .sort(function (a, b) {
+        var na = sm.byType[a] || 0, nb = sm.byType[b] || 0;
+        return nb - na;
+      });
     var total = sm.soldAny || 1;
     var showMoney = sm.hasEarnings;
 
@@ -648,6 +736,41 @@
 
     document.getElementById('reject-table').innerHTML =
       head + '<tbody>' + (body || '<tr><td colspan="4" class="empty">No rejected leads in this window.</td></tr>') + '</tbody>';
+
+    /* Table ⇄ pie. The table stays the default because it carries the fix
+       text, which the chart cannot; the pie answers "what dominates" faster.
+       Toggling is view-only — both read the same numbers. */
+    if (!entries.length) return;
+    var tableWrap = document.getElementById('reject-table-wrap');
+    var chartWrap = document.getElementById('reject-chart-wrap');
+    var chartHost = document.getElementById('reject-chart');
+    var mounted = false;
+
+    var toggle = document.getElementById('reject-toggle');
+    toggle.innerHTML =
+      '<div class="view-toggle">' +
+        '<button type="button" class="is-on" data-rv="table">Table</button>' +
+        '<button type="button" data-rv="chart">View as chart</button>' +
+      '</div>';
+
+    toggle.querySelectorAll('[data-rv]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        toggle.querySelectorAll('[data-rv]').forEach(function (x) { x.classList.remove('is-on'); });
+        b.classList.add('is-on');
+        var wantChart = b.dataset.rv === 'chart';
+        tableWrap.style.display = wantChart ? 'none' : '';
+        chartWrap.style.display = wantChart ? '' : 'none';
+        if (wantChart && !mounted) {
+          mounted = true;
+          C.mount(chartHost, 'pie', {
+            slices: entries.map(function (e) {
+              return { label: A.esc(D.rejectLabel(e.key, state.partnerId)), value: e.count };
+            }),
+            ariaLabel: 'Share of rejected leads by reason'
+          });
+        }
+      });
+    });
   })();
 
 

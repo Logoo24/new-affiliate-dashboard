@@ -298,7 +298,11 @@
         '</select></div>';
     }
 
+    /* Apply and the window summary share a centred flex row, so the date sits
+       on the same optical line as the word "Apply" instead of hanging off the
+       bottom edge of the button. */
     html += '<div class="spacer"></div>' +
+      '<div class="filters-apply">' +
       '<button type="submit" class="btn btn-primary">Apply</button>' +
       /* Only advertise the window on pages that actually scope by it — the
          scorecard is fixed to a rolling 30 days and saying "7 days" there
@@ -306,7 +310,7 @@
       (fields.indexOf('range') !== -1
         ? '<span class="applied">' + rangeSummary(state.range) + '</span>'
         : '') +
-      '</form>';
+      '</div></form>';
 
     host.innerHTML = html;
 
