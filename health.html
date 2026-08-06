@@ -121,15 +121,15 @@
         <div class="card-head">
           <div>
             <h2>How the score is built</h2>
-            <p class="sub">The tiers below are the same thresholds used to set allocation.</p>
+            <p class="sub">What each band means, and what to do about it.</p>
           </div>
         </div>
         <div class="table-wrap">
           <table class="data" id="tier-table"></table>
         </div>
         <div class="card-foot">
-          Refreshed weekly on the Monday allocation cycle. Rolling 30-day window,
-          10-day maturity buffer on outcome metrics, benchmarked against the trailing 90 days.
+          Refreshed every Monday. Rolling 30-day window with a 10-day maturity buffer on
+          outcome metrics, so leads still inside their sales cycle are not counted against you.
         </div>
       </section>
 
@@ -362,7 +362,7 @@
 
   /* ---- tier table ------------------------------------------------------ */
   (function () {
-    var head = '<thead><tr><th>Tier</th><th class="num">Score</th><th>What we do at this tier</th></tr></thead>';
+    var head = '<thead><tr><th>Band</th><th class="num">Score</th><th>What it means for you</th></tr></thead>';
     var body = H.TIERS.map(function (t) {
       var isHere = t.key === result.tier.key;
       var next = H.TIERS[H.TIERS.indexOf(t) - 1];

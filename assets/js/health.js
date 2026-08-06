@@ -40,24 +40,54 @@
     return Math.max(0, Math.min(100, t * 100));
   }
 
+  /* Parked parts are EXCLUDED and the rest renormalised — never scored zero.
+     A component whose input the data cannot supply is not a failing grade,
+     and treating it as one silently penalises every partner for a gap on our
+     side. Same rule as the parked operations pillar, one level down. */
   function weightedAvg(parts) {
     var sum = 0, w = 0;
     for (var i = 0; i < parts.length; i++) {
+      if (parts[i].parked) continue;
       sum += parts[i].score * parts[i].weight;
       w += parts[i].weight;
     }
     return w ? sum / w : 0;
   }
 
+  /* THIS REPORT IS READ BY THE AFFILIATE, NOT BY US.
+     ----------------------------------------------------------------------
+     These labels and actions were originally the internal Scale / No-Scale
+     vocabulary — "Intervene", "push more budget", "move CPL to the level that
+     restores a 45%+ margin". That is what WE decide about a partner, and none
+     of it belongs in front of one: it exposes our margin floor, our pricing
+     lever, and reads as a threat rather than as feedback.
+
+     Every tier is now named for what is true of THEIR TRAFFIC, and every
+     action is something THEY can act on. The internal thresholds are
+     unchanged, so this still reconciles with the Scale/No-Scale scorecard —
+     only the words a partner sees are different. `internal` is kept so our
+     own tooling can still speak its own language.
+
+     Cross-check before editing: HANDOFF.md, "affiliate-facing framing". */
   var TIERS = [
-    { key: 'scale',     label: 'Scale',     min: 80, badge: 'badge-good', tone: 'good',
-      action: 'Push more budget. Candidate for a higher CPL or a better comp model.' },
-    { key: 'healthy',   label: 'Healthy',   min: 60, badge: 'badge-info', tone: 'info',
-      action: 'Hold allocation. Watch the trend week over week.' },
-    { key: 'watch',     label: 'Watch',     min: 45, badge: 'badge-warn', tone: 'warning',
-      action: 'Slow if margin is drifting toward the floor. Creative review and a list-quality conversation.' },
-    { key: 'intervene', label: 'Intervene', min: 0,  badge: 'badge-crit', tone: 'critical',
-      action: 'Two options: pause, or move CPL to the level that restores a 45%+ margin.' }
+    { key: 'scale', label: 'Excellent', internal: 'Scale',
+      min: 80, badge: 'badge-good', tone: 'good',
+      action: 'Your leads are converting well above our benchmark. We have room for more ' +
+              'volume at this quality — talk to your account manager about scaling up.' },
+    { key: 'healthy', label: 'Healthy', internal: 'Healthy',
+      min: 60, badge: 'badge-info', tone: 'info',
+      action: 'Solid, steady performance. The pillar breakdown below shows where your ' +
+              'biggest remaining upside is.' },
+    { key: 'watch', label: 'Needs attention', internal: 'Watch',
+      min: 45, badge: 'badge-warn', tone: 'warning',
+      action: 'Something in your current traffic mix is holding results back. The rejection ' +
+              'reasons and targeting guidance below are the fastest places to look.' },
+    { key: 'intervene', label: 'Lead quality issue', internal: 'Intervene',
+      min: 0, badge: 'badge-crit', tone: 'critical',
+      action: 'A large share of your leads are not reaching a qualified sale. Start with your ' +
+              'top rejection reasons, then check the Targeting page for the criteria and the ' +
+              'states we need most. Your account manager will reach out to work through it ' +
+              'with you.' }
   ];
 
   function tierFor(score) {
@@ -90,7 +120,15 @@
       from: D.addDays(D.TODAY, -29),
       to: D.TODAY
     };
-    var demandTarget = opts.demandTarget || 900;
+    /* Volume target for this partner. Prefer the admin-set monthly target;
+       fall back to a flat 900 only when nothing is configured. Without this,
+       a partner sending 36,000 leads was scored against a hardcoded 900 and
+       the card read "36329 / 900", which is meaningless. */
+    var demandTarget = opts.demandTarget;
+    if (!demandTarget) {
+      var t = D.targetsFor(opts.partnerId);
+      demandTarget = (t && t.volume) || 900;
+    }
 
     var rows = D.queryLeads({
       partnerId: opts.partnerId || 'ahg',
@@ -119,8 +157,12 @@
 
     /* ---- Pillar 1 — Economics (~50%) ---------------------------------- */
     var econParts = [
-      { key: 'margin',  label: 'Margin vs 45% floor', weight: 0.35, internal: true,
-        score: norm(internal.marginPct, 0.25, 0.60) },
+      /* Parked whenever margin is not computable from the source. With the
+         real export it never is: Lead Cost is the $1 phantom COGS, so any
+         margin derived from it is fiction. Parked, not zero. */
+      { key: 'margin',  label: 'Margin', weight: 0.35, internal: true,
+        parked: !internal.marginUsable,
+        score: internal.marginUsable ? norm(internal.marginPct, 0.25, 0.60) : 0 },
       /* Deliberately always the ACCEPTED-lead basis, for every partner type.
          The RevShare overview reports conversion against all submitted leads
          because that is how they are paid — but the tier thresholds below are
@@ -131,9 +173,15 @@
       { key: 'phrate',  label: 'Priority/Hot conversion (of accepted)', weight: 0.30,
         score: norm(m.priorityHotRate, 0.04, 0.18),
         display: pct(m.priorityHotRate) },
-      { key: 'points',  label: 'Sold-type points per paid lead', weight: 0.20,
+      /* The point system (Priority 10 / Hot 8 / Auction & Marketplace
+         negative) is OUR scoring shorthand. A partner reading "0.02 points
+         per paid lead" learns nothing, so this shows the thing the points
+         actually measure: how much of what sold landed in the top two tiers. */
+      { key: 'points',  label: 'Share of sales in the top tiers', weight: 0.20,
         score: norm(m.pointsPerPaid, -0.5, 1.6),
-        display: m.pointsPerPaid.toFixed(2) },
+        display: m.soldAny
+          ? pct((m.soldPriorityHot + m.soldNewTiers) / m.soldAny)
+          : '—' },
       { key: 'cycle',   label: 'Median sales cycle', weight: 0.15,
         score: m.medianCycle == null ? 0 : norm(20 - m.medianCycle, 0, 12),
         display: m.medianCycle == null ? '—' : m.medianCycle + 'd' }
@@ -151,15 +199,16 @@
         score: norm(0.15 - ipqsRate, 0, 0.13),
         display: pct(ipqsRate) },
       { key: 'badcontact', label: 'Bad-contact rate', weight: 0.16, internal: true,
-        score: norm(0.22 - internal.badContactRate, 0, 0.18) },
+        parked: !internal.badContactUsable,
+        score: internal.badContactUsable ? norm(0.22 - internal.badContactRate, 0, 0.18) : 0 },
       { key: 'clawback', label: 'Clawback / over-unfire rate', weight: 0.14, internal: true,
         score: norm(0.14 - internal.clawbackRate, 0, 0.12) }
     ];
 
     /* ---- Pillar 3 — Speed & operations (~10%) — PARKED ----------------- */
     var opsParts = [
-      { key: 'speed',    label: 'Speed to lead', weight: 0.60, parked: true, display: 'awaiting field' },
-      { key: 'attempts', label: 'Call attempts to convert', weight: 0.40, parked: true, display: 'awaiting field' }
+      { key: 'speed',    label: 'How fast we call your leads', weight: 0.60, parked: true, display: 'not yet reported' },
+      { key: 'attempts', label: 'How many times we call them', weight: 0.40, parked: true, display: 'not yet reported' }
     ];
 
     /* ---- Pillar 4 — Volume & coverage (~10%) --------------------------- */
@@ -211,9 +260,14 @@
     var coverageScore = coverageParts.reduce(function (a, b) { return a + b; }, 0) / coverageParts.length;
 
     var volParts = [
-      { key: 'sufficiency', label: 'Volume vs demand', weight: 0.40,
-        score: norm(m.paid / demandTarget, 0.30, 1.0),
-        display: m.paid + ' / ' + demandTarget },
+      /* Compare LIKE WITH LIKE. `TARGETS.volume` is a submitted-lead target —
+         it drives the targets card and the dashed line on Leads by day, both
+         of which count raw volume. Scoring accepted leads against it silently
+         penalised every partner by their rejection rate on top of the volume
+         they actually sent. */
+      { key: 'sufficiency', label: 'Volume vs target', weight: 0.40,
+        score: norm(m.raw / demandTarget, 0.30, 1.0),
+        display: m.raw.toLocaleString('en-US') + ' of ' + demandTarget.toLocaleString('en-US') + ' leads' },
       { key: 'consistency', label: 'Day-to-day consistency', weight: 0.25,
         score: norm(1 - cv, 0.30, 0.85),
         display: 'CV ' + cv.toFixed(2) },
@@ -226,14 +280,20 @@
 
     /* ---- Pillars ------------------------------------------------------- */
     var pillars = [
-      { key: 'economics', label: 'Economics', weight: 0.50, parts: econParts,
-        score: weightedAvg(econParts),
-        note: 'Includes an internal margin input that is not shown here.' },
-      { key: 'quality', label: 'Delivered quality & stability', weight: 0.30, parts: qualParts,
+      /* Pillar names are what the affiliate is being measured ON, not our
+         internal category names. "Economics" in particular read as OUR
+         economics, which is precisely what they must not be scored against
+         in public. The note about a hidden margin input is gone for the same
+         reason — telling a partner they are graded on a number we will not
+         show them invites exactly one question, and it is not a good one. */
+      { key: 'economics', label: 'Conversion & value', weight: 0.50, parts: econParts,
+        score: weightedAvg(econParts) },
+      { key: 'quality', label: 'Lead quality & consistency', weight: 0.30, parts: qualParts,
         score: weightedAvg(qualParts) },
-      { key: 'operations', label: 'Speed & operations', weight: 0.10, parts: opsParts,
+      { key: 'operations', label: 'How we work your leads', weight: 0.10, parts: opsParts,
         score: null, parked: true,
-        note: 'Parked until speed-to-lead and call-attempt fields land on the lead table.' },
+        note: 'Not scored yet — we are not reporting call timing back to you, so it is left ' +
+              'out of your score entirely rather than counted against you.' },
       { key: 'volume', label: 'Volume & coverage', weight: 0.10, parts: volParts,
         score: weightedAvg(volParts) }
     ];

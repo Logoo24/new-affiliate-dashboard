@@ -117,6 +117,63 @@ Storage, and the rest of the admin surface, is specified in **[ADMIN-MAPPING.md]
 Keep that document current** — a feature that renders but has no row there is a feature nobody
 knows how to populate in production.
 
+### This report is read BY THE AFFILIATE — the framing rule
+
+Everything in the portal is written for the partner, not for us. That is not a copy
+preference; getting it wrong leaks commercial position.
+
+The health score originally used the internal Scale / No-Scale vocabulary verbatim. A partner
+scoring below 45 was shown the word **"Intervene"**, and the action text read *"Two options:
+pause, or move CPL to the level that restores a 45%+ margin."* That tells a partner our margin
+floor, names our pricing lever, and reads as a threat rather than as feedback.
+
+The bands are now named for what is true of **their traffic**, and every action is something
+**they** can do:
+
+| Score | Internal (ours) | What the affiliate sees |
+|---|---|---|
+| 80–100 | Scale | **Excellent** |
+| 60–79 | Healthy | **Healthy** |
+| 45–59 | Watch | **Needs attention** |
+| 0–44 | Intervene | **Lead quality issue** |
+
+Thresholds are unchanged, so this still reconciles with the Scale/No-Scale scorecard — only the
+words differ. `TIERS[].internal` keeps our own label for internal tooling.
+
+The same sweep removed, from every affiliate-facing page: the margin floor, "allocation",
+"clawback / over-unfire", the sold-type **point system** (a partner learns nothing from "0.02
+points per paid lead" — it now reads *"Share of sales in the top tiers: 78.4%"*), "What we do at
+this tier", and the note admitting the score includes a hidden margin input they cannot see.
+Pillar names changed too: *Economics* → **Conversion & value**, because "economics" reads as
+**our** economics, which is exactly what a partner must not be scored against in public.
+
+**When adding any copy to a partner-facing page, the test is: would I be comfortable if the
+affiliate read this line aloud on a call?**
+
+---
+
+### DECISION — sold type is visible to BOTH comp models, with one asymmetry
+
+Confirmed by Logan, Aug 6. This is the rule, and it is already enforced at the query layer:
+
+| | CPL campaigns | Revenue-share campaigns |
+|---|---|---|
+| Sold type on **accepted** leads | **Visible** — they need to see which of their leads reached Priority or Hot | **Visible** |
+| Sold type on **rejected** leads | **Blank.** They must never learn we work or sell a lead we declined | **Visible** — they are paid on it |
+| Sale amount / revenue | **Never** | **Visible on every lead** |
+| Exportable for their own analysis | Yes, minus revenue | **Yes, everything** |
+
+Verified against the real export: OptiLabX (CPL) — all 2,094 accepted leads carry a sold type,
+625 of them sold and **440 reached Priority or Hot**; all 2,528 rejected rows carry **no
+sold-type key and no revenue key at all**, and zero revenue fields exist anywhere on that
+projection. Heritage (revenue share) — all 56,309 rows carry both sold type and revenue,
+including **43 rejected-but-sold leads**, each showing its $500 sale and $200 share.
+
+The revenue-share export deliberately includes sold type on every row so the partner can run
+their own analysis on what converts and retarget against it.
+
+---
+
 ### DECISION — rejected-but-sold leads ARE visible to RevShare partners
 
 **This overrides the affiliate context document.** That doc (§16) lists "rejected-but-sold rows"

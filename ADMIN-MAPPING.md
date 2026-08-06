@@ -35,6 +35,48 @@ internal **Data source** page, so it is reviewable rather than buried here.
 
 ---
 
+## ⚑ THE CONNECTION LIST — what the dev team needs to wire up
+
+**This is the hand-off list.** Everything the dashboard needs that the current lead export
+cannot supply, in priority order. Each row is a thing that must be added to the export, fixed
+at source, or created as an admin-editable field. Detail for each is in the numbered sections
+below; this is the summary to work from.
+
+### A. Fields missing from the lead export
+
+| # | Field | Blocks | Status |
+|---|---|---|---|
+| A1 | **Time of day on `Created On`** (or populate `TimeStamp`) | Every hour-of-day feature: arrival-window analysis, the ideal-send-window comparison, the window component of the health score | **MISSING.** `TimeStamp` is empty on all 71,725 rows; `Created On` is date-only |
+| A2 | **`sub_id` on the lead post** | Per-publisher scoring, sub-ID drilldown, per-source pricing | **0.4% fill.** Madrivo 99%, Heritage and OptiLabX **0%** |
+| A3 | **`speed_to_lead`** — valid seconds | Operations pillar (60% of it) | **BROKEN.** Populated but values run −113,426,741 to 4,109,200, median 0 |
+| A4 | **Rev-share % per campaign** | Correct comp-model inference and Your-share maths | **PARTIAL.** Column holds 40 / 0 / 4 / 1.75%. annuity.org's **85% is absent**, so they wrongly read as CPL |
+| A5 | **Controlled `reject_reason` vocabulary** | Clean rejection reporting | **BROKEN.** 2,917 distinct values; the tail is raw XML filter responses |
+| A6 | **`lead_cost` = $0 on rev-share** | Any margin metric | **BROKEN.** All 41,627 accepted rows bill $1.00 — the phantom COGS, confirmed live |
+| A7 | **Normalised `assets` band** | Asset-band targeting widget | **PARTIAL.** 29 free-text variants; 81.6% collapse into one band |
+| A8 | **`sold_type` on the 16 Sold rows missing it** | Tier metrics completeness | **PARTIAL** |
+
+### B. Fields that do not exist anywhere yet
+
+| # | Field | Drives | Notes |
+|---|---|---|---|
+| B1 | **`partner_since`** | "Partner since" on the Partnership summary | Not derivable from leads — the earliest row is the export window, not the relationship. Backfill from contract date |
+| B2 | **`affiliate_users` table** | The whole Account & users page | Full spec in §1a. Multi-user login, primary contact, titles, avatars, away flag |
+| B3 | **`billing_period` / `billing_basis`** | Billing details card | Net 7 / 15 / 30, and received vs sold date |
+| B4 | **`partner_targets`** | Targets card, target line on Leads by day | Volume and/or spend, per partner per month. §4 |
+| B5 | **Campaign `active` lifecycle** | Active-campaign list, inactive count | Today a manual flip. Wanted: auto-active on lead flow, auto-inactive after 6 months idle. §2 |
+| B6 | **Per-state demand / budget** | The states-we-need widget | §5a |
+| B7 | **Call-centre hours & ideal windows as config** | Targeting page | Currently constants in `data.js`. §5b, §5c |
+| B8 | **Account-manager join** | Account manager block | Exists in the CRM, not joined to the portal |
+| B9 | **Google Chat deep link** | Chat button on Partnership summary | Currently a generic chat.google.com link |
+
+### C. Confirmed present — no work needed
+
+`sold_type` (priority / hot_lead / auction / marketplace, prices confirm the tiers),
+`call_attempts`, `campaign_id` / CID, `state`, `revenue`, `revenue_share_amount`,
+`return_reason`, `affiliate_id`.
+
+---
+
 ## What this document is
 
 Every element in the affiliate dashboard is driven by something: a field on a table, a setting an

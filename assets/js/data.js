@@ -1957,11 +1957,18 @@
         if (l._clawback) clawbacks++;
         if (l._badContact) badContacts++;
       }
+      /* The *Usable flags tell the health engine whether an input is real.
+         With the live export neither margin nor bad-contact is: Lead Cost is
+         the $1 phantom COGS and there is no bad-contact signal in the file.
+         Those components are PARKED rather than scored, so a gap on our side
+         never costs the partner points. */
       return {
         paid: paid,
         marginPct: revenue ? margin / revenue : 0,
+        marginUsable: !USING_REAL_DATA,
         clawbackRate: paid ? clawbacks / paid : 0,
-        badContactRate: paid ? badContacts / paid : 0
+        badContactRate: paid ? badContacts / paid : 0,
+        badContactUsable: !USING_REAL_DATA
       };
     }
   };
