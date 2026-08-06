@@ -68,6 +68,7 @@ below; this is the summary to work from.
 | B7 | **Call-centre hours & ideal windows as config** | Targeting page | Currently constants in `data.js`. §5b, §5c |
 | B8 | **Account-manager join** | Account manager block | Exists in the CRM, not joined to the portal |
 | B9 | **Google Chat deep link** | Chat button on Partnership summary | Currently a generic chat.google.com link |
+| B10 | **Per-user table preferences** | Which columns a user shows/hides, column widths, and their chosen sort | Every table is sortable, resizable and column-configurable. The mock persists this to `sessionStorage`, so it survives paging but dies with the tab. In production it should be a **stored user preference** on `affiliate_users` (see §1a) — a media buyer who hides six columns expects them to stay hidden next login |
 
 ### C. Confirmed present — no work needed
 

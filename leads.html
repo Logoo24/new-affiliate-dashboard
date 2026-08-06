@@ -26,7 +26,10 @@
             <p class="sub" id="table-sub"></p>
           </div>
           <div class="spacer"></div>
-          <div id="export-host"></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div id="cols-host"></div>
+            <div id="export-host"></div>
+          </div>
         </div>
         <div style="padding:0 18px" id="export-toast"></div>
         <div class="table-wrap">
@@ -58,6 +61,7 @@
 <script src="assets/js/health.js"></script>
 <script src="assets/js/charts.js"></script>
 <script src="assets/js/app.js"></script>
+<script src="assets/js/tables.js"></script>
 <script>
 (function () {
   'use strict';
@@ -120,33 +124,67 @@
       '<div class="notice notice-info"><span class="ico">◆</span><div>' + msg + '</div></div>';
   })();
 
-  /* ---- table ----------------------------------------------------------- */
-  var totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
-  var page = Math.min(state.page, totalPages);
-  var slice = rows.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  /* ---- table -------------------------------------------------------------
+     The lead table paginates, so sorting has to happen on the FULL filtered
+     set and then re-paginate. Sorting the 50 rendered rows would sort one
+     page and read as if it had sorted everything. `rows` is re-assigned by
+     the sort callback and the table re-renders from page 1. */
+  var page = 1;
 
-  var head = '<thead><tr>' + tableCols.map(function (c) {
-    return '<th' + (c.align === 'num' ? ' class="num"' : '') +
-      (c.group === 'revenue' ? ' class="revshare-col"' : '') + '>' + A.esc(c.label) + '</th>';
-  }).join('') + '</tr></thead>';
+  /* The value a column sorts on, taken from the row object rather than the
+     rendered cell — so a sold-type badge sorts by tier, a date sorts by
+     time, and a blank sorts last regardless of how it is displayed. */
+  function sortValueFor(row, colIdx) {
+    var c = tableCols[colIdx];
+    if (!c) return '';
+    switch (c.key) {
+      case 'receivedAt': return row.receivedAt ? row.receivedAt.getTime() : '';
+      case 'soldAt':     return row.soldAt ? row.soldAt.getTime() : '';
+      case 'soldType':   return row.soldType ? D.SOLD_TYPES[row.soldType].points : '';
+      case 'assetBand':  return row.assetBand
+                           ? D.ASSET_BANDS.map(function (b) { return b.key; }).indexOf(row.assetBand)
+                           : '';
+      case 'rejectReason': return row.rejectReason ? D.rejectLabel(row.rejectReason, state.partnerId) : '';
+      case 'status':     return row.status === 'paid' ? 1 : 0;
+      case 'dow':        return row.receivedAt ? row.receivedAt.getDay() : '';
+      /* A lead that never sold has no sale amount — it is blank, not zero.
+         Returning 0 would float every unsold lead to the top of an ascending
+         sort while the cell still shows "—", which reads as broken. */
+      case 'saleAmount':
+      case 'partnerShare':
+        return row[c.key] ? row[c.key] : '';
+      default:
+        var v = row[c.key];
+        return (v === null || v === undefined) ? '' : v;
+    }
+  }
 
-  var body = slice.map(function (r) {
-    return '<tr>' + tableCols.map(function (c) {
-      var cls = [];
-      if (c.align === 'num') cls.push('num');
-      if (c.group === 'revenue') cls.push('revshare-col');
-      var nowrap = (c.key === 'receivedAt' || c.key === 'soldAt' || c.key === 'assetBand');
-      return '<td' + (cls.length ? ' class="' + cls.join(' ') + '"' : '') +
-        (nowrap ? ' style="white-space:nowrap"' : '') + '>' +
-        A.leadCell(c, r, state) + '</td>';
-    }).join('') + '</tr>';
-  }).join('');
+  function renderTable() {
+    var totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+    page = Math.min(page, totalPages);
+    var slice = rows.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
-  document.getElementById('lead-table').innerHTML = head + '<tbody>' +
-    (body || '<tr><td colspan="' + tableCols.length + '" class="empty">No leads match these filters.</td></tr>') +
-    '</tbody>';
+    var head = '<thead><tr>' + tableCols.map(function (c) {
+      return '<th' + (c.align === 'num' ? ' class="num"' : '') +
+        (c.group === 'revenue' ? ' class="revshare-col"' : '') + '>' + A.esc(c.label) + '</th>';
+    }).join('') + '</tr></thead>';
 
-  (function () {
+    var body = slice.map(function (r) {
+      return '<tr>' + tableCols.map(function (c) {
+        var cls = [];
+        if (c.align === 'num') cls.push('num');
+        if (c.group === 'revenue') cls.push('revshare-col');
+        var nowrap = (c.key === 'receivedAt' || c.key === 'soldAt' || c.key === 'assetBand');
+        return '<td' + (cls.length ? ' class="' + cls.join(' ') + '"' : '') +
+          (nowrap ? ' style="white-space:nowrap"' : '') + '>' +
+          A.leadCell(c, r, state) + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+
+    document.getElementById('lead-table').innerHTML = head + '<tbody>' +
+      (body || '<tr><td colspan="' + tableCols.length + '" class="empty">No leads match these filters.</td></tr>') +
+      '</tbody>';
+
     var immature = rows.filter(function (r) { return !D.isMature(r); }).length;
     document.getElementById('table-sub').innerHTML =
       A.fmtInt(rows.length) + ' leads · ' + A.esc(A.rangeSummary(state.range)) +
@@ -155,26 +193,50 @@
         ? ' · <strong>' + A.fmtInt(immature) + '</strong> still cooking, so a blank sold ' +
           'column on a recent lead is expected'
         : '');
-  })();
 
-  /* ---- pager ----------------------------------------------------------- */
-  (function () {
+    renderPager(totalPages);
+    wireTable();
+  }
+
+  function renderPager(totalPages) {
     var host = document.getElementById('pager');
     if (totalPages <= 1) { host.textContent = A.fmtInt(rows.length) + ' leads'; return; }
     var startN = (page - 1) * PER_PAGE + 1;
     var endN = Math.min(page * PER_PAGE, rows.length);
-    var html = '<span>Showing ' + A.fmtInt(startN) + '–' + A.fmtInt(endN) + ' of ' + A.fmtInt(rows.length) + '</span>';
-    if (page > 1) {
-      html += '<a class="btn btn-sm" href="' + A.linkTo('leads.html', state,
-        { status: state.status, sold: state.sold, p: page - 1 }) + '">← Prev</a>';
-    }
-    html += '<span>Page ' + page + ' of ' + totalPages + '</span>';
-    if (page < totalPages) {
-      html += '<a class="btn btn-sm" href="' + A.linkTo('leads.html', state,
-        { status: state.status, sold: state.sold, p: page + 1 }) + '">Next →</a>';
-    }
-    host.innerHTML = html;
-  })();
+    host.innerHTML =
+      '<span>Showing ' + A.fmtInt(startN) + '–' + A.fmtInt(endN) + ' of ' + A.fmtInt(rows.length) + '</span>' +
+      (page > 1 ? '<button class="btn btn-sm" data-pg="' + (page - 1) + '">← Prev</button>' : '') +
+      '<span>Page ' + page + ' of ' + totalPages + '</span>' +
+      (page < totalPages ? '<button class="btn btn-sm" data-pg="' + (page + 1) + '">Next →</button>' : '');
+
+    /* Paging is in-page now rather than a query-string reload, so the active
+       sort and any column changes survive it. */
+    host.querySelectorAll('[data-pg]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        page = parseInt(b.dataset.pg, 10);
+        renderTable();
+        document.getElementById('lead-table').scrollIntoView({ block: 'start', behavior: 'smooth' });
+      });
+    });
+  }
+
+  var tableApi = null;
+  function wireTable() {
+    tableApi = FZTable.enhance(document.getElementById('lead-table'), {
+      controlsHost: document.getElementById('cols-host'),
+      labels: tableCols.map(function (c) { return c.label; }),
+      data: rows,
+      sortValue: sortValueFor,
+      onSort: function (sorted) {
+        rows = sorted;
+        page = 1;              /* a new sort starts at the top of the set */
+        renderTable();
+      }
+    });
+  }
+
+  renderTable();
+  if (tableApi) tableApi.applyStoredSort();
 
   /* ---- export ----------------------------------------------------------- */
   /* Exports the full filtered set, not the visible page — this is the file

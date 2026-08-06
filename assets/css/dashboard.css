@@ -715,6 +715,80 @@ table.data tfoot td {
 .tooltip .tt-row .v { font-weight: 600; }
 
 /* --------------------------------------------------------------------------
+   Sortable / resizable / configurable tables
+   -------------------------------------------------------------------------- */
+
+table.data th.sortable {
+  position: relative;
+  padding-right: 22px;          /* room for the indicator and the grip */
+  user-select: none;
+}
+table.data th.sortable .th-label {
+  cursor: pointer;
+  display: inline-block;
+}
+table.data th.sortable .th-label:hover { color: var(--ink); }
+table.data th.sorted { color: var(--ink); }
+
+.sort-ind {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--series-1);
+  cursor: pointer;
+}
+/* A faint affordance on hover so the header reads as clickable before it is
+   clicked, without adding permanent arrow clutter to every column. */
+table.data th.sortable:not(.sorted):hover .sort-ind::after {
+  content: '↕';
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.col-grip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+}
+.col-grip:hover { background: var(--series-1); opacity: 0.35; }
+body.is-col-resizing { cursor: col-resize; user-select: none; }
+
+.col-hidden { display: none !important; }
+
+.col-menu { min-width: 236px; max-height: 340px; overflow-y: auto; }
+.col-menu-head {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  font-weight: 650;
+  padding: 4px 10px 8px;
+}
+.col-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+}
+.col-opt:hover { background: var(--surface-2); }
+.col-opt input { margin: 0; pointer-events: none; }
+.col-opt:focus { outline: 2px solid var(--series-1); outline-offset: -2px; }
+.col-menu-foot {
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding: 8px 10px 4px;
+}
+
+/* --------------------------------------------------------------------------
    Contacts, users, gauge (Partnership summary + Account page)
    -------------------------------------------------------------------------- */
 

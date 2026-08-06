@@ -142,6 +142,7 @@
 <script src="assets/js/health.js"></script>
 <script src="assets/js/charts.js"></script>
 <script src="assets/js/app.js"></script>
+<script src="assets/js/tables.js"></script>
 <script>
 (function () {
   'use strict';
@@ -376,6 +377,12 @@
     }).join('');
     document.getElementById('tier-table').innerHTML = head + '<tbody>' + body + '</tbody>';
   })();
+
+
+  /* Sortable / resizable / configurable columns. Every table on this page
+     is fully rendered, so sorting the DOM sorts the whole dataset for the
+     selected window - not just the visible rows. */
+  if (window.FZTable) FZTable.enhanceAll();
 
 })();
 </script>
