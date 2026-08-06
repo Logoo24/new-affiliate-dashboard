@@ -22,7 +22,7 @@
         <div class="card-body" style="padding-top:18px">
           <div class="hero">
             <div>
-              <div class="hero-label">Lead health score</div>
+              <div class="hero-label" id="score-label">Lead health score</div>
               <div class="hero-figure" id="hero-score">—</div>
               <div id="hero-tier" style="margin-top:8px"></div>
             </div>
@@ -63,59 +63,9 @@
         </section>
       </div>
 
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <h2>Coverage asks</h2>
-            <p class="sub">Where more volume from you is worth more to both of us right now.</p>
-          </div>
-        </div>
-        <div class="card-body" style="padding-bottom:4px">
-          <div class="notice notice-info" style="margin:0"><span class="ico">◆</span>
-            <div id="coverage-note"></div></div>
-        </div>
-      </section>
-
-      <div class="grid-3">
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>States we need</h2>
-              <p class="sub" id="states-sub">Budget already approved that nobody is filling.</p>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table class="data" id="states-table"></table>
-          </div>
-          <div class="card-foot" id="states-foot"></div>
-        </section>
-
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>Ideal send windows</h2>
-              <p class="sub" id="windows-sub">Consumer local time, Monday–Friday.</p>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table class="data" id="windows-table"></table>
-          </div>
-          <div class="card-foot" id="windows-foot"></div>
-        </section>
-
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>Ideal daily split</h2>
-              <p class="sub" id="days-sub">How your week is weighted against ours.</p>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table class="data" id="days-table"></table>
-          </div>
-          <div class="card-foot" id="days-foot"></div>
-        </section>
-      </div>
+      <!-- States we need, ideal send windows and the ideal daily split used to
+           sit here. They are targeting guidance rather than score explanation,
+           so they now live on the Targeting page and are not duplicated. -->
 
       <section class="card">
         <div class="card-head">
@@ -163,6 +113,60 @@
     partnerId: state.partnerId,
     campaignId: state.campaignId,
     subid: state.subid
+  });
+
+  /* ---- "what is this score?" ---------------------------------------------
+     The pillar list and weights are read from the live engine rather than
+     written out as prose, so this explanation cannot drift away from the
+     scoring that actually runs. */
+  A.infoButton(document.getElementById('score-label'), {
+    title: 'How your lead health score works',
+    ariaLabel: 'How your lead health score works',
+    html: function () {
+      var live = result.pillars.filter(function (p) { return !p.parked; });
+      var parked = result.pillars.filter(function (p) { return p.parked; });
+
+      var rows = live.map(function (p) {
+        var inputs = (p.parts || [])
+          .filter(function (x) { return x.display !== undefined; })
+          .map(function (x) { return A.esc(x.label); })
+          .join(' · ') || '—';
+        return '<tr>' +
+          '<td><strong>' + A.esc(p.label) + '</strong></td>' +
+          '<td class="num">' + Math.round((p.effectiveWeight || p.weight) * 100) + '%</td>' +
+          '<td style="color:var(--ink-2)">' + inputs + '</td>' +
+          '</tr>';
+      }).join('');
+
+      return '' +
+        '<p>Your lead health score is a single 0&ndash;100 read on how well your traffic is ' +
+        'performing for us, refreshed every Monday over a rolling 30-day window. It is anchored ' +
+        'on one question: <strong>of the leads you send, how many reach a qualified sale at the ' +
+        'top tiers &mdash; Priority or Hot &mdash; and how quickly.</strong> Everything else in ' +
+        'the model exists to explain or protect that number.</p>' +
+
+        '<p>Leads still inside their sales cycle are excluded, so recent volume is never counted ' +
+        'against you before it has had a chance to convert. Below ' +
+        '<strong>100 matured leads</strong> the score is marked provisional and should be read as ' +
+        'directional rather than final. The score is built from these parts:</p>' +
+
+        '<div class="table-wrap"><table class="data">' +
+        '<thead><tr><th>What we measure</th><th class="num">Weight</th><th>What goes into it</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>' +
+
+        (parked.length
+          ? '<p style="margin-top:14px"><strong>' +
+            parked.map(function (p) { return A.esc(p.label); }).join(' and ') +
+            '</strong> is not scored yet. We are not reporting call timing back to you, so rather ' +
+            'than counting it against you it is left out entirely and the remaining weights are ' +
+            'rebalanced to 100%.</p>'
+          : '') +
+
+        '<p>The band your score falls into is explained at the bottom of this page, along with ' +
+        'what each one means. If you want to move the number, your rejection reasons and the ' +
+        '<a href="' + A.linkTo('targeting.html', state) + '">Targeting page</a> are the two ' +
+        'fastest places to look.</p>';
+    }
   });
 
   /* ---- hero ------------------------------------------------------------ */
@@ -268,98 +272,10 @@
       color + ');opacity:.35"></span>' + t.label + '</span>';
   }).join('');
 
-  /* ---- coverage asks ----------------------------------------------------
-     Three widgets, all of them ASKS rather than rules. The note has to ride
-     along with every one of them: we accept leads any day and any hour, and a
-     partner who reads these as gates will just send less. */
-  var cov = H.coverage(result);
-
-  document.getElementById('coverage-note').innerHTML =
-    '<strong>Asks, not rules.</strong> ' + A.esc(cov.note);
-
-  /* 1. States with unfilled budget ---------------------------------------- */
-  (function () {
-    var head = '<thead><tr><th>State</th><th class="num">Leads needed</th>' +
-      '<th class="num">Unused budget</th></tr></thead>';
-    var body = cov.states.rows.map(function (s) {
-      return '<tr>' +
-        '<td><strong>' + A.esc(s.st) + '</strong> ' +
-          '<span style="color:var(--ink-2)">' + A.esc(s.name) + '</span>' +
-          (s.western ? ' <span class="quota">' + A.esc(s.tz) + '</span>' : '') + '</td>' +
-        '<td class="num">' + A.fmtInt(s.leadsNeeded) + '</td>' +
-        '<td class="num">' + A.fmtMoney0(s.unusedBudget) + '</td>' +
-        '</tr>';
-    }).join('');
-    document.getElementById('states-table').innerHTML = head + '<tbody>' + body + '</tbody>';
-
-    document.getElementById('states-sub').textContent =
-      'Budget already approved that nobody is filling.';
-    document.getElementById('states-foot').innerHTML =
-      '<strong>' + A.fmtInt(cov.states.totalLeads) + ' leads</strong> against ' +
-      '<strong>' + A.fmtMoney0(cov.states.totalUnused) + '</strong> of open budget across these states. ' +
-      'You currently send ' + A.fmtPct(cov.states.share, 1) + ' of your volume from short states ' +
-      '(target ' + A.fmtPct(cov.states.target, 0) + ').';
-  })();
-
-  /* 2. Ideal reception windows -------------------------------------------- */
-  (function () {
-    var head = '<thead><tr><th>Window</th><th class="num">Your leads</th>' +
-      '<th class="num">Share</th></tr></thead>';
-    var body = cov.windows.rows.map(function (w) {
-      return '<tr' + (w.ideal ? ' style="background:var(--surface-2)"' : '') + '>' +
-        '<td>' + A.esc(w.label) + (w.ideal ? ' <strong>★</strong>' : '') + '</td>' +
-        '<td class="num">' + A.fmtInt(w.leads) + '</td>' +
-        '<td class="num">' + A.fmtPct(w.share, 1) + '</td>' +
-        '</tr>';
-    }).join('');
-    document.getElementById('windows-table').innerHTML = head + '<tbody>' + body + '</tbody>';
-
-    document.getElementById('windows-sub').innerHTML =
-      '★ ' + cov.windows.ideal.map(function (w) { return A.esc(w.label); }).join(' and ') +
-      ', consumer local time, Mon–Fri.';
-
-    var foot = '<strong>' + A.fmtPct(cov.windows.share, 1) + '</strong> of your volume lands in the ' +
-      'starred windows (target ' + A.fmtPct(cov.windows.target, 0) + '). ' +
-      (cov.windows.onTarget ? 'On target.' : 'Shifting sends into them gets faster first contact.');
-    /* Only shown to partners actually running western states. */
-    if (cov.windows.westernCaveat) {
-      foot += '<div style="margin-top:8px;color:var(--ink-2)">' +
-        A.esc(cov.windows.westernCaveat) + '</div>';
-    }
-    document.getElementById('windows-foot').innerHTML = foot;
-  })();
-
-  /* 3. Ideal daily volume split -------------------------------------------- */
-  (function () {
-    var head = '<thead><tr><th>Day</th><th class="num">You</th>' +
-      '<th class="num">Ideal</th><th class="num">Gap</th></tr></thead>';
-    var body = cov.days.rows.map(function (d) {
-      /* Over-sending on a day is not an error, so the gap is signed and
-         plain rather than dressed up as a failure. */
-      var gap = d.delta;
-      var sign = gap > 0.005 ? '+' : '';
-      var tone = Math.abs(gap) < 0.02 ? 'var(--ink-muted)' : 'var(--ink-2)';
-      return '<tr>' +
-        '<td>' + A.esc(d.short) + '</td>' +
-        '<td class="num">' + A.fmtPct(d.actual, 0) + '</td>' +
-        '<td class="num">' + A.fmtPct(d.ideal, 0) + '</td>' +
-        '<td class="num" style="color:' + tone + '">' + sign + A.fmtPct(gap, 0) + '</td>' +
-        '</tr>';
-    }).join('');
-    document.getElementById('days-table').innerHTML = head + '<tbody>' + body + '</tbody>';
-
-    var worst = cov.days.worst;
-    var foot = '<strong>' + A.fmtPct(cov.days.alignment, 0) + '</strong> match to the ideal split ' +
-      '(target ' + A.fmtPct(cov.days.target, 0) + ').';
-    if (worst && Math.abs(worst.delta) >= 0.02) {
-      foot += ' Biggest gap is <strong>' + A.esc(worst.label) + '</strong> at ' +
-        A.fmtPct(worst.actual, 0) + ' against ' + A.fmtPct(worst.ideal, 0) +
-        (worst.dow === 0
-          ? ' — Sunday sends sit in the queue until Monday morning.'
-          : '.');
-    }
-    document.getElementById('days-foot').innerHTML = foot;
-  })();
+  /* Coverage asks (states we need, ideal send windows, ideal daily split)
+     were removed from this page — they are targeting guidance, not score
+     explanation, and now live on the Targeting page. H.coverage() is still
+     exported and is what that page consumes. */
 
   /* ---- tier table ------------------------------------------------------ */
   (function () {

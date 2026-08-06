@@ -734,6 +734,76 @@ table.data tfoot td {
 .tooltip .tt-row .v { font-weight: 600; }
 
 /* --------------------------------------------------------------------------
+   Info button + modal
+   -------------------------------------------------------------------------- */
+
+.info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font);
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  vertical-align: middle;
+  margin-left: 7px;
+}
+.info-btn:hover { background: var(--surface-2); color: var(--ink); border-color: var(--series-1); }
+.info-btn:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 16, 28, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(16px, 5vh, 64px) 16px;
+  z-index: 100;
+  overflow-y: auto;
+}
+.modal-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 50px rgba(11, 16, 28, 0.35);
+  width: 100%;
+  max-width: 720px;
+  margin: auto 0;
+}
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-head h2 { flex: 1; }
+.modal-close {
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  font-family: var(--font);
+}
+.modal-close:hover { color: var(--ink); }
+.modal-body { padding: 16px 20px 20px; }
+.modal-body p { margin: 0 0 14px; max-width: 68ch; line-height: 1.6; }
+.modal-body p:last-child { margin-bottom: 0; }
+.modal-body h3 { margin: 18px 0 8px; }
+
+/* --------------------------------------------------------------------------
    Sortable / resizable / configurable tables
    -------------------------------------------------------------------------- */
 

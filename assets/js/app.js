@@ -280,7 +280,7 @@
     if (fields.indexOf('status') !== -1) {
       html += '<div class="field"><label for="f-status">Status</label>' +
         '<select id="f-status" name="status">' +
-        [['all', 'All leads'], ['paid', 'Accepted (paid)'], ['free', 'Rejected (free)']].map(function (o) {
+        [['all', 'All leads'], ['paid', 'Accepted'], ['free', 'Rejected']].map(function (o) {
           return '<option value="' + o[0] + '"' + (state.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
         }).join('') +
         '</select></div>';
@@ -407,10 +407,13 @@
         return esc(band ? band.label : '—');
       case 'hourSegment':  return esc(D.HOUR_SEGMENT_LABEL[row.hourSegment] || '—');
       case 'dow':          return esc(D.DOW_SHORT[row.dow] || '—');
+      /* "Free" is our internal word for a lead that fired no pixel, i.e. one
+         we owe nothing on. To the affiliate reading this it just means
+         rejected, so say that. */
       case 'status':
         return row.status === 'paid'
           ? '<span class="pill-paid">Paid</span>'
-          : '<span class="pill-free">Free</span>';
+          : '<span class="pill-free">Rejected</span>';
       case 'rejectReason':
         if (!row.rejectReason) return '—';
         return '<span style="color:var(--ink-2)" title="' + esc(D.rejectFix(row.rejectReason)) + '">' +
@@ -433,7 +436,7 @@
         return band ? band.label : '';
       case 'hourSegment':  return D.HOUR_SEGMENT_LABEL[row.hourSegment] || '';
       case 'dow':          return D.DOW_LABEL[row.dow] || '';
-      case 'status':       return row.status === 'paid' ? 'Paid' : 'Free';
+      case 'status':       return row.status === 'paid' ? 'Paid' : 'Rejected';
       case 'rejectReason':
         return row.rejectReason ? D.rejectLabel(row.rejectReason, state.partnerId) : '';
       case 'soldType':     return row.soldType ? D.SOLD_TYPES[row.soldType].label : '';
@@ -498,6 +501,61 @@
         '<span class="ico">▲</span><div><strong>' + esc(title) + '</strong><br>' +
         esc(reason) + '</div></div>';
     cardEl.appendChild(d);
+  }
+
+  /**
+   * A modal. Closes on the ✕, on the backdrop, and on Escape; focus moves to
+   * the close button so keyboard users are not stranded behind it.
+   */
+  function openModal(opts) {
+    var back = document.createElement('div');
+    back.className = 'modal-backdrop';
+    back.setAttribute('role', 'dialog');
+    back.setAttribute('aria-modal', 'true');
+    back.setAttribute('aria-label', opts.title || 'Information');
+    back.innerHTML =
+      '<div class="modal-card">' +
+        '<div class="modal-head">' +
+          '<h2>' + esc(opts.title || '') + '</h2>' +
+          '<button type="button" class="modal-close" aria-label="Close">×</button>' +
+        '</div>' +
+        '<div class="modal-body">' + (opts.html || '') + '</div>' +
+      '</div>';
+
+    function close() {
+      back.remove();
+      document.removeEventListener('keydown', onKey);
+      if (opts.returnFocusTo) opts.returnFocusTo.focus();
+    }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+
+    back.addEventListener('click', function (e) { if (e.target === back) close(); });
+    back.querySelector('.modal-close').addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+
+    document.body.appendChild(back);
+    back.querySelector('.modal-close').focus();
+    return close;
+  }
+
+  /** Small circular "i" that opens a modal. Appended to `host`. */
+  function infoButton(host, opts) {
+    if (!host) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'info-btn';
+    b.textContent = 'i';
+    b.setAttribute('aria-label', opts.ariaLabel || ('About ' + (opts.title || 'this')));
+    b.title = opts.ariaLabel || ('About ' + (opts.title || 'this'));
+    b.addEventListener('click', function () {
+      openModal({
+        title: opts.title,
+        html: typeof opts.html === 'function' ? opts.html() : opts.html,
+        returnFocusTo: b
+      });
+    });
+    host.appendChild(b);
+    return b;
   }
 
   function quote(v) {
@@ -611,6 +669,8 @@
     exportCsv: exportCsv,
     exportControl: exportControl,
     unsupported: unsupported,
+    openModal: openModal,
+    infoButton: infoButton,
     viewToggle: viewToggle
   };
 
