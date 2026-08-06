@@ -715,6 +715,71 @@ table.data tfoot td {
 .tooltip .tt-row .v { font-weight: 600; }
 
 /* --------------------------------------------------------------------------
+   Contacts, users, gauge (Partnership summary + Account page)
+   -------------------------------------------------------------------------- */
+
+.contact-block { min-width: 220px; }
+.contact-block .who { font-size: 15px; font-weight: 650; }
+.contact-block .role { font-size: 12.5px; color: var(--ink-muted); margin-top: 1px; }
+.contact-block .mail { font-size: 13.5px; margin-top: 3px; }
+.contact-block .mail a { color: var(--series-1); text-decoration: none; }
+.contact-block .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+/* Health gauge — a semicircular meter. The value arc reuses the validated
+   meter-fill severity tokens; the track is the same-ramp lighter step, so it
+   obeys the same rules as the linear meters. */
+.gauge-card { display: block; text-decoration: none; color: inherit; }
+.gauge-card:hover { background: var(--surface-2); }
+.gauge-wrap { display: flex; flex-direction: column; align-items: center; padding: 4px 0 2px; }
+.gauge-wrap svg { display: block; }
+.gauge-value {
+  font-size: 34px; font-weight: 650; letter-spacing: -0.02em;
+  margin-top: -46px; line-height: 1;
+}
+.gauge-tier { margin-top: 6px; }
+.gauge-hint { font-size: 12.5px; color: var(--ink-muted); margin-top: 8px; }
+
+/* User cards (Account page) */
+.user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.user-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+  background: var(--surface-1);
+}
+.avatar {
+  width: 46px; height: 46px; flex: 0 0 46px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 650; font-size: 16px; color: var(--ink-2);
+  overflow: hidden;
+  position: relative;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.user-card .u-name { font-size: 15px; font-weight: 650; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.user-card .u-title { font-size: 13px; color: var(--ink-muted); }
+.user-card .u-mail { font-size: 13px; margin-top: 2px; word-break: break-all; }
+.user-card .u-actions {
+  margin-top: 9px; display: flex; gap: 6px 12px; flex-wrap: wrap;
+  font-size: 12.5px;
+}
+.user-card .u-actions a { color: var(--series-1); text-decoration: none; cursor: pointer; }
+.user-card .u-actions a:hover { text-decoration: underline; }
+
+/* Away marker — deliberately subtle: muted chip, no status colour. */
+.away-chip {
+  font-size: 11px; font-weight: 600;
+  color: var(--ink-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+/* --------------------------------------------------------------------------
    Export control
    -------------------------------------------------------------------------- */
 

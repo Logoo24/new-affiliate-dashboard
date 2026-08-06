@@ -16,22 +16,83 @@
 
     <div class="content">
 
+      <!-- Who they are + who to talk to. Focused on the affiliate, not on
+           terms — products, integration and criteria live per campaign and on
+           the Targeting page. -->
       <section class="card">
         <div class="card-body" style="padding-top:18px">
-          <div class="hero">
-            <div>
+          <div class="hero" style="align-items:flex-start">
+            <div style="min-width:240px">
               <div class="hero-label">Partner</div>
               <div class="hero-figure" id="hero-name" style="font-size:34px;line-height:1.15">—</div>
-              <div id="hero-status" style="margin-top:8px"></div>
+              <div id="hero-status" style="margin-top:10px"></div>
             </div>
-            <div style="flex:1;min-width:260px">
-              <div id="hero-comp" style="font-size:14px;font-weight:600;margin-bottom:6px"></div>
-              <p class="hero-note" id="hero-note"></p>
+            <div class="contact-block">
+              <div class="hero-label" style="margin-bottom:6px">Account manager</div>
+              <div class="who" id="am-name"></div>
+              <div class="role" id="am-title"></div>
+              <div class="mail" id="am-mail"></div>
+              <div class="actions" id="am-actions"></div>
+            </div>
+            <div class="contact-block">
+              <div class="hero-label" style="margin-bottom:6px">Your primary contact</div>
+              <div class="who" id="pc-name"></div>
+              <div class="role" id="pc-title"></div>
+              <div class="mail" id="pc-mail"></div>
+              <div class="actions" id="pc-actions"></div>
             </div>
           </div>
         </div>
-        <div class="card-foot" id="hero-foot"></div>
       </section>
+
+      <!-- Partnership metrics -->
+      <div class="grid-3">
+        <a class="card gauge-card" id="gauge-link" href="health.html">
+          <div class="card-head">
+            <div>
+              <h2>Health score</h2>
+              <p class="sub">Across every campaign on this account.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="gauge-wrap" id="gauge"></div>
+          </div>
+        </a>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Volume</h2>
+              <p class="sub">Trailing four weeks.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="tile-label" style="margin-top:2px">Average weekly volume</div>
+            <div class="tile-value" id="vol-weekly" style="font-size:34px">—</div>
+            <div class="tile-sub" id="vol-sub"></div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+              <div class="tile-label">Accepted, last 30 days</div>
+              <div class="tile-value" id="vol-accepted" style="font-size:24px">—</div>
+              <div class="tile-sub" id="vol-accepted-sub"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Billing details</h2>
+              <p class="sub" id="billing-sub"></p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="tile-label" style="margin-top:2px">Payment period</div>
+            <div class="tile-value" id="billing-period" style="font-size:24px">—</div>
+            <div class="tile-sub" id="billing-basis"></div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)" id="billing-contacts"></div>
+          </div>
+        </section>
+      </div>
 
       <section class="card">
         <div class="card-head">
@@ -46,33 +107,6 @@
         <div class="card-foot" id="camp-foot"></div>
       </section>
 
-      <div class="grid-2">
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>Account details</h2>
-              <p class="sub">The commercial terms this account runs on.</p>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table class="data" id="account-table"></table>
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>How we work your leads</h2>
-              <p class="sub">Our hours, and what they mean for when you send.</p>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table class="data" id="hours-table"></table>
-          </div>
-          <div class="card-foot" id="hours-foot"></div>
-        </section>
-      </div>
-
     </div>
   </div>
 </div>
@@ -84,7 +118,7 @@
 <script>
 (function () {
   'use strict';
-  var D = FZData, A = FZApp;
+  var D = FZData, A = FZApp, H = FZHealth;
 
   var state = A.params();
   var p = state.partner;
@@ -92,32 +126,111 @@
   A.shell(state, {
     active: 'partnership.html',
     title: 'Partnership summary',
-    subtitle: 'Who you are to us, what you are running, and on what terms.'
+    subtitle: 'Your account at a glance, and who to talk to.'
   });
 
-  /* ---- hero ------------------------------------------------------------- */
+  /* ---- hero: name + DERIVED status + since ------------------------------ */
   document.getElementById('hero-name').textContent = p.name;
+
+  /* Active = at least one accepted lead in the trailing month. Derived from
+     the lead table, never a stored flag — see ADMIN-MAPPING.md §1. */
+  var act = D.isPartnerActive(state.partnerId);
   document.getElementById('hero-status').innerHTML =
-    '<span class="badge badge-good" style="font-size:12px;padding:4px 12px">' +
-    '<span class="dot"></span>' + A.esc(p.status) + '</span>' +
-    ' <span class="quota" style="margin-left:8px">Partner since ' + A.esc(p.since) + '</span>';
-  /* Deliberately NOT the comp model. It is set per campaign and belongs in the
-     campaigns table below, not beside the account name. */
-  document.getElementById('hero-comp').textContent =
-    p.products + ' · ' + p.integration;
-  document.getElementById('hero-note').textContent =
-    'Every figure in this portal is scoped to this account. Comp model is set per campaign, ' +
-    'so what you can see on a lead depends on which campaign sent it.';
+    '<span class="badge ' + (act.active ? 'badge-good' : 'badge-warn') + '" style="font-size:13px;padding:4px 12px">' +
+    '<span class="dot"></span>' + (act.active ? 'Active' : 'Inactive') + '</span>' +
+    '<div class="quota" style="margin-top:8px">Partner since ' + A.esc(D.fmtSince(state.partnerId)) + '</div>' +
+    (!act.active && act.lastAcceptedAt
+      ? '<div class="quota" style="margin-top:2px">Last accepted lead ' + A.fmtDate(act.lastAcceptedAt) + '</div>'
+      : '');
 
-  document.getElementById('hero-foot').innerHTML =
-    '<strong>Account manager:</strong> ' + A.esc(p.accountManager) +
-    ' · <strong>Your contact on file:</strong> ' + A.esc(p.partnerContact);
+  /* ---- account manager --------------------------------------------------- */
+  var am = D.ACCOUNT_MANAGER;
+  document.getElementById('am-name').textContent = am.name;
+  document.getElementById('am-title').textContent = am.title;
+  document.getElementById('am-mail').innerHTML =
+    '<a href="mailto:' + A.esc(am.email) + '">' + A.esc(am.email) + '</a>';
+  document.getElementById('am-actions').innerHTML =
+    '<a class="btn btn-sm" href="mailto:' + A.esc(am.email) + '" target="_blank" rel="noopener">✉ Email</a>' +
+    '<a class="btn btn-sm" href="' + A.esc(am.chatUrl) + '" target="_blank" rel="noopener">💬 Google Chat</a>';
 
-  /* ---- active campaigns -------------------------------------------------
-     CID and comp model are the two things partners ask for by name. "View
-     details" carries the campaign straight onto Performance with the filter
-     already applied, which is the same query-string state the filter row
-     writes — no special-case route. */
+  /* ---- primary contact --------------------------------------------------- */
+  /* One primary per affiliate, editable by any of that affiliate's users.
+     Changing it happens on the Account page, where all users are listed. */
+  var pc = D.primaryContact(state.partnerId);
+  document.getElementById('pc-name').innerHTML = A.esc(pc.name) +
+    (pc.away ? ' <span class="away-chip">Away</span>' : '');
+  document.getElementById('pc-title').textContent = pc.title;
+  document.getElementById('pc-mail').innerHTML =
+    '<a href="mailto:' + A.esc(pc.email) + '">' + A.esc(pc.email) + '</a>';
+  document.getElementById('pc-actions').innerHTML =
+    '<a class="btn btn-sm" href="' + A.linkTo('account.html', state) + '">Change primary contact</a>';
+
+  /* ---- gauge -------------------------------------------------------------- */
+  document.getElementById('gauge-link').href = A.linkTo('health.html', state);
+  (function () {
+    var hs = H.score({ partnerId: state.partnerId });
+    var C = FZCharts;
+
+    /* Track + fill reuse the validated meter severity ramps. */
+    var sevSuffix = { '': '', 'is-warning': '-warning', 'is-serious': '-serious', 'is-critical': '-critical' }[H.meterClass(hs.score)];
+    var track = C.cssVar('--meter-track' + sevSuffix);
+    var fill = C.cssVar('--meter-fill' + sevSuffix);
+
+    var W = 210, R = 84, SW = 16;
+    var cx = W / 2, cy = 100;
+    function arcPoint(t) {   /* t: 0..1 across the semicircle, left → right */
+      var a = Math.PI * (1 - t);
+      return [cx + R * Math.cos(a), cy - R * Math.sin(a)];
+    }
+    function arcPath(t0, t1) {
+      var p0 = arcPoint(t0), p1 = arcPoint(t1);
+      return 'M' + p0[0].toFixed(1) + ',' + p0[1].toFixed(1) +
+        ' A' + R + ',' + R + ' 0 ' + (t1 - t0 > 0.5 ? 1 : 0) + ',1 ' +
+        p1[0].toFixed(1) + ',' + p1[1].toFixed(1);
+    }
+
+    var t = Math.max(0.02, Math.min(1, hs.score / 100));
+    document.getElementById('gauge').innerHTML =
+      '<svg width="' + W + '" height="112" viewBox="0 0 ' + W + ' 112" role="img" ' +
+        'aria-label="Health score ' + hs.score + ' out of 100, tier ' + hs.tier.label + '">' +
+        '<path d="' + arcPath(0, 1) + '" fill="none" stroke="' + track + '" stroke-width="' + SW + '" stroke-linecap="round"/>' +
+        '<path d="' + arcPath(0, t) + '" fill="none" stroke="' + fill + '" stroke-width="' + SW + '" stroke-linecap="round"/>' +
+      '</svg>' +
+      '<div class="gauge-value">' + hs.score + '</div>' +
+      '<div class="gauge-tier"><span class="badge ' + hs.tier.badge + '"><span class="dot"></span>' +
+        hs.tier.label + '</span></div>' +
+      '<div class="gauge-hint">See the full breakdown →</div>';
+  })();
+
+  /* ---- volume ------------------------------------------------------------- */
+  (function () {
+    document.getElementById('vol-weekly').textContent = A.fmtInt(D.avgWeeklyVolume(state.partnerId));
+    document.getElementById('vol-sub').textContent = 'leads per week, all campaigns';
+
+    var coh = D.cohort({ partnerId: state.partnerId, rateBasis: state.rateBasis });
+    document.getElementById('vol-accepted').textContent = A.fmtInt(coh.metrics.paid);
+    document.getElementById('vol-accepted-sub').textContent =
+      A.fmtPct(coh.metrics.acceptanceRate, 1) + ' acceptance';
+  })();
+
+  /* ---- billing ------------------------------------------------------------ */
+  (function () {
+    document.getElementById('billing-sub').textContent = 'Terms and who to ask.';
+    document.getElementById('billing-period').textContent = p.billingPeriod;
+    document.getElementById('billing-basis').textContent = p.billingBasis;
+    document.getElementById('billing-contacts').innerHTML =
+      D.BILLING_CONTACTS.map(function (c) {
+        return '<div style="margin-bottom:9px">' +
+          '<div style="font-size:13.5px;font-weight:600">' + A.esc(c.name) +
+          ' <span style="font-weight:400;color:var(--ink-muted)">· ' + A.esc(c.note) + '</span></div>' +
+          '<div style="font-size:13px"><a href="mailto:' + A.esc(c.email) + '">' + A.esc(c.email) + '</a></div>' +
+        '</div>';
+      }).join('');
+  })();
+
+  /* ---- active campaigns ---------------------------------------------------
+     Comp model shows the MODEL only — Revenue share / Tiered CPL / Flat CPL.
+     Rates live behind "View details". */
   (function () {
     var camps = D.activeCampaignsFor(state.partnerId);
 
@@ -125,15 +238,11 @@
       '<th>Comp model</th><th>Launched</th><th></th></tr></thead>';
 
     var body = camps.map(function (c) {
-      var cm = D.compModel(c.comp);
-      var detail = c.comp === 'revshare'
-        ? cm.label + ' — ' + Math.round(p.revSharePct * 100) + '%'
-        : p.rateCard;
       return '<tr>' +
         '<td class="lead-id">' + A.esc(c.id) + '</td>' +
         '<td><strong>' + A.esc(c.name) + '</strong></td>' +
         '<td>' + A.esc(c.product) + '</td>' +
-        '<td>' + A.esc(detail) + '</td>' +
+        '<td>' + A.esc(D.compLabelForCampaign(c)) + '</td>' +
         '<td style="color:var(--ink-2);white-space:nowrap">' + A.esc(c.launched) + '</td>' +
         '<td style="text-align:right">' +
           '<a class="btn btn-sm" href="' +
@@ -150,58 +259,10 @@
     document.getElementById('camp-sub').textContent =
       camps.length + (camps.length === 1 ? ' campaign' : ' campaigns') + ' live right now.';
 
-    /* A mixed account is the case the column rules exist for, so say so
-       plainly rather than letting the lead table surprise them. */
-    var comps = state.comps;
-    document.getElementById('camp-foot').innerHTML = comps.length > 1
-      ? 'This account runs <strong>' + comps.length + ' comp models</strong>. ' +
-        'Revenue columns appear on lead rows from revenue-share campaigns only.'
-      : 'All campaigns on this account bill on <strong>' + A.esc(comps[0].label) + '</strong>. ' +
-        A.esc(comps[0].note);
-  })();
-
-  /* ---- account details --------------------------------------------------- */
-  (function () {
-    /* Comp model is intentionally absent — it is per campaign and is listed
-       against each one in the table above. A single account-level value here
-       would be wrong the moment a partner runs two models. */
-    var rows = [
-      ['Products', p.products],
-      ['Integration', p.integration + ' — ' + p.integrationNote],
-      /* The negotiated band is a commercial term, not a data error. It has
-         already cost a $5,194 invoice variance by being treated as one. */
-      ['Accepted age band', p.ageBand + ' — ' + p.ageBandNote],
-      ['Billing', p.billing],
-      ['Exclusivity', p.exclusivity],
-      ['Partner since', p.since]
-    ];
-    var body = rows.map(function (r) {
-      return '<tr><th style="width:34%;text-align:left;font-weight:600">' + A.esc(r[0]) + '</th>' +
-        '<td>' + A.esc(r[1]) + '</td></tr>';
-    }).join('');
-    document.getElementById('account-table').innerHTML = '<tbody>' + body + '</tbody>';
-  })();
-
-  /* ---- operating hours --------------------------------------------------- */
-  (function () {
-    var H = D.OPERATING_HOURS;
-    var rows = [
-      ['Monday – Friday', '9:00 AM – 7:00 PM local time in every timezone we cover ' +
-        '(9:00 AM – 10:00 PM ET end to end)'],
-      ['Saturday', '9:00 AM – 8:00 PM ET, lighter staffing'],
-      ['Sunday', 'Closed — anything landing Sunday sits until Monday morning'],
-      ['Ideal send windows', D.IDEAL_WINDOWS.map(function (w) { return w.label; }).join('  ·  ') +
-        ' (your consumer\'s local time, Mon–Fri)']
-    ];
-    var body = rows.map(function (r) {
-      return '<tr><th style="width:34%;text-align:left;font-weight:600">' + A.esc(r[0]) + '</th>' +
-        '<td>' + A.esc(r[1]) + '</td></tr>';
-    }).join('');
-    document.getElementById('hours-table').innerHTML = '<tbody>' + body + '</tbody>';
-
-    document.getElementById('hours-foot').innerHTML =
-      A.esc(D.COVERAGE_NOTE) +
-      ' <a href="' + A.linkTo('health.html', state) + '">See your current split →</a>';
+    var inactive = D.inactiveCampaignsFor(state.partnerId).length;
+    document.getElementById('camp-foot').innerHTML =
+      'This account has <strong>' + inactive + '</strong> campaign' + (inactive === 1 ? '' : 's') +
+      ' marked as inactive.';
   })();
 
 })();

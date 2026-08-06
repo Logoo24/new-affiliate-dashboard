@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account &amp; users — Financialize Partner Portal</title>
+<link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar" data-shell="sidebar"></aside>
+
+  <div class="main">
+    <header class="topbar" data-shell="topbar"></header>
+
+    <div class="content">
+
+      <div class="notice notice-info">
+        <span class="ico">◆</span>
+        <div>
+          Everyone at your company who can sign in to this portal. Any user can edit titles,
+          change the primary contact, or reset a password — you manage your own team.
+          Financialize staff are not listed here; our access is separate and account-wide.
+        </div>
+      </div>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Users on this account</h2>
+            <p class="sub" id="users-sub"></p>
+          </div>
+          <div class="spacer"></div>
+          <button class="btn btn-primary btn-sm" id="add-user">+ Add user</button>
+        </div>
+        <div class="card-body">
+          <div id="action-toast"></div>
+          <div class="user-grid" id="user-grid"></div>
+        </div>
+        <div class="card-foot">
+          <span>
+            The <strong>primary contact</strong> is who we reach first about this account —
+            performance conversations, billing questions, anything urgent. Exactly one user holds
+            it at a time.
+          </span>
+        </div>
+      </section>
+
+      <section class="card" id="add-card" style="display:none">
+        <div class="card-head">
+          <div>
+            <h2>Add a user</h2>
+            <p class="sub">They receive an invitation email and set their own password.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <form id="add-form" class="dupe-form" style="align-items:flex-end">
+            <div class="field"><label for="nu-name">Name</label>
+              <input type="text" id="nu-name" required placeholder="Full name"></div>
+            <div class="field"><label for="nu-title">Title</label>
+              <input type="text" id="nu-title" placeholder="e.g. Media buyer"></div>
+            <div class="field" style="flex:1"><label for="nu-email">Email</label>
+              <input type="text" id="nu-email" required placeholder="name@company.com"></div>
+            <button type="submit" class="btn btn-primary">Send invite</button>
+            <button type="button" class="btn" id="add-cancel">Cancel</button>
+          </form>
+        </div>
+      </section>
+
+      <p class="mocknote" style="border:0;padding:0;margin:0">
+        Mock-up — edits persist in this browser tab only. In production this is the
+        <code>affiliate_users</code> table; see <code>ADMIN-MAPPING.md</code> §1a.
+      </p>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/health.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/app.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = FZData, A = FZApp;
+
+  var state = A.params();
+
+  A.shell(state, {
+    active: 'account.html',
+    title: 'Account & users',
+    subtitle: 'Manage who can sign in for ' + state.partner.name + '.'
+  });
+
+  var toastHost = document.getElementById('action-toast');
+  function toast(msg) {
+    toastHost.innerHTML = '<div class="export-toast" style="margin:0 0 14px"><span>✓</span><span>' + msg + '</span></div>';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { toastHost.innerHTML = ''; }, 6000);
+  }
+
+  function initials(name) {
+    return name.split(/\s+/).map(function (w) { return w.charAt(0); })
+      .slice(0, 2).join('').toUpperCase();
+  }
+
+  /* ---- render ------------------------------------------------------------ */
+  function render() {
+    var users = D.usersFor(state.partnerId);
+
+    document.getElementById('users-sub').textContent =
+      users.length + (users.length === 1 ? ' user' : ' users') + ' can sign in to this account.';
+
+    document.getElementById('user-grid').innerHTML = users.map(function (u) {
+      return '<div class="user-card" data-uid="' + A.esc(u.id) + '">' +
+        '<div class="avatar" title="' + A.esc(u.name) + '">' +
+          (u.avatar ? '<img src="' + u.avatar + '" alt="">' : A.esc(initials(u.name))) +
+        '</div>' +
+        '<div style="min-width:0;flex:1">' +
+          '<div class="u-name">' + A.esc(u.name) +
+            (u.isPrimary ? ' <span class="badge badge-info" style="font-size:11px"><span class="dot"></span>Primary contact</span>' : '') +
+            (u.away ? ' <span class="away-chip">Away</span>' : '') +
+          '</div>' +
+          '<div class="u-title">' + A.esc(u.title || 'No title set') + '</div>' +
+          '<div class="u-mail"><a href="mailto:' + A.esc(u.email) + '">' + A.esc(u.email) + '</a></div>' +
+          '<div class="u-actions">' +
+            '<a data-act="title">Edit title</a>' +
+            '<a data-act="photo">' + (u.avatar ? 'Change photo' : 'Add photo') + '</a>' +
+            '<a data-act="reset">Reset password</a>' +
+            (!u.isPrimary ? '<a data-act="primary">Make primary</a>' : '') +
+            '<a data-act="away" style="color:var(--ink-muted)">' + (u.away ? 'Clear away' : 'Set away') + '</a>' +
+          '</div>' +
+          '<input type="file" accept="image/*" data-file style="display:none">' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    /* ---- wire actions ---------------------------------------------------- */
+    document.querySelectorAll('.user-card').forEach(function (card) {
+      var uid = card.dataset.uid;
+      var fileInput = card.querySelector('[data-file]');
+
+      card.querySelectorAll('[data-act]').forEach(function (a) {
+        a.addEventListener('click', function () {
+          var users = D.usersFor(state.partnerId);
+          var u = users.filter(function (x) { return x.id === uid; })[0];
+          if (!u) return;
+
+          switch (a.dataset.act) {
+            case 'primary':
+              D.setPrimaryContact(state.partnerId, uid);
+              toast('<strong>' + A.esc(u.name) + '</strong> is now the primary contact for this account.');
+              render();
+              break;
+
+            case 'title':
+              var t = prompt('Title for ' + u.name + ':', u.title || '');
+              if (t === null) return;
+              u.title = t.trim();
+              D.saveUsers(state.partnerId, users);
+              render();
+              break;
+
+            case 'reset':
+              /* Mock — production sends a reset email from the auth system. */
+              toast('Password reset link sent to <strong>' + A.esc(u.email) + '</strong>.');
+              break;
+
+            case 'away':
+              u.away = !u.away;
+              D.saveUsers(state.partnerId, users);
+              render();
+              break;
+
+            case 'photo':
+              fileInput.click();
+              break;
+          }
+        });
+      });
+
+      fileInput.addEventListener('change', function () {
+        var f = fileInput.files[0];
+        if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+          var users = D.usersFor(state.partnerId);
+          var u = users.filter(function (x) { return x.id === uid; })[0];
+          if (!u) return;
+          u.avatar = String(reader.result);
+          try {
+            D.saveUsers(state.partnerId, users);
+          } catch (e) { /* sessionStorage quota — keep in-memory only */ }
+          render();
+        };
+        reader.readAsDataURL(f);
+      });
+    });
+  }
+
+  /* ---- add user ---------------------------------------------------------- */
+  document.getElementById('add-user').addEventListener('click', function () {
+    document.getElementById('add-card').style.display = '';
+    document.getElementById('nu-name').focus();
+  });
+  document.getElementById('add-cancel').addEventListener('click', function () {
+    document.getElementById('add-card').style.display = 'none';
+  });
+  document.getElementById('add-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = document.getElementById('nu-name').value.trim();
+    var email = document.getElementById('nu-email').value.trim();
+    if (!name || !email) return;
+    var users = D.usersFor(state.partnerId);
+    users.push({
+      id: 'u-new-' + Date.now(),
+      name: name,
+      title: document.getElementById('nu-title').value.trim(),
+      email: email,
+      isPrimary: false, away: false, avatar: null
+    });
+    D.saveUsers(state.partnerId, users);
+    document.getElementById('add-form').reset();
+    document.getElementById('add-card').style.display = 'none';
+    toast('Invitation sent to <strong>' + A.esc(email) + '</strong>.');
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

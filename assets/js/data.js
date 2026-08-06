@@ -224,12 +224,17 @@
      model — both partners here happen to run a single comp model across all
      their campaigns, but the schema does not assume that and neither does the
      query layer. */
+  /* NOTE there is deliberately NO `status` field here any more. Active vs
+     inactive is DERIVED — at least one accepted lead in the trailing month —
+     via isPartnerActive(). A stored flag drifts; a derived one cannot.
+
+     `sinceISO` must come off the partnership record in production. That date
+     may not exist in the admin centre today — see ADMIN-MAPPING.md §1. */
   var PARTNERS = {
     ahg: {
       id: 'ahg',
       name: 'Annuity Heritage Group',
       shortName: 'Heritage',
-      status: 'Active',
       /* The RATE CARD, not the comp model. Comp model is a property of the
          campaign; this is only the commercial rate those campaigns bill at. */
       rateCard: 'Revenue share — 40%',
@@ -239,17 +244,23 @@
       products: 'Annuity',
       integration: 'Their funnel → our API',
       integrationNote: 'Posts server-to-server. Pixel validated Jun 2026.',
-      accountManager: 'Logan Randall',
-      partnerContact: 'Brayden — brayden@annuityheritage.example',
-      since: 'February 2026',
-      billing: 'Monthly, net 15, invoiced on sold date',
-      exclusivity: '365-day Priority/Hot exclusivity window'
+      sinceISO: '2026-02-11',
+      billingPeriod: 'Net 15',
+      billingBasis: 'Invoiced monthly on the sold date',
+      exclusivity: '365-day Priority/Hot exclusivity window',
+      /* Everyone at the affiliate who can log in. Financialize staff are NOT
+         users — admin access covers every account and lives outside this
+         table entirely. Exactly one user is primary at any time. */
+      users: [
+        { id: 'u-ahg-1', name: 'Jake Wolfe',     title: 'Co-founder',   email: 'jake@annuityheritage.example',    isPrimary: true,  away: false, avatar: null },
+        { id: 'u-ahg-2', name: 'Brayden Miller', title: 'Co-founder',   email: 'brayden@annuityheritage.example', isPrimary: false, away: false, avatar: null },
+        { id: 'u-ahg-3', name: 'Dana Ortiz',     title: 'Media buyer',  email: 'dana@annuityheritage.example',    isPrimary: false, away: true,  avatar: null }
+      ]
     },
     opx: {
       id: 'opx',
       name: 'OptiLabX Media',
       shortName: 'OptiLabX',
-      status: 'Active',
       rateCard: 'Tiered CPL — $102 / $90 / $27',
       revSharePct: 0,
       ageBand: '45–79',                 /* negotiated exception, not an error */
@@ -257,13 +268,33 @@
       products: 'Annuity + Life',
       integration: 'Our landing pages',
       integrationNote: 'Traffic driven to Financialize-hosted LPs.',
-      accountManager: 'Logan Randall',
-      partnerContact: 'Jake — jake@optilabx.example',
-      since: 'November 2025',
-      billing: 'Monthly, net 30, invoiced on received date',
-      exclusivity: '365-day Priority/Hot exclusivity window'
+      sinceISO: '2025-11-03',
+      billingPeriod: 'Net 30',
+      billingBasis: 'Invoiced monthly on the received date',
+      exclusivity: '365-day Priority/Hot exclusivity window',
+      users: [
+        { id: 'u-opx-1', name: 'Alex Stark',   title: 'Founder',          email: 'alex@optilabx.example',   isPrimary: true,  away: false, avatar: null },
+        { id: 'u-opx-2', name: 'Priya Nair',   title: 'Head of media',    email: 'priya@optilabx.example',  isPrimary: false, away: false, avatar: null },
+        { id: 'u-opx-3', name: 'Sam Whitaker', title: 'Ops coordinator',  email: 'sam@optilabx.example',    isPrimary: false, away: false, avatar: null }
+      ]
     }
   };
+
+  /* Our side of the relationship. Fixed contacts, not per-partner data. */
+  var ACCOUNT_MANAGER = {
+    name: 'Logan Randall',
+    title: 'Affiliate Performance Manager',
+    email: 'logan@financialize.com',
+    /* Generic chat entry point in the mock. Production should deep-link the
+       partner straight into a DM — see ADMIN-MAPPING.md. */
+    chatUrl: 'https://chat.google.com/'
+  };
+  var BILLING_CONTACTS = [
+    { name: 'Cassie Jensen',    title: 'AP / Controller', email: 'accounting@financialize.com',
+      note: 'Billing questions and payment status' },
+    { name: 'Christine Aquino', title: 'Reporting',       email: 'christine.aquino@financialize.com',
+      note: 'Monthly invoice reports' }
+  ];
 
   /* Accepts the current partner id, and still accepts the legacy 'revshare' /
      'cpl' values that used to double as partner ids so old bookmarks and
@@ -278,6 +309,93 @@
 
   function partner(partnerId) {
     return PARTNERS[resolvePartnerId(partnerId)];
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Affiliate users                                                        */
+  /* ---------------------------------------------------------------------- */
+
+  /* The mock persists user edits (primary contact, titles, away flag,
+     avatars) to sessionStorage so a change made on the Account page is
+     visible on the Partnership summary without a backend. In production this
+     is an affiliate_users table — see ADMIN-MAPPING.md §1a. */
+  function usersFor(partnerId) {
+    var pid = resolvePartnerId(partnerId);
+    try {
+      var saved = sessionStorage.getItem('fz_users_' + pid);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    /* Deep copy so callers can mutate then save without touching the seed. */
+    return JSON.parse(JSON.stringify(PARTNERS[pid].users));
+  }
+
+  function saveUsers(partnerId, users) {
+    var pid = resolvePartnerId(partnerId);
+    try { sessionStorage.setItem('fz_users_' + pid, JSON.stringify(users)); } catch (e) {}
+  }
+
+  function primaryContact(partnerId) {
+    var users = usersFor(partnerId);
+    for (var i = 0; i < users.length; i++) if (users[i].isPrimary) return users[i];
+    return users[0] || null;
+  }
+
+  function setPrimaryContact(partnerId, userId) {
+    var users = usersFor(partnerId);
+    users.forEach(function (u) { u.isPrimary = u.id === userId; });
+    saveUsers(partnerId, users);
+    return users;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Derived partner status                                                 */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * DERIVED, never stored: a partner is Active if we accepted at least one
+   * of their leads in the trailing month. In production:
+   *
+   *   SELECT COUNT(*) FROM leads
+   *    WHERE partner_id = ? AND status = 'paid'
+   *      AND received_at >= NOW() - INTERVAL 1 MONTH
+   *
+   * Declared before ALL_LEADS is generated, so it must be CALLED only after
+   * module init completes — which is every real caller, since pages call it
+   * from the UI layer.
+   */
+  function isPartnerActive(partnerId) {
+    var pid = resolvePartnerId(partnerId);
+    var cutoff = addDays(TODAY, -30).getTime();
+    var lastAccepted = null;
+    for (var i = ALL_LEADS.length - 1; i >= 0; i--) {
+      var l = ALL_LEADS[i];
+      if (l.partnerId !== pid || l.status !== 'paid') continue;
+      if (!lastAccepted || l.receivedAt > lastAccepted) lastAccepted = l.receivedAt;
+      if (l.receivedAt.getTime() >= cutoff) {
+        return { active: true, lastAcceptedAt: l.receivedAt };
+      }
+    }
+    return { active: false, lastAcceptedAt: lastAccepted };
+  }
+
+  /** Average raw leads per week, trailing 28 days. */
+  function avgWeeklyVolume(partnerId) {
+    var pid = resolvePartnerId(partnerId);
+    var cutoff = addDays(TODAY, -27).getTime();
+    var n = 0;
+    for (var i = 0; i < ALL_LEADS.length; i++) {
+      var l = ALL_LEADS[i];
+      if (l.partnerId === pid && l.receivedAt.getTime() >= cutoff) n++;
+    }
+    return Math.round(n / 4);
+  }
+
+  function fmtSince(partnerId) {
+    var iso = partner(partnerId).sinceISO;
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+    if (!m) return '—';
+    return new Date(+m[1], +m[2] - 1, +m[3])
+      .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }
 
   /** Criteria labels must carry the partner's negotiated band. */
@@ -378,6 +496,26 @@
         { id: 'opx_span_social', label: 'Spanish — social', share: 0.42, quality: 0.88 }
       ]
     },
+    /* Inactive campaigns. perDay [0,0] so they generate no leads — which is
+       exactly why they are inactive. Today `active` is a manual flip in the
+       admin system; the intended rule (see ADMIN-MAPPING.md §2) is DERIVED:
+       auto-active while leads arrive, auto-inactive after 6 months without
+       one. These two rows are what that rule would have flipped. */
+    {
+      id: '561', name: 'Annuity — Nurture reactivation', partnerId: 'ahg', comp: 'revshare',
+      active: false, launched: 'Feb 2026',
+      product: 'Annuity', kind: 'aged', perDay: [0, 0], acceptRate: 0.5,
+      sold: { priority: 0, hot: 0, auction: 0, marketplace: 0 },
+      rejectMix: [['duplicate', 1]], cycle: [10, 20], subids: []
+    },
+    {
+      id: '433', name: 'Annuity — Social', partnerId: 'opx', comp: 'cpl',
+      active: false, launched: 'Dec 2025',
+      product: 'Annuity', kind: 'fresh', perDay: [0, 0], acceptRate: 0.5,
+      sold: { priority: 0, hot: 0, auction: 0, marketplace: 0 },
+      rejectMix: [['ipqs', 1]], cycle: [8, 16], subids: []
+    },
+
     {
       id: '592', name: 'Life — Landing page', partnerId: 'opx', comp: 'cpl',
       active: true, launched: 'May 2026',
@@ -402,6 +540,17 @@
   }
   function activeCampaignsFor(partnerId) {
     return campaignsFor(partnerId).filter(function (c) { return c.active; });
+  }
+  function inactiveCampaignsFor(partnerId) {
+    return campaignsFor(partnerId).filter(function (c) { return !c.active; });
+  }
+
+  /** Partner-facing billing label for a campaign — the MODEL only, no rates.
+      Rates live behind "View details", not in the summary table. */
+  function compLabelForCampaign(c) {
+    if (c.comp === 'revshare') return 'Revenue share';
+    var card = PARTNERS[c.partnerId].rateCard || '';
+    return card.indexOf('Tiered') === 0 ? 'Tiered CPL' : 'Flat CPL';
   }
   function campaignById(id) { return CAMPAIGN_BY_ID[id] || null; }
 
@@ -584,6 +733,38 @@
      Sunday is worked until Monday — it is not a restriction, it is where the
      lead lands in the queue. Indexed by JS getDay(). */
   var IDEAL_DOW_SPLIT = [0.00, 0.20, 0.19, 0.19, 0.19, 0.15, 0.08];
+
+  /* ---------------------------------------------------------------------- */
+  /* Lead criteria — the Targeting page                                     */
+  /* ---------------------------------------------------------------------- */
+
+  /* What makes a lead payable, per product. The age row is a FUNCTION of the
+     partner because the accepted band is a negotiated commercial term —
+     OptiLabX runs 45–79 against the standard 45–75, and hardcoding the
+     standard band has already cost a $5,194 invoice variance. */
+  function leadCriteria(partnerId) {
+    var p = partner(partnerId);
+    var exception = p.ageBand !== '45–75';
+    return {
+      annuity: [
+        { label: 'Age', value: p.ageBand + (exception ? ' — negotiated for your account (standard is 45–75)' : ''), highlight: exception },
+        { label: 'Investable assets', value: 'Greater than $25,000 — under $25K never pays, on any comp model' },
+        { label: 'Location', value: 'US only. New York is never accepted.' },
+        { label: 'Phone', value: 'Valid, working US number' },
+        { label: 'Email', value: 'Valid, working' },
+        { label: 'Consent', value: 'TrustedForm or Jornaya certificate — prior express written consent' },
+        { label: 'Transmission', value: 'Real time, via our landing page or authorized API' }
+      ],
+      life: [
+        { label: 'Age', value: '25 to 73' },
+        { label: 'Household income', value: '$40,000 or greater' },
+        { label: 'Declared health', value: 'Good, Average, or Excellent — Poor not accepted' },
+        { label: 'Coverage amount', value: 'Greater than $50,000. Final Expense excluded.' },
+        { label: 'Location', value: 'US only. New York is never accepted.' },
+        { label: 'Consent', value: 'TrustedForm or Jornaya certificate' }
+      ]
+    };
+  }
 
   /* ---------------------------------------------------------------------- */
   /* Generation                                                             */
@@ -1431,6 +1612,19 @@
     CAMPAIGNS: CAMPAIGNS,
     campaignsFor: campaignsFor,
     activeCampaignsFor: activeCampaignsFor,
+    inactiveCampaignsFor: inactiveCampaignsFor,
+    compLabelForCampaign: compLabelForCampaign,
+
+    ACCOUNT_MANAGER: ACCOUNT_MANAGER,
+    BILLING_CONTACTS: BILLING_CONTACTS,
+    usersFor: usersFor,
+    saveUsers: saveUsers,
+    primaryContact: primaryContact,
+    setPrimaryContact: setPrimaryContact,
+    isPartnerActive: isPartnerActive,
+    avgWeeklyVolume: avgWeeklyVolume,
+    fmtSince: fmtSince,
+    leadCriteria: leadCriteria,
     campaignById: campaignById,
     compForCampaign: compForCampaign,
     compsFor: compsFor,

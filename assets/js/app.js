@@ -29,8 +29,13 @@
     { href: 'index.html',          label: 'Performance',      ico: '▤' },
     { href: 'leads.html',          label: 'Lead table',       ico: '☰' },
     { href: 'health.html',         label: 'Health scorecard', ico: '◈' },
+    { href: 'targeting.html',      label: 'Targeting',        ico: '◎' },
     { href: 'duplicate-check.html',label: 'Duplicate check',  ico: '⌕' },
     { href: 'setup.html',          label: 'Setup & docs',     ico: '⚙' }
+  ];
+
+  var ACCOUNT_NAV = [
+    { href: 'account.html', label: 'Account & users', ico: '◉' }
   ];
 
   /* TEMPORARY AND INTERNAL. Not part of the partner portal — it exists so the
@@ -145,21 +150,37 @@
               (n.href === active ? ' class="is-active"' : '') + '>' +
               '<span class="ico">' + n.ico + '</span>' + n.label + '</a>';
           }).join('') +
-          '<div class="nav-label" style="margin-top:18px">Internal — temporary</div>' +
+          '<div class="nav-label" style="margin-top:14px">Account</div>' +
+          ACCOUNT_NAV.map(function (n) {
+            return '<a href="' + linkTo(n.href, state) + '"' +
+              (n.href === active ? ' class="is-active"' : '') + '>' +
+              '<span class="ico">' + n.ico + '</span>' + n.label + '</a>';
+          }).join('') +
+          '<div class="nav-label" style="margin-top:14px">Internal — temporary</div>' +
           INTERNAL_NAV.map(function (n) {
             return '<a href="' + linkTo(n.href, state) + '"' +
               (n.href === active ? ' class="is-active"' : '') + '>' +
               '<span class="ico">' + n.ico + '</span>' + n.label + '</a>';
           }).join('') +
         '</nav>' +
-        /* No comp model here. It is set PER CAMPAIGN, so putting one model
-           beside the account name misrepresents any partner running more than
-           one — see the Partnership summary for the per-campaign breakdown. */
-        '<div class="sidebar-foot">' +
-          '<strong>' + esc(p.name) + '</strong><br>' +
-          esc(p.status) + ' · ' + D.activeCampaignsFor(state.partnerId).length + ' active campaigns' +
-          '<div class="brand-tagline">Built for Agents. Backed by Purpose.<br>Driven by Growth.</div>' +
-        '</div>';
+        /* Active/inactive here is DERIVED — one accepted lead in the trailing
+           month — not a stored flag. No comp model here either: it is set per
+           campaign and one model beside the account name misrepresents any
+           partner running more than one. The whole block links to the Account
+           page. */
+        (function () {
+          var act = D.isPartnerActive(state.partnerId);
+          return '<a class="sidebar-foot" href="' + linkTo('account.html', state) + '" ' +
+            'style="display:block;text-decoration:none;color:inherit;cursor:pointer">' +
+            '<strong>' + esc(p.name) + '</strong><br>' +
+            /* Pinned hex, not theme tokens: the rail is navy in BOTH themes,
+               and light-mode --good-text is a dark green that vanishes on it.
+               #22C55E and #fab219 both clear 3:1 on the navy surface. */
+            '<span style="color:' + (act.active ? '#22C55E' : '#fab219') + ';font-weight:600">' +
+              (act.active ? '● Active' : '● Inactive') + '</span>' +
+            ' · ' + D.activeCampaignsFor(state.partnerId).length + ' active campaigns' +
+          '</a>';
+        })();
     }
 
     if (top) {

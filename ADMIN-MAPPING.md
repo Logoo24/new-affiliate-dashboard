@@ -56,15 +56,49 @@ One row per affiliate. Drives the Partnership summary screen and every criteria 
 |---|---|---|---|
 | `partner_id` | everything | **EXISTS** | |
 | `name` | Partnership summary, sidebar | **EXISTS** | |
-| `status` (active/paused) | Partnership summary badge | **EXISTS** | |
+| **Active / Inactive** | Partnership summary badge, sidebar footer | **DERIVED — NEEDS BUILDING** | **Not a stored flag.** Active = at least one **accepted** lead in the trailing month; otherwise the badge turns orange and reads Inactive, with the last-accepted date shown. `SELECT COUNT(*) FROM leads WHERE partner_id = ? AND status='paid' AND received_at >= NOW() - INTERVAL 1 MONTH`. The old stored `status` field is superseded and should not drive anything |
 | `rev_share_pct` | Your-share column, earnings tiles | **PARTIAL** | Exists but is hardcoded 40% in places. annuity.org runs at 85% — it must be per partner |
-| `age_band_min` / `age_band_max` | **every criteria label** | **NEEDS BUILDING** | See the warning below |
-| `products` | Partnership summary | **EXISTS** | |
-| `integration_type` | Partnership summary | **EXISTS** | API vs our landing pages |
-| `partner_since` | Partnership summary | **EXISTS** | |
-| `billing_terms` | Partnership summary | **NEEDS BUILDING** | Net 15 / net 30, and whether invoicing is on received or sold date |
-| `account_manager` | Partnership summary | **PARTIAL** | Exists in the CRM, not joined to the portal |
-| `partner_contact` | Partnership summary | **EXISTS** | |
+| `age_band_min` / `age_band_max` | every criteria label, **Targeting page** | **NEEDS BUILDING** | See the warning below |
+| `products` | per-campaign only now | **EXISTS** | Removed from the Partnership summary — products and integration churn per campaign, so they render only in the campaigns table |
+| `integration_type` | per-campaign only now | **EXISTS** | Same |
+| `partner_since` | "Partner since" under the badge | **LIKELY MISSING — confirm** | Must reflect the date the partnership was actually added. **Logan flags this may not exist in the admin centre today.** If absent, backfill from contract date or first campaign creation, then store properly |
+| `billing_period` | Billing details card | **NEEDS BUILDING** | Net 7 / Net 15 / Net 30, admin-editable per partner. Most run Net 30 |
+| `billing_basis` | Billing details card | **NEEDS BUILDING** | Whether invoicing is on received or sold date |
+| `account_manager` | Account manager block | **PARTIAL** | Exists in the CRM, not joined to the portal. Shows name, title, email (`logan@financialize.com`), an Email button (`mailto:`), and a **Google Chat button — currently a generic chat.google.com link; production should deep-link into a DM with the manager** |
+| Billing contacts | Billing details card | **CONSTANT** | Cassie Jensen `accounting@financialize.com` (billing questions), Christine Aquino `christine.aquino@financialize.com` (invoice reports). Fine as config, not per-partner data |
+
+---
+
+## 1a. Affiliate users — NEEDS BUILDING, whole table
+
+An affiliate is a company; several people at that company sign in as separate **users** of the one
+account. **Financialize staff are not users** — admin access covers every account and lives
+outside this table.
+
+```
+affiliate_users
+  user_id      PK
+  partner_id   FK — every user belongs to exactly one affiliate
+  name         VARCHAR
+  email        VARCHAR  UNIQUE — the login
+  title        VARCHAR  NULL   — editable by any user on the account
+  is_primary   BOOLEAN         — exactly ONE true per partner_id, enforced
+  away         BOOLEAN         — the subtle "on vacation" marker
+  avatar       BLOB/URL NULL   — profile picture, user-uploaded
+  password     via the auth system, self-service reset
+```
+
+| Behaviour | Rule |
+|---|---|
+| Primary contact | Exactly one per affiliate. Shown on the Partnership summary as "Your primary contact." **Any user on the account may change it** — it is their team, not ours to gate |
+| Edit titles / emails | Any user on the account |
+| Password reset | Self-service for their own; any user may trigger a reset **email** for a teammate (never sets a password directly) |
+| Away marker | User-toggled, deliberately subtle — a muted chip, no status colour |
+| Add user | Invitation email; invitee sets their own password |
+
+In the mock: `usersFor()` / `saveUsers()` / `setPrimaryContact()` in `data.js`, persisted to
+sessionStorage so edits on the Account page show up on the Partnership summary. The Account page
+is `account.html`.
 
 > **`age_band_min` / `age_band_max` is the highest-risk row in this document.** OptiLabX runs a
 > negotiated **45–79** band rather than the standard 45–75. That is a commercial term, not a data
@@ -87,7 +121,7 @@ side by side, and the lead table renders them in one view with different columns
 | **`comp_model`** | **the entire column projection** | **NEEDS BUILDING** | `revshare` \| `cpl`. Today comp model is effectively an account-level assumption |
 | `rev_share_pct` override | Your-share column | **NEEDS BUILDING** | Optional; falls back to the partner rate |
 | `cpl_tier` / rate card | invoicing | **PARTIAL** | Tiered CPL exists but is not exposed per campaign |
-| `active` | Partnership summary listing | **EXISTS** | A paused campaign keeps its history but is not listed as live |
+| `active` | Partnership summary listing + inactive count | **PARTIAL — rule change requested** | Today this is a **manual flip** in the admin system. **Logan wants it derived:** a campaign is automatically marked active while leads arrive through its landing page or API, and automatically marked **inactive after 6 months without a single lead**. The Partnership summary shows "this account has X campaigns marked as inactive" from this field. Keep a manual override for hard pauses, but the default lifecycle should be automatic |
 | `launched_on` | Partnership summary | **PARTIAL** | Derivable from first lead; better stored |
 | `product` | Partnership summary, lead table | **EXISTS** | |
 
@@ -343,6 +377,23 @@ version must match it, not compete with it.
 
 In the mock: `SUPPRESSION`, `suppressionSample()`, `suppressionManifest()` in `data.js`. The
 download button serves a small sample with fabricated digests so the format is reviewable.
+
+## 7a. Partnership summary metrics & Targeting page
+
+Added August 6. All derived or config — nothing here needs a new admin-editable field beyond
+what §1 and §5 already list.
+
+| Element | Source | Status |
+|---|---|---|
+| Health gauge (Partnership summary) | the existing health engine, account-wide; click-through to the scorecard | **derived** — same inputs as §6 |
+| Average weekly volume | raw leads, trailing 28 days ÷ 4 | **derived** |
+| Accepted last 30 days | lead table | **derived** |
+| Campaign comp-model label | "Revenue share" / "Tiered CPL" / "Flat CPL" — the **model only**, no rates in the summary table; rates live behind View details | derived from campaign `comp_model` + rate card shape |
+| Targeting — call-centre hours, ideal windows, day split | §5b / §5c configuration | **NEEDS BUILDING** as config |
+| Targeting — lead criteria per product | standard criteria + the partner's `age_band` override (§1) | age band **NEEDS BUILDING**; the rest is constant criteria that should live in config, not code |
+| Targeting — states-we-need widget | §5a state demand | **NEEDS BUILDING** |
+
+---
 
 ## 8. Still unmapped
 
