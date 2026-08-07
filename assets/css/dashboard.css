@@ -784,6 +784,9 @@ table.data tfoot td {
   color: var(--ink);
   border-color: var(--series-1);
 }
+/* Inside a heading the inline-flex box rides 3px low against the larger
+   line box; nudge it back to optical centre. Table cells are unaffected. */
+h2 .tip-btn, h3 .tip-btn { vertical-align: 3px; }
 .tip-btn:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
 
 #fz-tipbox {
@@ -1010,6 +1013,12 @@ body.is-col-resizing { cursor: col-resize; user-select: none; }
   display: flex;
   gap: 12px;
   background: var(--surface-1);
+}
+/* When a card IS the control (Setup's action and document cards), it should
+   answer the cursor — a static card that navigates reads as broken. */
+a.user-card:hover, button.user-card:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
 }
 .avatar {
   width: 46px; height: 46px; flex: 0 0 46px;

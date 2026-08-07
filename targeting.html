@@ -112,9 +112,10 @@
     document.getElementById('hours-body').innerHTML =
       [['Mon–Fri', '9:00 AM – 7:00 PM local'],
        ['Saturday', '9:00 AM – 8:00 PM ET'],
-       ['Sunday', 'Closed']].map(function (r) {
-        return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;' +
-          'border-bottom:1px solid var(--grid)">' +
+       ['Sunday', 'Closed']].map(function (r, i, arr) {
+        /* No rule under the last row — the card-foot brings its own. */
+        return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0' +
+          (i < arr.length - 1 ? ';border-bottom:1px solid var(--grid)' : '') + '">' +
           '<span style="font-weight:600">' + r[0] + '</span>' +
           '<span style="color:var(--ink-2)">' + r[1] + '</span></div>';
       }).join('');

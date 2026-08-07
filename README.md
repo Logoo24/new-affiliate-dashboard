@@ -18,6 +18,8 @@ implementation into the current system is unambiguous.
 model, and the field list the build is waiting on. **[ADMIN-MAPPING.md](ADMIN-MAPPING.md)** is the
 companion: every dashboard element mapped to the admin setting and data field behind it, with what
 exists today versus what needs building. Keep it current as fields are added.
+**[IMPROVEMENTS.md](IMPROVEMENTS.md)** is the forward plan — what would make the portal more
+valuable to the affiliate beyond what is built, phased by value per unit of effort.
 
 ## Running it
 
