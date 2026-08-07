@@ -581,12 +581,15 @@
     var head = '<thead><tr><th>Tier</th><th class="num">Sold</th><th class="num">Share</th>' +
       (showMoney ? '<th class="num revshare-col">You earned</th>' : '') + '</tr></thead>';
 
+    /* Tiers with zero sales collapse into one muted line instead of padding
+       the table with "0 — —" rows — two dead rows on every account made the
+       new tiers read like a standing failure rather than a pending launch. */
+    var awaiting = [];
     var body = order.map(function (k) {
       var n = sm.byType[k] || 0;
       if (!n && (k === 'livetransfer' || k === 'appointment')) {
-        return '<tr style="opacity:.55"><td>' + A.soldBadge(k) + '</td>' +
-          '<td class="num">0</td><td class="num">—</td>' +
-          (showMoney ? '<td class="num revshare-col">—</td>' : '') + '</tr>';
+        awaiting.push(k);
+        return '';
       }
       var earned = 0;
       if (showMoney) {
@@ -598,6 +601,11 @@
         (showMoney ? '<td class="num revshare-col">' + (earned ? A.fmtMoney0(earned) : '—') + '</td>' : '') +
         '</tr>';
     }).join('');
+    if (awaiting.length) {
+      body += '<tr style="opacity:.6"><td colspan="' + (showMoney ? 4 : 3) + '" ' +
+        'style="font-size:12.5px;color:var(--ink-2)">Not yet sold in this window: ' +
+        awaiting.map(function (k) { return A.soldBadge(k); }).join(' ') + '</td></tr>';
+    }
 
     document.getElementById('tier-table').innerHTML = head + '<tbody>' + body + '</tbody>';
     document.getElementById('tier-foot').innerHTML =

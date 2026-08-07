@@ -732,9 +732,27 @@
     });
   }
 
+  /* ONE account-manager block, used by every page that shows one (the
+     Partnership summary hero and Setup & docs today). Two pages rendering
+     the same person in two designs read as two different contacts. */
+  function accountManagerBlock() {
+    var am = D.ACCOUNT_MANAGER;
+    return '<div class="contact-block">' +
+      '<div class="hero-label" style="margin-bottom:6px">Account manager</div>' +
+      '<div class="who">' + esc(am.name) + '</div>' +
+      '<div class="role">' + esc(am.title) + '</div>' +
+      '<div class="mail"><a href="mailto:' + esc(am.email) + '">' + esc(am.email) + '</a></div>' +
+      '<div class="actions">' +
+        '<a class="btn btn-sm" href="mailto:' + esc(am.email) + '" target="_blank" rel="noopener">✉ Email</a>' +
+        '<a class="btn btn-sm" href="' + esc(am.chatUrl) + '" target="_blank" rel="noopener">💬 Google Chat</a>' +
+      '</div>' +
+    '</div>';
+  }
+
   global.FZApp = {
     params: params,
     shell: shell,
+    accountManagerBlock: accountManagerBlock,
     filterBar: filterBar,
     linkTo: linkTo,
     isoDate: isoDate,

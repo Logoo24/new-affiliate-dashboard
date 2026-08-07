@@ -57,7 +57,17 @@
   'use strict';
   var D = FZData, A = FZApp;
 
-  var PER_PAGE = 50;
+  /* Page size is a USER PREFERENCE, like column choices and widths — a
+     media buyer scanning 56k rows at 50/page faces 1,100 pages. Persisted
+     the same way as the rest of the table prefs (sessionStorage in the
+     mock; affiliate_users in production — ADMIN-MAPPING B10). */
+  var PAGE_SIZES = [50, 100, 250];
+  var PER_PAGE = (function () {
+    try {
+      var v = parseInt(sessionStorage.getItem('fz_pagesize'), 10);
+      return PAGE_SIZES.indexOf(v) !== -1 ? v : 50;
+    } catch (e) { return 50; }
+  })();
   var state = A.params({ defaultRange: '30d' });
 
   A.shell(state, {
@@ -169,14 +179,33 @@
 
   function renderPager(totalPages) {
     var host = document.getElementById('pager');
-    if (totalPages <= 1) { host.textContent = A.fmtInt(rows.length) + ' leads'; return; }
-    var startN = (page - 1) * PER_PAGE + 1;
-    var endN = Math.min(page * PER_PAGE, rows.length);
-    host.innerHTML =
-      '<span>Showing ' + A.fmtInt(startN) + '–' + A.fmtInt(endN) + ' of ' + A.fmtInt(rows.length) + '</span>' +
-      (page > 1 ? '<button class="btn btn-sm" data-pg="' + (page - 1) + '">← Prev</button>' : '') +
-      '<span>Page ' + page + ' of ' + totalPages + '</span>' +
-      (page < totalPages ? '<button class="btn btn-sm" data-pg="' + (page + 1) + '">Next →</button>' : '');
+    var sizeSel = '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;' +
+      'color:var(--ink-2)">Rows <select id="page-size">' +
+      PAGE_SIZES.map(function (s) {
+        return '<option value="' + s + '"' + (s === PER_PAGE ? ' selected' : '') + '>' + s + '</option>';
+      }).join('') + '</select></label>';
+
+    if (totalPages <= 1) {
+      host.innerHTML = '<span>' + A.fmtInt(rows.length) + ' leads</span>' +
+        (rows.length > PAGE_SIZES[0] ? sizeSel : '');
+    } else {
+      var startN = (page - 1) * PER_PAGE + 1;
+      var endN = Math.min(page * PER_PAGE, rows.length);
+      host.innerHTML =
+        '<span>Showing ' + A.fmtInt(startN) + '–' + A.fmtInt(endN) + ' of ' + A.fmtInt(rows.length) + '</span>' +
+        sizeSel +
+        (page > 1 ? '<button class="btn btn-sm" data-pg="' + (page - 1) + '">← Prev</button>' : '') +
+        '<span>Page ' + page + ' of ' + A.fmtInt(totalPages) + '</span>' +
+        (page < totalPages ? '<button class="btn btn-sm" data-pg="' + (page + 1) + '">Next →</button>' : '');
+    }
+
+    var ps = host.querySelector('#page-size');
+    if (ps) ps.addEventListener('change', function () {
+      PER_PAGE = parseInt(ps.value, 10);
+      try { sessionStorage.setItem('fz_pagesize', String(PER_PAGE)); } catch (e) {}
+      page = 1;
+      renderTable();
+    });
 
     /* Paging is in-page now rather than a query-string reload, so the active
        sort and any column changes survive it. */

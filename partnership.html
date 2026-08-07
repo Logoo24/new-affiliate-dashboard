@@ -27,13 +27,9 @@
               <div class="hero-figure" id="hero-name" style="font-size:34px;line-height:1.15">—</div>
               <div id="hero-status" style="margin-top:10px"></div>
             </div>
-            <div class="contact-block">
-              <div class="hero-label" style="margin-bottom:6px">Account manager</div>
-              <div class="who" id="am-name"></div>
-              <div class="role" id="am-title"></div>
-              <div class="mail" id="am-mail"></div>
-              <div class="actions" id="am-actions"></div>
-            </div>
+            <!-- Filled by A.accountManagerBlock() — one shared block, same
+                 on every page that shows the account manager. -->
+            <div id="am-host" style="display:contents"></div>
             <div class="contact-block">
               <div class="hero-label" style="margin-bottom:6px">Your primary contact</div>
               <div class="who" id="pc-name"></div>
@@ -156,14 +152,7 @@
       : '');
 
   /* ---- account manager --------------------------------------------------- */
-  var am = D.ACCOUNT_MANAGER;
-  document.getElementById('am-name').textContent = am.name;
-  document.getElementById('am-title').textContent = am.title;
-  document.getElementById('am-mail').innerHTML =
-    '<a href="mailto:' + A.esc(am.email) + '">' + A.esc(am.email) + '</a>';
-  document.getElementById('am-actions').innerHTML =
-    '<a class="btn btn-sm" href="mailto:' + A.esc(am.email) + '" target="_blank" rel="noopener">✉ Email</a>' +
-    '<a class="btn btn-sm" href="' + A.esc(am.chatUrl) + '" target="_blank" rel="noopener">💬 Google Chat</a>';
+  document.getElementById('am-host').innerHTML = A.accountManagerBlock();
 
   /* ---- primary contact --------------------------------------------------- */
   /* One primary per affiliate, editable by any of that affiliate's users.

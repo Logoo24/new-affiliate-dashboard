@@ -168,15 +168,10 @@
         : '');
   })();
 
-  /* ---- contact ------------------------------------------------------------ */
-  document.getElementById('contact').innerHTML =
-    '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">' +
-      '<div style="flex:1;min-width:220px">' +
-        '<div style="font-size:15px;font-weight:600">Logan Randall</div>' +
-        '<div style="font-size:13px;color:var(--ink-2)">Affiliate Performance Manager</div>' +
-      '</div>' +
-      '<a class="btn btn-primary" href="mailto:logan@financialize.com">Email Logan</a>' +
-    '</div>';
+  /* ---- contact ------------------------------------------------------------
+     The same shared block the Partnership summary shows — one design for
+     the same person everywhere. */
+  document.getElementById('contact').innerHTML = A.accountManagerBlock();
 
   if (window.FZTable) FZTable.enhanceAll();
 

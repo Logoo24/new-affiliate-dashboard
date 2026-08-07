@@ -1235,6 +1235,24 @@ a.user-card:hover, button.user-card:hover {
 .notice-info    { border-left: 3px solid var(--series-1); }
 .notice-warn    { border-left: 3px solid var(--warning); }
 .notice-mock    { border-left: 3px solid var(--muted-mark); background: var(--surface-2); }
+/* An internal-note card sitting on a PARTNER-FACING page. Dashed warn border
+   and a standing badge so no screenshot ever mistakes it for partner
+   content. (Wholly internal pages carry their own banner instead.) */
+.card.is-internal { border: 1px dashed var(--warning); }
+.card.is-internal > .card-head { background: var(--surface-2); }
+.card.is-internal > .card-head h2::before {
+  content: 'INTERNAL';
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--ink-2);
+  border: 1px solid var(--warning);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-right: 8px;
+  vertical-align: 2px;
+}
 
 /* Build note — visible only in the mock-up, flagged for the dev handoff */
 .mocknote {

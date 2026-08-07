@@ -281,15 +281,25 @@
       };
     }).sort(function (a, b) { return b.m.raw - a.m.raw; });
 
+    /* The management-grid columns (score × volume tier) lead the row — this
+       table IS the grid, and the decision columns should not live a scroll
+       away from the name they describe. */
     document.getElementById('partner-table').innerHTML =
-      '<thead><tr><th>Affiliate</th><th>Aff ID</th><th class="num">Leads</th>' +
+      '<thead><tr><th>Affiliate</th>' +
+      '<th class="num">Health</th><th>Band (internal)</th><th class="num">Leads/day (30d)</th><th>Vol tier</th>' +
+      '<th>Aff ID</th><th class="num">Leads</th>' +
       '<th class="num">Accepted</th><th class="num">Sold</th><th class="num">Campaigns</th>' +
       '<th>Comp model</th><th>Status</th>' +
-      '<th class="num">Health</th><th>Band (internal)</th><th class="num">Leads/day (30d)</th><th>Vol tier</th>' +
       '<th></th></tr></thead><tbody>' +
       rows.map(function (r) {
         return '<tr>' +
           '<td><strong>' + A.esc(r.p.name) + '</strong></td>' +
+          '<td class="num" style="font-weight:700">' + r.hs.score +
+            (r.hs.provisional ? '<span style="color:var(--ink-muted);font-weight:400">*</span>' : '') + '</td>' +
+          '<td><span class="badge ' + r.hs.tier.badge + '"><span class="dot"></span>' +
+            A.esc(r.hs.tier.internal) + '</span></td>' +
+          '<td class="num">' + r.perDay.toFixed(1) + '</td>' +
+          '<td style="white-space:nowrap">' + volTier(r.perDay) + '</td>' +
           '<td class="lead-id">' + A.esc(r.p.affiliateId || '—') + '</td>' +
           '<td class="num">' + A.fmtInt(r.m.raw) + '</td>' +
           '<td class="num">' + A.fmtInt(r.m.paid) + '</td>' +
@@ -298,12 +308,6 @@
           '<td>' + A.esc(r.comps) + '</td>' +
           '<td><span class="badge ' + (r.act.active ? 'badge-good' : 'badge-warn') + '">' +
             '<span class="dot"></span>' + (r.act.active ? 'Active' : 'Inactive') + '</span></td>' +
-          '<td class="num" style="font-weight:700">' + r.hs.score +
-            (r.hs.provisional ? '<span style="color:var(--ink-muted);font-weight:400">*</span>' : '') + '</td>' +
-          '<td><span class="badge ' + r.hs.tier.badge + '"><span class="dot"></span>' +
-            A.esc(r.hs.tier.internal) + '</span></td>' +
-          '<td class="num">' + r.perDay.toFixed(1) + '</td>' +
-          '<td style="white-space:nowrap">' + volTier(r.perDay) + '</td>' +
           '<td style="text-align:right"><a class="btn btn-sm" href="' +
             A.linkTo('partnership.html', state, { partner: r.id }) + '">View →</a></td>' +
         '</tr>';
