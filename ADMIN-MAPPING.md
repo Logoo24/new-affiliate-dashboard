@@ -628,7 +628,7 @@ Steps per path (sources: Onboarding packet V7.16.26, LP & Pixel Guide V7.14.26, 
 
 | Path | Steps |
 |---|---|
-| Landing pages | Tracking link (with parameter picker) → **place pixel** (required for rev share, skippable for CPL) → creatives review → test lead (test URL, first name `dev_test`, ZIP 99996, unique email+phone, both-sides confirmation) → go live |
+| Landing pages | Tracking link (with parameter picker) → **place pixel** (required for rev share, skippable for CPL) → creatives review → test leads (**one accepted AND one deliberately rejected** — pixel must fire on the first and stay silent on the second; testing through the affiliate's own tracking link is fine so long as it lands on the test URL with test values filled; first name `dev_test`, ZIP 99996, unique email+phone; both-sides confirmation) → go live |
 | API | CID + docs → build integration (headers, exact option text, Consumer Blocked) → creatives review → test lead (posts to production; response says accepted/rejected) → go live |
 
 | Field / element | Source in mock | Status |

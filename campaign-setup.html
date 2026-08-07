@@ -311,7 +311,11 @@
     var h;
     if (su.method === 'lp') {
       h = '<p style="margin-top:0">Open your test URL — it loads the landing page with test ' +
-        'parameters attached. Submit the form with:</p>' +
+        'parameters attached. <strong>Send two test leads: one that should be accepted, and one ' +
+        'that should be rejected</strong> (break a criteria rule on purpose — an age outside the ' +
+        'band works). Accepted must ' + (su.pixelUrl ? 'fire your pixel; rejected must not.'
+          : 'come back accepted; rejected must not.') + ' That proves the whole path, not half ' +
+        'of it. On every test:</p>' +
         '<ul class="checklist">' +
         '<li><span class="mark">·</span><span>First name <strong>' + A.esc(D.TEST_LEAD.firstName) +
           '</strong> — how our team spots test rows.</span></li>' +
@@ -320,16 +324,21 @@
         '<li><span class="mark">·</span><span>A <strong>unique email and phone</strong> every ' +
           'test — duplicates get rejected.</span></li></ul>' +
         copyRow('Test URL', testUrl) +
-        '<p style="font-size:13px;color:var(--ink-2)">We confirm the lead accepted on our side' +
+        '<p style="font-size:13px;color:var(--ink-2)">Testing through your own tracking link ' +
+        'instead is fine — many partners do, to prove the whole redirect chain. Just make sure ' +
+        'it ends up at this address, with your tracking parameters filled with test values.</p>' +
+        '<p style="font-size:13px;color:var(--ink-2)">We confirm the accepted lead on our side' +
         (su.pixelUrl ? ', and you confirm your pixel fired with the right transaction ID and ' +
-          'amount. Both confirmations = tested.' : '.') + '</p>';
+          'amount — and stayed silent on the rejected one. Both confirmations = tested.' : '.') + '</p>';
     } else {
       h = '<p style="margin-top:0">There is no separate test endpoint — your first test posts ' +
-        'to production. A <code>success</code> response with a <code>lead_id</code> means we ' +
-        'received it; the response also tells you whether it was accepted. On every test post, ' +
-        'use first name <strong>' + A.esc(D.TEST_LEAD.firstName) + '</strong>, ZIP ' +
-        '<strong>' + A.esc(D.TEST_LEAD.zip) + '</strong>, and a unique email and phone.</p>' +
-        '<p style="font-size:13px;color:var(--ink-2)">We verify the test lead on our side and ' +
+        'to production. <strong>Send two test leads: one that should be accepted, and one that ' +
+        'should be rejected</strong> (break a criteria rule on purpose — an age outside the band ' +
+        'works). The response tells you which way each went; seeing both proves the whole path, ' +
+        'not half of it. On every test post, use first name <strong>' +
+        A.esc(D.TEST_LEAD.firstName) + '</strong>, ZIP <strong>' + A.esc(D.TEST_LEAD.zip) +
+        '</strong>, and a unique email and phone.</p>' +
+        '<p style="font-size:13px;color:var(--ink-2)">We verify both test leads on our side and ' +
         'confirm with you before go-live.</p>';
     }
     if (!su.live) {
