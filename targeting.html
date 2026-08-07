@@ -192,18 +192,11 @@
      lot; see ADMIN-MAPPING §1. */
   (function () {
     var crit = D.leadCriteria(state.partnerId);
-    var products = [];
-    D.campaignsFor(state.partnerId).forEach(function (c) {
-      var p = c.product.toLowerCase();
-      if (products.indexOf(p) === -1 && crit[p]) products.push(p);
-    });
-    if (!products.length) products = ['annuity'];
-    /* Annuity is the primary product and always leads the toggle,
-       regardless of which campaign happens to be listed first. */
-    products.sort(function (a, b) {
-      var ORDER = ['annuity', 'life'];
-      return ORDER.indexOf(a) - ORDER.indexOf(b);
-    });
+    /* Both products always show, even on a single-product account — the
+       criteria are worth reading before a partner expands into the other
+       product, and hiding the toggle read as a missing feature. Annuity is
+       the primary product and leads. */
+    var products = ['annuity', 'life'].filter(function (p) { return crit[p]; });
     var current = products[0];
 
     document.getElementById('criteria-tip-host').innerHTML =
