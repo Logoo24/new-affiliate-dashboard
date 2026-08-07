@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Campaign setup — Financialize Partner Portal</title>
+<link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar" data-shell="sidebar"></aside>
+
+  <div class="main">
+    <header class="topbar" data-shell="topbar"></header>
+
+    <div class="content">
+
+      <!-- Terms strip: everything agreed with Logan, read-only by design.
+           There is deliberately NO edit affordance on any of it. -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2 id="camp-name"></h2>
+            <p class="sub" id="camp-sub"></p>
+          </div>
+          <div class="spacer"></div>
+          <div id="camp-progress"></div>
+        </div>
+        <div class="card-body">
+          <div id="terms-chips" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+        </div>
+        <div class="card-foot">
+          <span>These terms were agreed with Logan before this campaign was created. To change
+          any of them, <a href="mailto:logan@financialize.com">contact him directly</a> — they
+          are not editable here.</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Setup steps</h2>
+            <p class="sub" id="steps-sub"></p>
+          </div>
+        </div>
+        <div class="card-body" id="steps"></div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/data/dataset.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/health.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/tables.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = FZData, A = FZApp;
+
+  var state = A.params();
+  A.shell(state, {
+    active: 'setup.html',
+    title: 'Campaign setup',
+    subtitle: 'Everything this campaign needs before it goes live.'
+  });
+
+  var q = new URLSearchParams(location.search);
+  var su = D.campaignSetup(state.partnerId, q.get('campaign'));
+
+  if (!su) {
+    document.querySelector('.content').innerHTML =
+      '<div class="notice notice-warn"><span class="ico">▲</span><div>' +
+      'That campaign is not on this account. ' +
+      '<a href="' + A.linkTo('setup.html', state) + '">Back to Setup &amp; docs</a>.</div></div>';
+    return;
+  }
+
+  var c = su.campaign;
+
+  /* ---- header ------------------------------------------------------------ */
+  document.getElementById('camp-name').textContent = c.name;
+  document.getElementById('camp-sub').textContent = 'Campaign ID (CID): ' + c.id;
+  document.getElementById('camp-progress').innerHTML = su.complete
+    ? '<span class="badge badge-good"><span class="dot"></span>Live</span>'
+    : '<span class="badge badge-info"><span class="dot"></span>In setup — step ' +
+      (su.doneCount + 1) + ' of ' + su.steps.length + '</span>';
+
+  var METHOD_LABEL = { lp: 'Financialize landing pages', api: 'API integration' };
+  var COMP_LABEL = su.isRev
+    ? 'Revenue share — ' + Math.round((c.revSharePct || 0) * 100) + '%'
+    : 'Cost per lead';
+  document.getElementById('terms-chips').innerHTML =
+    [['Product', c.product],
+     ['Traffic', su.trafficSource === 'email' ? 'Email' : 'Non-email'],
+     ['Integration', METHOD_LABEL[su.method]],
+     ['Compensation', COMP_LABEL]].map(function (t) {
+      return '<span class="badge"><strong>' + t[0] + '</strong>&nbsp;' + A.esc(t[1]) + '</span>';
+    }).join('');
+
+  document.getElementById('steps-sub').textContent = su.complete
+    ? 'This campaign is live. The steps below are its setup record.'
+    : 'Work them top to bottom — each step says whose move it is.';
+
+  /* ---- step bodies -------------------------------------------------------- */
+  var mailCreatives = 'mailto:' + D.COMPLIANCE_CONTACT.email +
+    '?cc=logan@financialize.com&subject=' +
+    encodeURIComponent('Creatives for review — ' + c.name + ' (CID ' + c.id + ')');
+
+  function mono(txt) {
+    return '<div style="font-family:ui-monospace,monospace;font-size:12px;padding:9px 12px;' +
+      'border:1px solid var(--border);border-radius:6px;background:var(--surface-2);' +
+      'color:var(--ink-2);overflow-x:auto;white-space:nowrap">' + txt + '</div>';
+  }
+  function copyRow(label, url) {
+    return '<div style="margin:8px 0">' +
+      '<div class="tile-label" style="margin-bottom:4px">' + A.esc(label) + '</div>' +
+      '<div style="display:flex;gap:8px;align-items:center">' +
+        '<div style="flex:1;font-family:ui-monospace,monospace;font-size:12px;padding:9px 12px;' +
+          'border:1px solid var(--border);border-radius:6px;background:var(--surface-2);' +
+          'color:var(--ink-2);overflow-x:auto;white-space:nowrap">' + A.esc(url) + '</div>' +
+        '<button type="button" class="btn btn-sm" data-copy="' + A.esc(url) + '">Copy</button>' +
+      '</div></div>';
+  }
+
+  /* The mock tracking/test URLs are placeholders for admin-generated URLs —
+     ADMIN-MAPPING §7d. Real ones come off the campaign record. */
+  var domain = c.product === 'Life' ? 'lead.lifepolicyexpress.com' : 'lead.annuities.net';
+  var trackingUrl = 'https://' + domain + '/?cid=' + c.id + '&subid={your_subid}';
+  var testUrl = 'https://' + domain + '/?cid=' + c.id + '&test=1';
+
+  function bodyTracking() {
+    var h = '<p style="margin-top:0">Send your traffic to this link. Append your own ' +
+      'sub-ID values so reporting can break out by source — sub-IDs get you per-source ' +
+      'feedback and per-source pricing, and protect your strong sources from weaker ones.</p>' +
+      copyRow('Tracking URL', trackingUrl);
+    if (su.method === 'api') {
+      var spec = D.API_SPECS[c.product === 'Life' ? 'life' : 'annuity'];
+      var doc = D.documentsFor(state.partnerId).filter(function (d) { return d.key === spec.docKey; })[0];
+      h = '<p style="margin-top:0">You post leads directly to our API — the linked ' +
+        'documentation is the spec. Your campaign ID below goes on every post.</p>' +
+        copyRow('Endpoint', spec.endpoint) +
+        copyRow('Your campaign_id', String(c.id)) +
+        '<p style="margin:10px 0 4px"><a class="btn btn-sm" ' +
+        (doc && doc.url ? 'href="' + A.esc(doc.url) + '" target="_blank" rel="noopener"' : '') +
+        '>' + A.esc(c.product) + ' API documentation ↗</a></p>';
+    }
+    if (su.trafficSource === 'email') {
+      var unsub = D.UNSUB_LINKS[c.product === 'Life' ? 'life' : 'annuity'].replace('{cid}', c.id);
+      h += '<div class="tile-label" style="margin-top:14px">Email traffic — your unsubscribe links</div>' +
+        '<p style="margin:4px 0 0;font-size:13px;color:var(--ink-2)">Every creative you send ' +
+        'must carry an unsubscribe link. These are yours for this campaign, CID already filled in. ' +
+        'The <code>&amp;email=</code> version takes the subscriber address from your platform\'s ' +
+        'merge field.</p>' +
+        copyRow('Standard', unsub) +
+        copyRow('With merge field', unsub + '&email=');
+    }
+    return h;
+  }
+
+  function bodyPixel() {
+    var intro = su.isRev
+      ? '<p style="margin-top:0">You are on revenue share, so you\'ll want to know when a lead ' +
+        'converts. Paste your postback pixel URL below. <strong>We place it on the campaign\'s ' +
+        'thank-you page and gate it ourselves — it fires only on accepted leads</strong>, passing ' +
+        'your transaction ID, sale amount and xsubid through dynamic parameters.</p>'
+      : '<p style="margin-top:0">On our landing pages, conversion tracking is optional for ' +
+        'cost-per-lead campaigns — most CPL partners skip it. If you do want accepted leads ' +
+        'passed back to your system, paste your pixel URL and we\'ll place and gate it for you.</p>';
+    var h = intro +
+      '<p style="font-size:13px;color:var(--ink-2)">Dynamic values you can put in your URL: ' +
+      '<code>{transaction_id}</code> · <code>{sale_amount}</code> · <code>{xsubid}</code>. ' +
+      'Need more than one pixel? Send the second to Logan and we\'ll add it.</p>';
+    if (su.pixelUrl) {
+      h += '<div class="tile-label">Pixel on file</div>' + mono(A.esc(su.pixelUrl)) +
+        '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<button type="button" class="btn btn-sm" id="pixel-edit">Replace pixel URL</button></div>' +
+        '<p style="font-size:12.5px;color:var(--ink-muted);margin:8px 0 0">Changing your pixel ' +
+        'notifies Logan and is re-verified with a test lead before it takes effect.</p>';
+    } else if (su.pixelSkipped) {
+      h += '<p><span class="badge"><span class="dot"></span>Skipped — no pixel on this campaign' +
+        '</span>&nbsp;<button type="button" class="btn btn-sm" id="pixel-edit">Add one anyway</button></p>';
+    } else {
+      h += '<form id="pixel-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+        '<input type="url" id="pixel-url" required placeholder="https://track.yournetwork.com/postback?tid={transaction_id}&amp;amt={sale_amount}" ' +
+          'style="flex:1;min-width:280px">' +
+        '<button type="submit" class="btn btn-primary">Submit pixel URL</button>' +
+        (su.isRev ? '' : '<button type="button" class="btn btn-sm" id="pixel-skip">I don\'t need a pixel</button>') +
+        '</form>';
+    }
+    return h;
+  }
+
+  function bodyIntegrate() {
+    var spec = D.API_SPECS[c.product === 'Life' ? 'life' : 'annuity'];
+    return '<p style="margin-top:0">Build your post against the documentation linked in step 1. ' +
+      'The three things that cause nearly every setup problem:</p>' +
+      '<ul class="checklist">' +
+      '<li><span class="mark">1</span><span><strong>Headers.</strong> Send ' +
+        '<code>Content-Type: application/json</code> and <code>response_format</code> in the body — ' +
+        'missing headers are the usual cause of 403s.</span></li>' +
+      '<li><span class="mark">2</span><span><strong>Exact option text.</strong> ' + A.esc(spec.note) +
+        '</span></li>' +
+      '<li><span class="mark">3</span><span><strong>Consumer Blocked.</strong> Repeating the same ' +
+        'email, phone or IP — normal during testing — trips our block. Tell Logan and we\'ll ' +
+        'whitelist your testing IP.</span></li></ul>' +
+      '<div class="tile-label" style="margin-top:12px">Required fields</div>' +
+      '<p style="font-size:13px;color:var(--ink-2);margin:4px 0 10px">' + A.esc(spec.required) + '</p>' +
+      '<p style="font-size:13px;color:var(--ink-2)">Pass your tracking keys on every post — ' +
+      '<code>subid</code>, <code>xsubid</code>, <code>transid</code> and the rest are in the doc. ' +
+      'A successful post returns your <code>lead_id</code>; the response tells you accepted or ' +
+      'rejected per lead.</p>' +
+      (su.isRev ? '<p style="font-size:13px;color:var(--ink-2)">Revenue share: we\'ll also set up ' +
+        'a conversion postback with you so you hear about every sale — Logan coordinates this ' +
+        'during setup.</p>' : '') +
+      (su.live ? '' :
+        '<button type="button" class="btn btn-primary" id="integrate-ready">My integration is ready</button>');
+  }
+
+  function bodyCreatives() {
+    return '<p style="margin-top:0">We\'re flexible on creative: build your own, iterate as you ' +
+      'see fit. Two things we hold to — every creative gets a compliance review before it runs, ' +
+      'and <strong>whenever you change creatives, send the current set again</strong> so what\'s ' +
+      'on file always matches what\'s live.</p>' +
+      '<ul class="checklist">' +
+      '<li><span class="mark">✓</span><span>Educational framing: financial security, income ' +
+        'protection, retirement stability.</span></li>' +
+      '<li><span class="mark">✕</span><span>No fear tactics, urgency pressure, or guaranteed-' +
+        'returns claims.</span></li></ul>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
+      '<a class="btn btn-primary" href="' + mailCreatives + '">Email creatives to compliance</a>' +
+      (su.live || D.campaignSetup(state.partnerId, c.id).steps.filter(function (s) { return s.key === 'creatives'; })[0].state === 'done'
+        ? '' : '<button type="button" class="btn btn-sm" id="creatives-sent">I\'ve sent them</button>') +
+      '</div>' +
+      '<p style="font-size:12.5px;color:var(--ink-muted);margin:8px 0 0">Goes to ' +
+      A.esc(D.COMPLIANCE_CONTACT.name) + ' (' + A.esc(D.COMPLIANCE_CONTACT.email) +
+      '), copying Logan. Unsure an angle will pass? Send it before running it — quick feedback ' +
+      'beats a paused campaign.</p>';
+  }
+
+  function bodyTest() {
+    var h;
+    if (su.method === 'lp') {
+      h = '<p style="margin-top:0">Open your test URL — it loads the landing page with test ' +
+        'parameters attached. Submit the form with:</p>' +
+        '<ul class="checklist">' +
+        '<li><span class="mark">·</span><span>ZIP code <strong>99996</strong> or <strong>99997</strong></span></li>' +
+        '<li><span class="mark">·</span><span>A <strong>unique email and phone</strong> every ' +
+          'test — duplicates get rejected.</span></li></ul>' +
+        copyRow('Test URL', testUrl) +
+        '<p style="font-size:13px;color:var(--ink-2)">We confirm the lead accepted on our side' +
+        (su.pixelUrl ? ', and you confirm your pixel fired with the right transaction ID and ' +
+          'amount. Both confirmations = tested.' : '.') + '</p>';
+    } else {
+      h = '<p style="margin-top:0">There is no separate test endpoint — your first test posts ' +
+        'to production. A <code>success</code> response with a <code>lead_id</code> means we ' +
+        'received it; the response also tells you whether it was accepted. Use ZIP ' +
+        '<strong>99996/99997</strong> and a unique email and phone per test.</p>' +
+        '<p style="font-size:13px;color:var(--ink-2)">We verify the test lead on our side and ' +
+        'confirm with you before go-live.</p>';
+    }
+    if (!su.live) {
+      var st = su.steps.filter(function (s) { return s.key === 'test'; })[0].state;
+      h += st === 'waiting'
+        ? '<p><span class="badge badge-info"><span class="dot"></span>Test sent — we\'re ' +
+          'verifying it now</span></p>'
+        : '<button type="button" class="btn btn-primary" id="test-sent">I\'ve sent my test lead</button>';
+    }
+    return h;
+  }
+
+  function bodyLive() {
+    return su.live
+      ? '<p style="margin-top:0">This campaign is live. Watch it on ' +
+        '<a href="' + A.linkTo('performance.html', state, { campaign: c.id }) + '">Performance</a> ' +
+        'and the <a href="' + A.linkTo('leads.html', state, { campaign: c.id }) + '">lead table</a>.</p>'
+      : '<p style="margin-top:0">Once your test lead is verified, we flip this campaign live ' +
+        'and you can start sending traffic. We monitor performance and check in regularly ' +
+        'through the first weeks.</p>';
+  }
+
+  var BODIES = { tracking: bodyTracking, pixel: bodyPixel, integrate: bodyIntegrate,
+                 creatives: bodyCreatives, test: bodyTest, live: bodyLive };
+
+  var STATE_CHIP = {
+    done:    '<span class="badge badge-good"><span class="dot"></span>Done</span>',
+    action:  '<span class="badge badge-warn"><span class="dot"></span>Your move</span>',
+    waiting: '<span class="badge badge-info"><span class="dot"></span>With us</span>',
+    todo:    '<span class="badge" style="opacity:.7"><span class="dot"></span>Upcoming</span>'
+  };
+
+  function render() {
+    su = D.campaignSetup(state.partnerId, c.id);
+    document.getElementById('camp-progress').innerHTML = su.complete
+      ? '<span class="badge badge-good"><span class="dot"></span>Live</span>'
+      : '<span class="badge badge-info"><span class="dot"></span>In setup — step ' +
+        (su.doneCount + 1) + ' of ' + su.steps.length + '</span>';
+
+    document.getElementById('steps').innerHTML = su.steps.map(function (s, i) {
+      var open = !su.complete && su.current && su.current.key === s.key;
+      return '<details class="setup-step"' + (open ? ' open' : '') + '>' +
+        '<summary>' +
+          '<span class="step-n' + (s.state === 'done' ? ' is-done' : '') + '">' +
+            (s.state === 'done' ? '✓' : (i + 1)) + '</span>' +
+          '<span style="flex:1;font-weight:600">' + A.esc(s.label) +
+            (s.optional ? ' <span style="font-weight:400;color:var(--ink-muted)">(optional)</span>' : '') +
+          '</span>' +
+          STATE_CHIP[s.state] +
+        '</summary>' +
+        '<div class="step-body">' + BODIES[s.key]() + '</div>' +
+      '</details>';
+    }).join('');
+    wire();
+  }
+
+  function wire() {
+    document.querySelectorAll('[data-copy]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        try { navigator.clipboard.writeText(b.dataset.copy); } catch (e) {}
+        b.textContent = 'Copied';
+        setTimeout(function () { b.textContent = 'Copy'; }, 1400);
+      });
+    });
+    var pf = document.getElementById('pixel-form');
+    if (pf) pf.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = document.getElementById('pixel-url').value.trim();
+      if (v) { D.saveSetupState(state.partnerId, c.id, { pixelUrl: v, pixelSkipped: false }); render(); }
+    });
+    var ps = document.getElementById('pixel-skip');
+    if (ps) ps.addEventListener('click', function () {
+      D.saveSetupState(state.partnerId, c.id, { pixelSkipped: true }); render();
+    });
+    var pe = document.getElementById('pixel-edit');
+    if (pe) pe.addEventListener('click', function () {
+      D.saveSetupState(state.partnerId, c.id, { pixelUrl: null, pixelSkipped: false }); render();
+    });
+    var ir = document.getElementById('integrate-ready');
+    if (ir) ir.addEventListener('click', function () {
+      D.saveSetupState(state.partnerId, c.id, { integrationReady: true }); render();
+    });
+    var cs = document.getElementById('creatives-sent');
+    if (cs) cs.addEventListener('click', function () {
+      D.saveSetupState(state.partnerId, c.id, { creativesSent: true }); render();
+    });
+    var ts = document.getElementById('test-sent');
+    if (ts) ts.addEventListener('click', function () {
+      D.saveSetupState(state.partnerId, c.id, { testRequested: true }); render();
+    });
+  }
+
+  render();
+
+})();
+</script>
+</body>
+</html>

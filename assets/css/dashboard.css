@@ -440,6 +440,51 @@ h3 { font-size: 15px; }
 .btn:hover { background: var(--surface-2); }
 /* For the one action a screen exists to make obvious. */
 .btn-lg { font-size: 15px; padding: 12px 22px; font-weight: 600; }
+
+/* Campaign setup tracker (campaign-setup.html). Each step is a <details>
+   so the current step opens and finished ones fold away. */
+.setup-step {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  margin-bottom: 10px;
+}
+.setup-step summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 14px;
+}
+.setup-step summary::-webkit-details-marker { display: none; }
+.setup-step summary:hover { background: var(--surface-2); border-radius: var(--radius); }
+.setup-step[open] summary { border-bottom: 1px solid var(--grid); }
+.step-n {
+  width: 26px; height: 26px; flex: 0 0 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12.5px; font-weight: 650; color: var(--ink-2);
+  background: var(--surface-2);
+}
+/* Completion is the check glyph plus the label state chip, never colour
+   alone — the green here is reinforcement, not the signal. */
+.step-n.is-done {
+  border-color: var(--good-text);
+  color: var(--good-text);
+}
+.step-body { padding: 14px 16px 16px 52px; font-size: 13.5px; }
+.step-body input[type="url"] {
+  font-family: inherit; font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--ink);
+}
+@media (max-width: 720px) { .step-body { padding-left: 16px; } }
 /* Coral is the brand's call-to-action colour. Safe here because a button is
    chrome, not a data mark, and it carries a text label. */
 .btn-primary {

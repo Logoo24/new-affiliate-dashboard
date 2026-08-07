@@ -88,6 +88,7 @@
         </div>
         <div class="card-body">
           <div id="creative-btns" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+          <p id="creative-policy" style="font-size:13px;color:var(--ink-2);margin:14px 0 0"></p>
         </div>
       </section>
 
@@ -260,6 +261,16 @@
       return '<button type="button" class="btn" data-creative="' + c.key + '">' +
         A.esc(c.label) + '</button>';
     }).join('');
+
+    /* The policy, in the flexible register Logan set: iterate freely, but
+       compliance always has the current set. */
+    document.getElementById('creative-policy').innerHTML =
+      'We\'re flexible on creative — build your own and iterate as you see fit. Every creative ' +
+      'gets a compliance review before it runs, and whenever you change creatives, send the ' +
+      'current set to <a href="mailto:' + D.COMPLIANCE_CONTACT.email +
+      '?cc=logan@financialize.com&subject=' + encodeURIComponent('Creatives for review') + '">' +
+      A.esc(D.COMPLIANCE_CONTACT.name) + '</a> (copying Logan) so what\'s on file always ' +
+      'matches what\'s live.';
 
     document.querySelectorAll('[data-creative]').forEach(function (b) {
       b.addEventListener('click', function () {

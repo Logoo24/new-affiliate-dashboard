@@ -42,7 +42,8 @@ These are the minimum bar. Everything else is upside.
 | `duplicate-check.html` | C | **Duplicates & suppression** — the suppression file leads the page, then the 365-day Priority/Hot lookup, single and bulk |
 | `health.html` | D | Health scorecard — the score dial as the hero, pillar breakdown, 90-day trend, and a collapsible "how the score is built" |
 | `targeting.html` | — | Call-centre hours, ideal send windows and day split, lead criteria, and the top-10 states we need |
-| `setup.html` | E | **Setup & docs** — a hub: new/edit campaign (both placeholders), the document library, and who to contact |
+| `setup.html` | E | **Setup & docs** — a hub: the campaign list with per-campaign setup status, the document library, and who to contact |
+| `campaign-setup.html` | E2 | **Campaign setup tracker** — onboarding steps 6–10, per campaign, branching landing-page vs API. The one affiliate-editable field in the portal (the pixel URL) lives here. See the decision below and ADMIN-MAPPING §7d |
 | `account.html` | — | Account, users and contacts |
 
 Plus **three temporary, internal, non-partner-facing** pages under an "Internal — temporary"
@@ -218,6 +219,35 @@ including **43 rejected-but-sold leads**, each showing its $500 sale and $200 sh
 
 The revenue-share export deliberately includes sold type on every row so the partner can run
 their own analysis on what converts and retarget against it.
+
+---
+
+### DECISION — the campaign setup flow (Aug 7)
+
+Onboarding steps 6–10 became the per-campaign tracker on `campaign-setup.html`. Logan's rulings,
+which the build must keep:
+
+1. **Portal access is granted after onboarding step 5** (campaign IDs issued), so the tracker
+   never collects steps 1–5 — traffic type, comp model, integration method, agreement and CIDs
+   are agreed with Logan first and only *reflected* in the portal, read-only.
+2. **The conversion pixel URL is the ONLY field an affiliate can edit anywhere in the portal.**
+   Landing-page campaigns only; required on revenue share, skippable on CPL. We install it on the
+   thank-you page ourselves and gate it to accepted leads. A post-go-live change notifies Logan
+   and is re-verified with a test lead.
+3. **The flow is per campaign** — integration method is a per-campaign choice (the same account
+   can run our landing pages on one campaign and the API on another), and each campaign has its
+   own pixel.
+4. **An account with no campaigns shows one sentence** — "There are no active campaigns on this
+   account." — and no setup prompt. There is deliberately no "create your first campaign" flow;
+   campaigns exist before logins do.
+5. **Creatives go to compliance, not to a form.** Jephanie Genilla (jgenilla@financialize.com),
+   CC Logan. The policy register is flexible on purpose: partners build and iterate their own
+   creatives as they see fit, but every creative is reviewed before it runs and **the current
+   running set must be re-sent every time it changes** so what's on file matches what's live.
+
+The old "test-lead sandbox" want is satisfied inside this flow: the *Send a test lead* step is
+the pixel/integration verification (test URL + ZIP 99996/99997 on the LP path, production post
+on the API path), confirmed from both sides before go-live.
 
 ---
 

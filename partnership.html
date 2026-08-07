@@ -267,12 +267,36 @@
         '</tr>';
     }).join('');
 
+    /* Campaigns mid-setup surface here too, linking into their tracker —
+       a new partner's first visit should land them one click from the
+       thing they need to do next. */
+    var inSetup = D.setupCampaignsFor(state.partnerId);
+    body += inSetup.map(function (c) {
+      var su = D.campaignSetup(state.partnerId, c.id);
+      return '<tr>' +
+        '<td class="lead-id">' + A.esc(String(c.id)) + '</td>' +
+        '<td><strong>' + A.esc(c.name) + '</strong></td>' +
+        '<td>' + A.esc(c.product) + '</td>' +
+        '<td>' + A.esc(D.compLabelForCampaign(c)) + '</td>' +
+        '<td><span class="badge badge-warn"><span class="dot"></span>In setup — ' +
+          (su.current && su.current.owner !== 'us' ? 'your move' : 'with us') + '</span></td>' +
+        '<td style="text-align:right">' +
+          '<a class="btn btn-sm" href="' +
+            A.linkTo('campaign-setup.html', state, { campaign: c.id }) +
+          '">Continue setup →</a>' +
+        '</td>' +
+        '</tr>';
+    }).join('');
+
+    /* Logan's rule for a campaign-less account: one plain sentence. */
     document.getElementById('campaign-table').innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="6" class="empty">No active campaigns on this account.</td></tr>') +
+      (body ||
+       '<tr><td colspan="6" class="empty">There are no active campaigns on this account.</td></tr>') +
       '</tbody>';
 
     document.getElementById('camp-sub').textContent =
-      camps.length + (camps.length === 1 ? ' campaign' : ' campaigns') + ' live right now.';
+      camps.length + (camps.length === 1 ? ' campaign' : ' campaigns') + ' live right now' +
+      (inSetup.length ? ', ' + inSetup.length + ' in setup' : '') + '.';
 
     var inactive = D.inactiveCampaignsFor(state.partnerId).length;
     document.getElementById('camp-foot').innerHTML =

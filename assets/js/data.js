@@ -2033,10 +2033,193 @@
 
   /* NOTE — a test-lead sandbox lived here briefly (Aug 6–7 2026) and was
      removed on Logan's call: checking a hand-typed lead against acceptance
-     criteria is not something affiliates need. What he actually wants in
-     this slot is a PIXEL TEST — verifying the tracking pixel fires correctly
-     on the affiliate's landing page — which pairs with Marc Heberling's
-     pixel-validation work and is not built yet. See ADMIN-MAPPING §7c. */
+     criteria is not something affiliates need. The affiliate-facing pixel
+     verification now lives inside the campaign setup flow (the "Send a test
+     lead" step on campaign-setup.html). */
+
+  /* ======================================================================
+     CAMPAIGN SETUP FLOW  (campaign-setup.html)
+     ----------------------------------------------------------------------
+     Onboarding steps 6–10 as a per-campaign tracker. Steps 1–5 (traffic
+     type, comp model, integration method, agreement, campaign IDs) happen
+     in conversation with Logan BEFORE the affiliate has portal access, so
+     the portal only ever REFLECTS those decisions — the tracker starts at
+     "complete setup for your integration method".
+
+     THE ONE AFFILIATE-EDITABLE FIELD IN THE ENTIRE FLOW is the conversion
+     pixel URL (landing-page campaigns). Everything else is a status, a
+     link, or an instruction. CPL, comp model, targets and every other
+     commercial term are read-only facts agreed with Logan.
+
+     Each step carries an OWNER ('you' = the affiliate, 'us' = Financialize)
+     and a STATE ('done' | 'action' | 'waiting' | 'todo'). The UX rule: a
+     partner glancing at the tracker must know whose court the ball is in.
+
+     Sources: Affiliate Onboarding V7.16.26, Landing Page & Pixel Setup
+     Guide V7.14.26, Lead Submission API V5.22.26, Life Lead POST API.
+     Storage spec: ADMIN-MAPPING §7d. */
+
+  var COMPLIANCE_CONTACT = {
+    name: 'Jephanie Genilla',
+    email: 'jgenilla@financialize.com',
+    role: 'Compliance review'
+  };
+
+  /* Global per product line; the campaign's CID is substituted in. The
+     &email= variant takes the subscriber address via a merge field. */
+  var UNSUB_LINKS = {
+    annuity: 'https://lead.annuities.net/email-unsubscribe.php/?cid={cid}',
+    life: 'https://lead.lifepolicyexpress.com/email-unsubscribe.php?cid={cid}'
+  };
+
+  /* The two products post to DIFFERENT endpoints with different required
+     fields. The summary here is orientation only — the linked doc is the
+     spec, and the portal must never let the two drift. */
+  var API_SPECS = {
+    annuity: {
+      endpoint: 'https://admin.financialize.com/api/lead_post.php',
+      docKey: 'api_annuity',
+      required: 'first_name · last_name · phone_day · email · zip_code · ' +
+        'age OR dob_y · investment (exact option text) · campaign_id · response_format',
+      note: 'The investment value must match one of the nine documented options exactly, ' +
+        'character for character.'
+    },
+    life: {
+      endpoint: 'https://admin.financialize.com/api/lead_post_life_insurance.php',
+      docKey: 'api_life',
+      required: 'first_name · last_name · email · phone_day (10 digits) · zip_code (5 digits) · ' +
+        'age OR dob_y · health · reason_for_insurance · investment · household_income · ' +
+        'nicotine_use · campaign_id · aff_id · response_format ("json")',
+      note: 'health, reason_for_insurance, investment and household_income each take one of a ' +
+        'fixed option list — see the doc for the exact strings.'
+    }
+  };
+
+  /* ---- per-campaign setup facts -----------------------------------------
+     integration method and traffic source are ADMIN FIELDS the export does
+     not carry (ADMIN-MAPPING §7d). In the mock: traffic source is parsed
+     off the campaign name where the name declares it; integration method is
+     a deterministic stand-in so reviewers see both paths. */
+  function trafficSourceFor(c) {
+    if (/non-?email/i.test(c.name)) return 'nonemail';
+    if (/email/i.test(c.name)) return 'email';
+    return 'nonemail';
+  }
+  function integrationMethodFor(c) {
+    if (c.method) return c.method;
+    /* Mock assignment, stable per campaign. */
+    var n = parseInt(String(c.id).replace(/\D/g, ''), 10) || 0;
+    return (n % 2 === 0) ? 'lp' : 'api';
+  }
+
+  /* Synthetic in-setup campaigns so reviewers can walk the flow mid-stream.
+     NOT in CAMPAIGNS: default queries, filters and metrics never see them.
+     One LP path (Heritage — needs a pixel: rev share) and one API path
+     (OptiLabX). Clearly fabricated; delete when real setup records exist. */
+  var SETUP_CAMPAIGNS = [
+    { id: '771', name: 'Heritage - Life [Non-email - Rev Share]', partnerId: 'annuityherit',
+      comp: 'revshare', revSharePct: 0.4, product: 'Life', method: 'lp',
+      active: false, inSetup: true },
+    { id: '772', name: 'OptiLabX - Annuity [Email]', partnerId: 'optilabxmedi',
+      comp: 'cpl', revSharePct: 0, product: 'Annuity', method: 'api',
+      active: false, inSetup: true }
+  ];
+
+  function setupCampaignsFor(partnerId) {
+    var pid = resolvePartnerId(partnerId);
+    return SETUP_CAMPAIGNS.filter(function (c) { return c.partnerId === pid; });
+  }
+  function setupCampaign(partnerId, campaignId) {
+    var all = setupCampaignsFor(partnerId).concat(campaignsFor(partnerId));
+    return all.filter(function (c) { return String(c.id) === String(campaignId); })[0] || null;
+  }
+
+  /* ---- affiliate inputs & mock step persistence ------------------------- */
+  function setupStore(pid, cid) { return 'fz_setup_' + pid + '_' + cid; }
+  function setupState(partnerId, campaignId) {
+    var pid = resolvePartnerId(partnerId);
+    try { return JSON.parse(sessionStorage.getItem(setupStore(pid, campaignId))) || {}; }
+    catch (e) { return {}; }
+  }
+  function saveSetupState(partnerId, campaignId, patch) {
+    var pid = resolvePartnerId(partnerId);
+    var s = setupState(pid, campaignId);
+    for (var k in patch) s[k] = patch[k];
+    try { sessionStorage.setItem(setupStore(pid, campaignId), JSON.stringify(s)); } catch (e) {}
+    return s;
+  }
+
+  /**
+   * The tracker. Returns { campaign, method, trafficSource, steps, complete,
+   * current } where steps[i] = { key, label, owner, state, optional }.
+   *
+   * A LIVE campaign returns every step done — the tracker then reads as the
+   * campaign's setup record (tracking link, pixel on file) rather than a
+   * to-do list. In production every state except the pixel URL and the
+   * creative send is admin-set; the mock lets buttons advance them so the
+   * flow can be felt end to end.
+   */
+  function campaignSetup(partnerId, campaignId) {
+    var pid = resolvePartnerId(partnerId);
+    var c = setupCampaign(pid, campaignId);
+    if (!c) return null;
+
+    var method = integrationMethodFor(c);
+    var live = !c.inSetup;
+    var s = setupState(pid, c.id);
+    var isRev = c.comp === 'revshare';
+
+    var steps = [];
+    steps.push({ key: 'tracking', owner: 'us',
+      label: method === 'lp' ? 'Your campaign ID & tracking link' : 'Your campaign ID & API documentation',
+      state: 'done' });
+
+    if (method === 'lp') {
+      /* CPL partners generally do not need a pixel on the LP path — the step
+         is skippable for them, required for revenue share. */
+      var pixelDone = live || !!s.pixelUrl || !!s.pixelSkipped;
+      steps.push({ key: 'pixel', owner: 'you', optional: !isRev,
+        label: 'Place your conversion pixel',
+        state: pixelDone ? 'done' : 'action' });
+    } else {
+      steps.push({ key: 'integrate', owner: 'you',
+        label: 'Build your API integration',
+        state: (live || s.integrationReady) ? 'done' : 'action' });
+    }
+
+    steps.push({ key: 'creatives', owner: 'you',
+      label: 'Send your creatives for compliance review',
+      state: (live || s.creativesSent) ? 'done' : 'todo' });
+
+    steps.push({ key: 'test', owner: 'both',
+      label: 'Send a test lead',
+      state: live ? 'done' : (s.testConfirmed ? 'done' : (s.testRequested ? 'waiting' : 'todo')) });
+
+    steps.push({ key: 'live', owner: 'us', label: 'Go live',
+      state: live ? 'done' : 'todo' });
+
+    /* First not-done step becomes the current one; a 'todo' owned by the
+       affiliate that is first in line is promoted to 'action'. */
+    var current = null;
+    for (var i = 0; i < steps.length; i++) {
+      if (steps[i].state !== 'done') { current = steps[i]; break; }
+    }
+    if (current && current.state === 'todo' && current.owner !== 'us') current.state = 'action';
+
+    return {
+      campaign: c, method: method, live: live,
+      trafficSource: c.trafficSource || trafficSourceFor(c),
+      isRev: isRev,
+      pixelUrl: s.pixelUrl || (live && method === 'lp' && isRev
+        ? 'https://track.' + pid + '.example/postback?tid={transaction_id}&amt={sale_amount}&sub={xsubid}'
+        : null),
+      pixelSkipped: !!s.pixelSkipped,
+      steps: steps,
+      current: current,
+      complete: !current,
+      doneCount: steps.filter(function (st) { return st.state === 'done'; }).length
+    };
+  }
 
   /* ---------------------------------------------------------------------- */
   /* Suppression file                                                       */
@@ -2551,6 +2734,12 @@
     savePartnerDocUrl: savePartnerDocUrl,
     CRITERIA_DOC_URL: CRITERIA_DOC_URL,
     CREATIVE_LINKS: CREATIVE_LINKS,
+    COMPLIANCE_CONTACT: COMPLIANCE_CONTACT,
+    UNSUB_LINKS: UNSUB_LINKS,
+    API_SPECS: API_SPECS,
+    setupCampaignsFor: setupCampaignsFor,
+    campaignSetup: campaignSetup,
+    saveSetupState: saveSetupState,
     rejectFix: rejectFix,
     SOLD_TYPES: SOLD_TYPES,
     NORTH_STAR_TYPES: NORTH_STAR_TYPES,

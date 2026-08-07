@@ -16,17 +16,19 @@
 
     <div class="content">
 
-      <!-- A hub, not a page of content. Three destinations, then help. The
-           campaign flows are placeholders pending Logan's spec. -->
+      <!-- A hub, not a page of content. Campaign setup, documents, help. -->
       <section class="card">
         <div class="card-head">
           <div>
-            <h2>Campaigns</h2>
-            <p class="sub">Launch something new, or change how an existing campaign runs.</p>
+            <h2>Your campaigns</h2>
+            <p class="sub">Each campaign has its own setup — open one to see its status, tracking link and pixel.</p>
           </div>
         </div>
-        <div class="card-body">
-          <div class="user-grid" id="actions" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))"></div>
+        <div class="card-body" id="campaign-list"></div>
+        <div class="card-foot">
+          <span>New campaigns are set up directly with Logan — product, traffic, compensation and
+          integration are agreed before a campaign appears here.
+          <a href="mailto:logan@financialize.com">Start that conversation</a>.</span>
         </div>
       </section>
 
@@ -76,42 +78,45 @@
     subtitle: 'Campaign setup, documentation and who to ask.'
   });
 
-  /* ---- campaign actions --------------------------------------------------
-     Both flows are PLACEHOLDERS pending Logan's spec. They open a modal
-     saying so rather than a half-built form, because a form that looks real
-     and does nothing is worse than an honest stub. */
+  /* ---- campaign list -----------------------------------------------------
+     Every campaign — in-setup first, then live — linking into its own
+     setup tracker (campaign-setup.html). Campaigns are CREATED by Logan
+     after terms are agreed; nothing here creates or edits one.
+     Zero campaigns renders the plain message Logan specified. */
   (function () {
-    var ACTIONS = [
-      { key: 'new', title: 'Set up new campaign', ico: '＋',
-        desc: 'Launch a new product, geo or traffic source on your account.' },
-      { key: 'edit', title: 'Edit existing campaign', ico: '✎',
-        desc: 'Change caps, targeting or where your leads post.' }
-    ];
-    document.getElementById('actions').innerHTML = ACTIONS.map(function (a) {
-      return '<button type="button" class="user-card" data-act="' + a.key + '" ' +
-        'style="display:block;text-align:left;cursor:pointer;font-family:inherit;width:100%">' +
-        '<div style="font-size:22px;line-height:1;margin-bottom:8px;color:var(--brand-coral)">' + a.ico + '</div>' +
-        '<div style="font-size:15px;font-weight:600">' + A.esc(a.title) + '</div>' +
-        '<div style="font-size:13px;color:var(--ink-2);margin-top:4px">' + A.esc(a.desc) + '</div>' +
-        '</button>';
-    }).join('');
+    var inSetup = D.setupCampaignsFor(state.partnerId);
+    var live = D.campaignsFor(state.partnerId);
+    var host = document.getElementById('campaign-list');
 
-    document.querySelectorAll('[data-act]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var a = ACTIONS.filter(function (x) { return x.key === b.dataset.act; })[0];
-        A.openModal({
-          title: a.title,
-          html: '<div class="notice notice-mock"><span class="ico">✎</span><div>' +
-            '<strong>Placeholder.</strong> This flow has not been designed yet. ' +
-            'For now, contact Logan Randall to ' +
-            (a.key === 'new' ? 'set up a new campaign' : 'change an existing campaign') + '.' +
-            '</div></div>' +
-            '<p style="color:var(--ink-2);font-size:14px">' +
-            '<a href="mailto:logan@financialize.com">logan@financialize.com</a></p>',
-          returnFocusTo: b
-        });
-      });
-    });
+    if (!inSetup.length && !live.length) {
+      host.innerHTML = '<p class="empty" style="margin:4px 0">There are no active campaigns ' +
+        'on this account.</p>';
+      return;
+    }
+
+    function row(c) {
+      var su = D.campaignSetup(state.partnerId, c.id);
+      var status = su.complete
+        ? '<span class="badge badge-good"><span class="dot"></span>Live</span>'
+        : '<span class="badge badge-warn"><span class="dot"></span>In setup — ' +
+          (su.current && su.current.owner !== 'us' ? 'your move' : 'with us') + '</span>';
+      return '<a class="user-card" href="' +
+        A.linkTo('campaign-setup.html', state, { campaign: c.id }) + '" ' +
+        'style="display:flex;align-items:center;gap:14px;text-decoration:none;color:inherit;margin-bottom:10px">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:14.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+            A.esc(c.name) + '</div>' +
+          '<div style="font-size:12.5px;color:var(--ink-2);margin-top:2px">CID ' + A.esc(String(c.id)) +
+            ' · ' + A.esc(c.product) +
+            (su.complete ? '' : ' · step ' + (su.doneCount + 1) + ' of ' + su.steps.length) + '</div>' +
+        '</div>' +
+        status +
+        '<span style="color:var(--brand-coral);font-weight:600;font-size:13px;white-space:nowrap">' +
+          (su.complete ? 'View setup →' : 'Continue →') + '</span>' +
+      '</a>';
+    }
+
+    host.innerHTML = inSetup.map(row).join('') + live.map(row).join('');
   })();
 
   /* ---- documents ----------------------------------------------------------

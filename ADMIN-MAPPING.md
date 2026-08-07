@@ -605,6 +605,46 @@ Two rules the implementation has to keep:
 
 ---
 
+## 7d. Campaign setup flow — `campaign-setup.html`
+
+Added August 7. Onboarding steps 6–10 as a **per-campaign tracker**. The framing decisions, all
+Logan's:
+
+- **Steps 1–5 (traffic type, comp model, integration method, agreement, campaign IDs) happen in
+  conversation with Logan before portal access exists.** Access is granted after step 5, so the
+  portal only ever *reflects* those decisions and the tracker starts at "complete setup for your
+  integration method."
+- **The flow is per campaign** — an affiliate running three campaigns places three different
+  pixels. Each campaign's tracker branches on its own integration method.
+- **The ONE affiliate-editable field in the entire flow is the conversion pixel URL** (landing-page
+  campaigns). CPL, comp model, targets, product, traffic source — all read-only, changed only
+  through Logan.
+- **Zero campaigns** renders one plain sentence — *"There are no active campaigns on this
+  account."* — no setup prompt, since Logan sets campaigns up before login exists.
+- **Every step carries an owner** (you / us / both) and the UX contract is: a partner glancing at
+  the tracker knows whose court the ball is in.
+
+Steps per path (sources: Onboarding packet V7.16.26, LP & Pixel Guide V7.14.26, the two API docs):
+
+| Path | Steps |
+|---|---|
+| Landing pages | Tracking link → **place pixel** (required for rev share, skippable for CPL) → creatives review → test lead (test URL, ZIP 99996/99997, unique email+phone, both-sides confirmation) → go live |
+| API | CID + docs → build integration (headers, exact option text, Consumer Blocked) → creatives review → test lead (posts to production; response says accepted/rejected) → go live |
+
+| Field / element | Source in mock | Status |
+|---|---|---|
+| `campaign.integration_method` (`lp` / `api`) | deterministic stand-in in `integrationMethodFor()` | **NEEDS BUILDING** — admin field on the campaign. Not in the export. The tracker branches entirely on it |
+| `campaign.traffic_source` (`email` / `non_email`) | parsed off the campaign name (`[Non-email …]`) | **NEEDS BUILDING** as a real field; name-parsing is the same fragility as comp model |
+| `campaign.tracking_url` / `test_url` | placeholder URLs built from product domain + CID | **NEEDS BUILDING** — admin generates these today via the campaign listing's Tracking URL button; the portal needs them stored on the campaign record |
+| **`campaign.pixel_url`** — the affiliate-writable field | sessionStorage via `saveSetupState()` | **NEEDS BUILDING** with an **audit trail**. We install it as the 1×1 iframe on the thank-you page (Pixel Code → Thank You Page), gated to accepted leads. Changing it after go-live notifies Logan and is re-verified with a test lead before taking effect. Multiple pixels = multiple iframes, added by us |
+| `campaign_setup` step states | `campaignSetup()` + sessionStorage | **NEEDS BUILDING** — `(campaign_id, step_key, state, updated_by, updated_at)`. Admin sets every state except the pixel submission and the affiliate's "sent" claims; test-lead confirmation can auto-set from an actual received test lead (ZIP 99996/99997) |
+| Unsubscribe links | `UNSUB_LINKS`, CID substituted per campaign | **LIVE VALUES** (global per product line). Rendered only on email-traffic campaigns |
+| API endpoints + required-field summaries | `API_SPECS` | **LIVE VALUES** from the two API docs. The summary is orientation; the linked doc is the spec — keep them from drifting |
+| Compliance contact | `COMPLIANCE_CONTACT` — Jephanie Genilla, jgenilla@financialize.com, CC Logan | constant; creative policy: build and iterate freely, every creative reviewed before running, **re-send the current set on every change** |
+| Demo campaigns | `SETUP_CAMPAIGNS` — one synthetic in-setup campaign each for Heritage (LP path) and OptiLabX (API path) | **MOCK ONLY.** Not in `CAMPAIGNS`, so queries, filters and metrics never see them. Delete when real setup records exist |
+
+---
+
 ## 7d. Compensation page
 
 Added August 6. Money in one place: what the window earned, the billing terms, the monthly

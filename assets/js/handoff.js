@@ -228,6 +228,19 @@
       storage: 'documents (key, label, description, url, scope, sort_order, featured). Must ' +
                'support ADDING documents without a deploy.' },
 
+    { group: 'Campaigns', name: 'Campaign setup tracker', status: 'build',
+      controls: 'The per-campaign onboarding tracker (campaign-setup.html): step states, ' +
+                'integration method, traffic source, tracking/test URLs, and the affiliate\'s ' +
+                'pixel URL.',
+      today: 'campaignSetup() in data.js; states in sessionStorage; integration method is a ' +
+             'deterministic stand-in; two synthetic in-setup demo campaigns.',
+      storage: 'campaign_setup (campaign_id, step_key, state, updated_by, updated_at) plus new ' +
+               'campaign fields: integration_method, traffic_source, tracking_url, test_url, ' +
+               'pixel_url (affiliate-writable, audited). See ADMIN-MAPPING §7d.',
+      risk: 'pixel_url is the ONLY affiliate-writable field in the portal — it needs an audit ' +
+            'trail, and a post-go-live change must notify Logan and be re-verified with a test ' +
+            'lead before taking effect.' },
+
     { group: 'Content', name: 'Creative links', status: 'build',
       controls: 'The three buttons on Targeting\'s Creatives card: example annuity creatives, ' +
                 'example life creatives, creative guidelines.',
