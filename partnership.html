@@ -169,13 +169,24 @@
   /* One primary per affiliate, editable by any of that affiliate's users.
      Changing it happens on the Account page, where all users are listed. */
   var pc = D.primaryContact(state.partnerId);
-  document.getElementById('pc-name').innerHTML = A.esc(pc.name) +
-    (pc.away ? ' <span class="away-chip">Away</span>' : '');
-  document.getElementById('pc-title').textContent = pc.title;
-  document.getElementById('pc-mail').innerHTML =
-    '<a href="mailto:' + A.esc(pc.email) + '">' + A.esc(pc.email) + '</a>';
-  document.getElementById('pc-actions').innerHTML =
-    '<a class="btn btn-sm" href="' + A.linkTo('account.html', state) + '">Change primary contact</a>';
+  if (pc.placeholder) {
+    /* No contact in the source yet — a designed empty state, not a record
+       that looks broken. */
+    document.getElementById('pc-name').textContent = 'No contact on file yet';
+    document.getElementById('pc-title').textContent =
+      'Your team\'s primary contact is added during onboarding.';
+    document.getElementById('pc-mail').innerHTML =
+      '<a href="mailto:logan@financialize.com">Ask Logan to add one</a>';
+    document.getElementById('pc-actions').innerHTML = '';
+  } else {
+    document.getElementById('pc-name').innerHTML = A.esc(pc.name) +
+      (pc.away ? ' <span class="away-chip">Away</span>' : '');
+    document.getElementById('pc-title').textContent = pc.title;
+    document.getElementById('pc-mail').innerHTML =
+      '<a href="mailto:' + A.esc(pc.email) + '">' + A.esc(pc.email) + '</a>';
+    document.getElementById('pc-actions').innerHTML =
+      '<a class="btn btn-sm" href="' + A.linkTo('account.html', state) + '">Change primary contact</a>';
+  }
 
   /* ---- gauge --------------------------------------------------------------
      Drawn by the SHARED dial in charts.js — the same one the Health
@@ -191,6 +202,16 @@
       sevSuffix: sevSuffix,
       hint: 'See the full breakdown →'
     });
+    /* The scorecard flags a thin sample; the summary must too. A brand-new
+       partner's first screen showing a bare, confident number is how an
+       unearned 48 becomes a fact in someone's deck. */
+    if (hs.provisional) {
+      document.getElementById('gauge').insertAdjacentHTML('afterend',
+        '<div style="text-align:center;margin-top:6px">' +
+        '<span class="badge badge-warn"><span class="dot"></span>Provisional</span>' +
+        A.tip('Fewer than 100 of this account\'s leads have finished their sales cycle, so ' +
+              'read the score as directional rather than final.') + '</div>');
+    }
   })();
 
   /* ---- volume ------------------------------------------------------------- */

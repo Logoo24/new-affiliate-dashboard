@@ -63,14 +63,18 @@
   var D = FZData, A = FZApp;
 
   var state = A.params();
+  var q = new URLSearchParams(location.search);
+  var su = D.campaignSetup(state.partnerId, q.get('campaign'));
+
   A.shell(state, {
     active: 'setup.html',
     title: 'Campaign setup',
-    subtitle: 'Everything this campaign needs before it goes live.'
+    /* Tense follows the campaign: a live campaign's page is its setup
+       RECORD, not a to-do list. */
+    subtitle: su && su.complete
+      ? 'This campaign is live — its setup record, tracking link and pixel.'
+      : 'Everything this campaign needs before it goes live.'
   });
-
-  var q = new URLSearchParams(location.search);
-  var su = D.campaignSetup(state.partnerId, q.get('campaign'));
 
   if (!su) {
     document.querySelector('.content').innerHTML =

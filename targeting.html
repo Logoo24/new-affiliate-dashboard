@@ -227,7 +227,12 @@
           return '<div class="user-card" style="padding:11px 13px;display:block' +
             (r.highlight ? ';background:var(--surface-2)' : '') + '">' +
             '<div class="tile-label">' + A.esc(r.label) +
-              (r.highlight ? ' <strong style="color:var(--good-text)">★</strong>' : '') + '</div>' +
+              /* The star marks a negotiated term — meaningless without the
+                 hover saying so. */
+              (r.highlight ? ' <strong style="color:var(--good-text)">★</strong>' +
+                A.tip('A negotiated term specific to your account — it differs from our ' +
+                      'standard criteria. Your leads are judged against this value, not the ' +
+                      'standard one.') : '') + '</div>' +
             '<div style="font-size:14px;font-weight:600;margin-top:3px">' + A.esc(r.value.split(' — ')[0]) + '</div>' +
           '</div>';
         }).join('');

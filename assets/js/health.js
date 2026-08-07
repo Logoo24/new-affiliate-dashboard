@@ -492,8 +492,11 @@
     var stabilityScore = stabilityStd == null ? null
       : percentileScore(domCls, 'stability', stabilityStd);
     var qualParts = [
+      /* Parked displays say "not yet reported" — WHY it is parked (the
+         call-outcome feed, the export's missing timestamp) is a note to the
+         build team and lives in ADMIN-MAPPING, not in a partner's face. */
       { key: 'badcontact', label: 'Bad-contact rate', weight: 0.24, parked: true, score: null,
-        display: 'needs the call-outcome feed' },
+        display: 'not yet reported' },
       { key: 'ipqs', label: 'Contact-validation rejects', weight: 0.22,
         score: rollupPart('qual', 'ipqs'), display: pct(av2.ipqs) },
       { key: 'dupe', label: 'Duplicate rate', weight: 0.20,
@@ -516,7 +519,7 @@
         display: pct(stateShare) },
       /* Blocked on time-of-day landing in the export — ADMIN-MAPPING A1. */
       { key: 'windowFit', label: 'Send-window fit', weight: 0.0, parked: true, score: null,
-        display: 'needs time of day on the export' }
+        display: 'not yet reported' }
     ];
 
     var compScore = weightedAvg(compParts);

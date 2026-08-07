@@ -260,6 +260,13 @@
         return '<span>' + A.esc(part.label) + ': <strong style="color:var(--ink-2)">' +
           A.esc(part.display) + '</strong></span>';
       }).filter(Boolean).join('');
+      /* The bridge between a raw rate and its score: an aged campaign's 0.3%
+         can be mid-pack FOR ITS CLASS. Without this line the two numbers
+         read as a contradiction. */
+      if (p.key === 'conversion') {
+        parts += '<span style="color:var(--ink-muted)">Rates are scored against campaigns of ' +
+          'the same class — see Score by campaign below.</span>';
+      }
 
       return '<div class="meter">' +
         '<div class="meter-head">' +

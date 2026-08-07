@@ -239,9 +239,11 @@ Full detail and the remaining open questions are in `HANDOFF.md`.
 
 ## Conventions
 
-- Data is generated deterministically (`mulberry32`, seed `20260805`) and `TODAY` is pinned to
-  Aug 5 2026, so every reviewer sees identical figures. Changing the seed or `TODAY` changes every
-  number quoted in `HANDOFF.md` and the README.
+- **`TODAY` comes from the loaded dataset** — with the current export that is **Aug 6 2026**
+  (its last lead date), so every reviewer sees identical figures. Re-ingesting a newer export
+  moves `TODAY` and with it every number quoted in `HANDOFF.md` and the README. The
+  deterministic generator (`mulberry32`, seed `20260805`, `TODAY` pinned Aug 5 2026) is only
+  the fallback when no dataset file is present.
 - ES5-style code throughout (`var`, `function`, IIFEs) — match it.
 - **No status is ever colour-alone.** Every status ships as a dot plus a text label, because brand
   coral sits close to status-critical red (ΔE 9.7 light / 6.8 dark, against a floor of 15). This is

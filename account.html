@@ -112,10 +112,22 @@
   function render() {
     var users = D.usersFor(state.partnerId);
 
-    document.getElementById('users-sub').textContent =
-      users.length + (users.length === 1 ? ' user' : ' users') + ' can sign in to this account.';
+    var realUsers = users.filter(function (u) { return !u.placeholder; });
+    document.getElementById('users-sub').textContent = realUsers.length
+      ? realUsers.length + (realUsers.length === 1 ? ' user' : ' users') + ' can sign in to this account.'
+      : 'No users on file yet.';
 
     document.getElementById('user-grid').innerHTML = users.map(function (u) {
+      /* The source has no contact data for this account — say so plainly
+         instead of rendering a record that looks broken. */
+      if (u.placeholder) {
+        return '<div class="user-card" style="display:block">' +
+          '<div style="font-size:15px;font-weight:600">No users on file yet</div>' +
+          '<div style="font-size:13px;color:var(--ink-2);margin-top:4px">Your team is added ' +
+            'during onboarding. Use “Add a user” below, or ' +
+            '<a href="mailto:logan@financialize.com">ask Logan</a> to set your team up.</div>' +
+          '</div>';
+      }
       return '<div class="user-card" data-uid="' + A.esc(u.id) + '">' +
         '<div class="avatar" title="' + A.esc(u.name) + '">' +
           (u.avatar ? '<img src="' + u.avatar + '" alt="">' : A.esc(initials(u.name))) +
@@ -143,6 +155,8 @@
     document.querySelectorAll('.user-card').forEach(function (card) {
       var uid = card.dataset.uid;
       var fileInput = card.querySelector('[data-file]');
+      /* The no-users-yet placeholder card has no actions to wire. */
+      if (!uid || !fileInput) return;
 
       card.querySelectorAll('[data-act]').forEach(function (a) {
         a.addEventListener('click', function () {

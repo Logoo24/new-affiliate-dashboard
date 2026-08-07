@@ -1133,9 +1133,14 @@
         billingPeriod: 'Net 30',
         billingBasis: 'Invoiced monthly',
         exclusivity: '365-day Priority/Hot exclusivity window',
+        /* No contact data exists in the export. `placeholder: true` makes
+           the views render a designed empty state ("no contact on file yet")
+           instead of a fake-looking record — an honest gap should read as an
+           unfilled field, not broken UI. */
         users: [
           { id: p.id + '-u1', name: 'Primary contact', title: 'Not in the lead export',
-            email: 'contact@' + p.id + '.example', isPrimary: true, away: false, avatar: null }
+            email: 'contact@' + p.id + '.example', isPrimary: true, away: false, avatar: null,
+            placeholder: true }
         ]
       };
     });
