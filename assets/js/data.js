@@ -2031,102 +2031,12 @@
     return '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
   }
 
-  /* ======================================================================
-     TEST-LEAD SANDBOX (mock)
-     ----------------------------------------------------------------------
-     "Post a test lead, see exactly what our filter returns — pass, or which
-     rule failed." Kills the integration-debugging email chain.
-
-     Rules are evaluated IN INTAKE ORDER against THIS account's criteria
-     record: the age band is read off the partner record — the same field
-     rejectDesc() renders — so OptiLabX's negotiated 45–79 holds here
-     without any page knowing about it. Check keys ARE reject-bucket keys,
-     so the sandbox's rejection reason is the exact string the lead table
-     would show for the same failure (the fidelity rule).
-
-     IN PRODUCTION THIS MUST RUN THE REAL FILTER CHAIN against the
-     partner's criteria record, behind a sandbox endpoint. A re-implemented
-     rule list drifts, and a sandbox that disagrees with intake is worse
-     than none. Auth, logging and rate limits mirror the duplicate lookup.
-     ====================================================================== */
-  function sandboxCheck(opts) {
-    opts = opts || {};
-    var p = partner(opts.partnerId);
-    var product = opts.product === 'life' ? 'life' : 'annuity';
-    var checks = [];
-    /* pass: true | false | null — null means "not evaluated", e.g. the
-       duplicate check cannot run without a valid phone. */
-    function add(key, label, pass, detail) {
-      checks.push({ key: key, label: label, pass: pass, detail: detail });
-    }
-
-    var digits = String(opts.phone || '').replace(/\D/g, '');
-    if (digits.length === 11 && digits.charAt(0) === '1') digits = digits.slice(1);
-    var phoneOk = digits.length === 10;
-    add('ipqs', 'Valid, working US phone', phoneOk,
-        phoneOk ? formatPhone(digits) : 'Needs a 10-digit US number.');
-
-    var dup = phoneOk ? checkDuplicate(digits) : null;
-    add('duplicate', 'Outside the 365-day Priority/Hot exclusivity window',
-        phoneOk ? !dup.duplicate : null,
-        !phoneOk ? 'Not checked — needs a valid phone first.'
-          : dup.duplicate ? 'Sold as Priority or Hot; last sold ' + dup.lastSoldMonth + '.'
-          : 'No match in the window.');
-
-    var st = String(opts.state || '').trim().toUpperCase();
-    var stateOk = /^[A-Z]{2}$/.test(st) && st !== 'NY';
-    add('state', 'Accepted state', stateOk,
-        st === 'NY' ? 'New York is never accepted.'
-          : stateOk ? st : 'Needs a two-letter US state code. US only.');
-
-    var band;
-    if (product === 'life') band = [25, 73];
-    else {
-      var m = /(\d+)\D+(\d+)/.exec(p.ageBand || '');
-      band = m ? [+m[1], +m[2]] : [45, 75];
-    }
-    var age = parseInt(opts.age, 10);
-    var ageOk = !isNaN(age) && age >= band[0] && age <= band[1];
-    add('age', 'Age within your ' + band[0] + '–' + band[1] + ' band', ageOk,
-        isNaN(age) ? 'Needs an age.'
-          : ageOk ? String(age) : age + ' is outside ' + band[0] + '–' + band[1] + '.');
-
-    var money = Number(String(opts.money == null ? '' : opts.money).replace(/[$,\s]/g, ''));
-    if (product === 'life') {
-      var incomeOk = !isNaN(money) && money >= 40000;
-      add('income', 'Household income $40,000 or greater', incomeOk,
-          isNaN(money) ? 'Needs a figure.'
-            : incomeOk ? '$' + money.toLocaleString('en-US') : 'Under the $40,000 minimum.');
-    } else {
-      var assetsOk = !isNaN(money) && money > 25000;
-      add('assets', 'Investable assets greater than $25,000', assetsOk,
-          isNaN(money) ? 'Needs a figure.'
-            : assetsOk ? '$' + money.toLocaleString('en-US')
-            : 'Under $25K never pays, on any comp model.');
-    }
-
-    var consentOk = opts.consent === 'trustedform' || opts.consent === 'jornaya';
-    add('consent', 'Consent certificate attached', consentOk,
-        consentOk ? (opts.consent === 'trustedform' ? 'TrustedForm' : 'Jornaya')
-                  : 'TrustedForm or Jornaya certificate required — prior express written consent.');
-
-    var firstFail = null;
-    for (var i = 0; i < checks.length; i++) {
-      if (checks[i].pass === false) { firstFail = checks[i]; break; }
-    }
-
-    /* The response body the sandbox endpoint would return. Rejected uses the
-       SAME reason string the lead table shows for this bucket, so what the
-       integrator sees in testing reconciles with what they see in reporting. */
-    var h = 0, seed = digits + st + age + product;
-    for (var c = 0; c < seed.length; c++) h = (h * 31 + seed.charCodeAt(c)) >>> 0;
-    var response = firstFail
-      ? { status: 'rejected', reason: rejectLabel(firstFail.key) }
-      : { status: 'accepted', lead_id: 'TEST-' + String(100000 + (h % 900000)) };
-
-    return { checks: checks, accepted: !firstFail,
-             failKey: firstFail ? firstFail.key : null, response: response };
-  }
+  /* NOTE — a test-lead sandbox lived here briefly (Aug 6–7 2026) and was
+     removed on Logan's call: checking a hand-typed lead against acceptance
+     criteria is not something affiliates need. What he actually wants in
+     this slot is a PIXEL TEST — verifying the tracking pixel fires correctly
+     on the affiliate's landing page — which pairs with Marc Heberling's
+     pixel-validation work and is not built yet. See ADMIN-MAPPING §7c. */
 
   /* ---------------------------------------------------------------------- */
   /* Suppression file                                                       */
@@ -2694,7 +2604,6 @@
     leadStatementsFor: leadStatementsFor,
     saveStatementUrl: saveStatementUrl,
     checkDuplicate: checkDuplicate,
-    sandboxCheck: sandboxCheck,
     SUPPRESSION: SUPPRESSION,
     suppressionSample: suppressionSample,
     suppressionManifest: suppressionManifest,

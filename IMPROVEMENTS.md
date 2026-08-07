@@ -60,7 +60,7 @@ The duplicate check and suppression file are the start of a genuinely differenti
 | **Pre-send validation API** | One endpoint an affiliate can call before acquiring a lead: duplicate status + criteria pass/fail (age band, state, assets threshold) against *their* account's terms. Returns pass/fail per rule, never internal data. Rate-limited and logged like the duplicate lookup. |
 | **Criteria as machine-readable spec** | Their negotiated criteria (the Targeting page) exposed as JSON from the same admin-managed source, so their form validation can be generated from it and never drift from what we actually enforce. |
 | **Suppression adoption feedback** | A small card on Duplicates & suppression: *your duplicate rejection rate, 30d, vs the 30d before you started pulling the file.* The file's value, proven with their own number. (Same measurement proposed to Sagar internally.) |
-| **Test-lead sandbox** | A "post a test lead" tool in Setup & docs that hits a sandbox endpoint and shows exactly what our filter returned — pass, or which rule failed. Kills the integration-debugging email chain with Zakira's team. |
+| **Pixel test tool** | A tool in Setup & docs that verifies the affiliate's tracking pixel fires correctly on their landing page. (A test-lead sandbox was tried here Aug 6–7 and removed — checking a hand-typed lead against acceptance criteria isn't an affiliate need; confirming their integration works is. Build as the front end to Marc Heberling's pixel-validation work.) |
 
 *This is the section with real competitive weight: most networks tell affiliates what got
 rejected; almost none help them not buy the lead in the first place.*
@@ -124,7 +124,7 @@ Phased by *value to the affiliate per unit of build effort*, taking dependencies
 |---|---|---|
 | **1 — with the current build** | Earnings statement + pending/settled (§1), weekly digest + rejection-spike alert (§2), comparison ranges + saved views (§6), freshness stamp (§7) | Statement and digest are the two features partners will *feel* immediately; most of the computation already exists in the engine. |
 | **2 — needs the admin build** | Change notices + change log (§2, §7), criteria as JSON + suppression adoption card (§3), campaign request flows + user management (§5) | All keyed on the admin tables `ADMIN-MAPPING.md` already specs — build once, several features light up. |
-| **3 — needs new plumbing** | Pre-send validation API + test sandbox (§3), sub-ID scorecards (§4, blocked on A2), scheduled exports, postback self-config (§5) | Real engineering, and the pre-send API is the one to design carefully — it inherits every containment rule from the duplicate lookup. |
+| **3 — needs new plumbing** | Pre-send validation API + pixel test tool (§3), sub-ID scorecards (§4, blocked on A2), scheduled exports, postback self-config (§5) | Real engineering, and the pre-send API is the one to design carefully — it inherits every containment rule from the duplicate lookup. |
 | **4 — strategic** | Benchmarks + what-to-fix-first (§4), multi-account, mobile "today" view | Differentiators once the fundamentals are trusted. |
 
 **The one-line version:** the dashboard currently tells a partner what happened. Phase 1 makes it
