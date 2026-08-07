@@ -2060,10 +2060,32 @@
      Storage spec: ADMIN-MAPPING §7d. */
 
   var COMPLIANCE_CONTACT = {
-    name: 'Jephanie Genilla',
+    name: 'Jefanie Genilla',
     email: 'jgenilla@financialize.com',
     role: 'Compliance review'
   };
+
+  /* Test-lead conventions — system values, not suggestions. The test ZIP
+     routes the lead down the test path, and dev_test as the first name is
+     how the team spots test rows in the lead table. */
+  var TEST_LEAD = {
+    zip: '99996',
+    firstName: 'dev_test',
+    note: 'Unique email address and phone number on every test — repeats are rejected as duplicates.'
+  };
+
+  /* Tracking-URL parameters the tracking system accepts, from the LP &
+     Pixel guide's variable list. THE KEY LIST BELONGS TO THE TRACKING
+     SYSTEM: the admin's Tracking URL generator selects from the same set,
+     and this constant must be replaced by that source (ADMIN-MAPPING §7d)
+     so the portal can never offer a key the system would drop. */
+  var TRACKING_PARAMS = [
+    { group: 'Sub-tracking', keys: ['subid', 'subid2', 'subid3', 'subid4', 'subid5', 'xaffid', 'xsubid', 'transid'] },
+    { group: 'UTM', keys: ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] },
+    { group: 'Click IDs', keys: ['gclid', 'fbclid', 'msclkid', 'click_id', 'transaction_id'] },
+    { group: 'Referrer & source', keys: ['referrer', 'source_affiliate', 'first_touch_timestamp'] },
+    { group: 'Consent & verification', keys: ['phone_opt_in', 'tcpa_opt_in', 'opt_in_timestamp', 'xxTrustedFormCertUrl'] }
+  ];
 
   /* Global per product line; the campaign's CID is substituted in. The
      &email= variant takes the subscriber address via a merge field. */
@@ -2079,17 +2101,42 @@
     annuity: {
       endpoint: 'https://admin.financialize.com/api/lead_post.php',
       docKey: 'api_annuity',
-      required: 'first_name · last_name · phone_day · email · zip_code · ' +
-        'age OR dob_y · investment (exact option text) · campaign_id · response_format',
+      /* Every row is REQUIRED on every post — from Lead Submission API
+         V5.22.26. The linked doc is the spec; this list must track it. */
+      required: [
+        { f: 'first_name', n: 'Lead’s first name' },
+        { f: 'last_name', n: 'Lead’s last name' },
+        { f: 'phone_day', n: 'Primary phone number' },
+        { f: 'email', n: 'Email address' },
+        { f: 'zip_code', n: 'ZIP code' },
+        { f: 'age OR dob_y', n: 'One of the two — age in years, or 4-digit birth year. Not both required.' },
+        { f: 'investment', n: 'Must match one of the nine documented options EXACTLY, character for character (e.g. "$50,000 - $100,000").' },
+        { f: 'campaign_id', n: 'This campaign’s CID — shown in step 1.' },
+        { f: 'response_format', n: '"json"' }
+      ],
       note: 'The investment value must match one of the nine documented options exactly, ' +
         'character for character.'
     },
     life: {
       endpoint: 'https://admin.financialize.com/api/lead_post_life_insurance.php',
       docKey: 'api_life',
-      required: 'first_name · last_name · email · phone_day (10 digits) · zip_code (5 digits) · ' +
-        'age OR dob_y · health · reason_for_insurance · investment · household_income · ' +
-        'nicotine_use · campaign_id · aff_id · response_format ("json")',
+      /* From the Life Lead POST API doc. */
+      required: [
+        { f: 'first_name', n: 'Lead’s first name' },
+        { f: 'last_name', n: 'Lead’s last name' },
+        { f: 'email', n: 'Valid email address' },
+        { f: 'phone_day', n: 'Daytime phone — must be 10 digits' },
+        { f: 'zip_code', n: 'Must be 5 digits' },
+        { f: 'age OR dob_y', n: 'One of the two — age in years, or 4-digit birth year (YYYY). Not both required.' },
+        { f: 'health', n: 'One of: Excellent · Good · Average · Fair · Poor' },
+        { f: 'reason_for_insurance', n: 'One of the seven documented options (e.g. "Mortgage Protection") — exact text' },
+        { f: 'investment', n: 'Coverage range — one of the eight documented options, exact text' },
+        { f: 'household_income', n: 'One of the five documented bands, exact text' },
+        { f: 'nicotine_use', n: '"yes" or "no"' },
+        { f: 'campaign_id', n: 'This campaign’s CID — shown in step 1.' },
+        { f: 'aff_id', n: 'Your affiliate ID' },
+        { f: 'response_format', n: 'Must be "json"' }
+      ],
       note: 'health, reason_for_insurance, investment and household_income each take one of a ' +
         'fixed option list — see the doc for the exact strings.'
     }
@@ -2737,6 +2784,8 @@
     COMPLIANCE_CONTACT: COMPLIANCE_CONTACT,
     UNSUB_LINKS: UNSUB_LINKS,
     API_SPECS: API_SPECS,
+    TEST_LEAD: TEST_LEAD,
+    TRACKING_PARAMS: TRACKING_PARAMS,
     setupCampaignsFor: setupCampaignsFor,
     campaignSetup: campaignSetup,
     saveSetupState: saveSetupState,

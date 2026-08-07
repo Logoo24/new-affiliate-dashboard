@@ -130,14 +130,56 @@
   /* The mock tracking/test URLs are placeholders for admin-generated URLs —
      ADMIN-MAPPING §7d. Real ones come off the campaign record. */
   var domain = c.product === 'Life' ? 'lead.lifepolicyexpress.com' : 'lead.annuities.net';
-  var trackingUrl = 'https://' + domain + '/?cid=' + c.id + '&subid={your_subid}';
+  var baseTrackingUrl = 'https://' + domain + '/?cid=' + c.id;
   var testUrl = 'https://' + domain + '/?cid=' + c.id + '&test=1';
 
+  /* Which tracking parameters ride on the URL. All on by default — the
+     affiliate unchecks what they don't pass. Selection persists per
+     campaign so the copied URL survives a reload. */
+  var paramSel = (function () {
+    var all = {};
+    D.TRACKING_PARAMS.forEach(function (g) {
+      g.keys.forEach(function (k) { all[k] = true; });
+    });
+    try {
+      var raw = sessionStorage.getItem('fz_trkparams_' + state.partnerId + '_' + c.id);
+      if (raw) {
+        var off = JSON.parse(raw);
+        off.forEach(function (k) { all[k] = false; });
+      }
+    } catch (e) {}
+    return all;
+  })();
+  function persistParams() {
+    var off = Object.keys(paramSel).filter(function (k) { return !paramSel[k]; });
+    try { sessionStorage.setItem('fz_trkparams_' + state.partnerId + '_' + c.id, JSON.stringify(off)); }
+    catch (e) {}
+  }
+  function trackingUrlNow() {
+    var qs = [];
+    D.TRACKING_PARAMS.forEach(function (g) {
+      g.keys.forEach(function (k) { if (paramSel[k]) qs.push(k + '={' + k + '}'); });
+    });
+    return baseTrackingUrl + (qs.length ? '&' + qs.join('&') : '');
+  }
+
   function bodyTracking() {
-    var h = '<p style="margin-top:0">Send your traffic to this link. Append your own ' +
-      'sub-ID values so reporting can break out by source — sub-IDs get you per-source ' +
-      'feedback and per-source pricing, and protect your strong sources from weaker ones.</p>' +
-      copyRow('Tracking URL', trackingUrl);
+    var h = '<p style="margin-top:0">Send your traffic to this link. The checkboxes control ' +
+      'which tracking parameters ride on the URL — untick anything you don\'t pass and it drops ' +
+      'out. Each <code>{value}</code> is a placeholder your system fills in. Sub-IDs are the ' +
+      'ones to keep: they get you per-source feedback and per-source pricing, and protect your ' +
+      'strong sources from weaker ones.</p>' +
+      D.TRACKING_PARAMS.map(function (g) {
+        return '<div style="margin:8px 0 2px"><span class="tile-label">' + A.esc(g.group) + '</span></div>' +
+          '<div style="display:flex;gap:4px 12px;flex-wrap:wrap">' +
+          g.keys.map(function (k) {
+            return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;' +
+              'font-family:ui-monospace,monospace;cursor:pointer">' +
+              '<input type="checkbox" data-trkparam="' + k + '"' + (paramSel[k] ? ' checked' : '') + '>' +
+              A.esc(k) + '</label>';
+          }).join('') + '</div>';
+      }).join('') +
+      '<div id="tracking-url-row">' + copyRow('Your tracking URL', trackingUrlNow()) + '</div>';
     if (su.method === 'api') {
       var spec = D.API_SPECS[c.product === 'Life' ? 'life' : 'annuity'];
       var doc = D.documentsFor(state.partnerId).filter(function (d) { return d.key === spec.docKey; })[0];
@@ -172,9 +214,22 @@
         'cost-per-lead campaigns — most CPL partners skip it. If you do want accepted leads ' +
         'passed back to your system, paste your pixel URL and we\'ll place and gate it for you.</p>';
     var h = intro +
-      '<p style="font-size:13px;color:var(--ink-2)">Dynamic values you can put in your URL: ' +
-      '<code>{transaction_id}</code> · <code>{sale_amount}</code> · <code>{xsubid}</code>. ' +
-      'Need more than one pixel? Send the second to Logan and we\'ll add it.</p>';
+      /* The wrong-pixel guard: what belongs in this box, and what does not. */
+      '<div class="notice notice-info" style="margin:10px 0">' +
+        '<span class="ico">◆</span><div style="font-size:13px">' +
+        '<strong>What goes here: a URL, not a code snippet.</strong> Your pixel is the ' +
+        '<em>postback URL from your own tracking system</em> — the address that, when loaded, ' +
+        'records a conversion on your side. We place it on our thank-you page as a 1×1 iframe ' +
+        'and it fires only when a lead is <strong>accepted</strong>.' +
+        '<ul style="margin:8px 0 0;padding-left:18px">' +
+        '<li>If your platform hands you an HTML tag, paste just the <code>src</code> URL from ' +
+          'inside it — not the whole tag.</li>' +
+        '<li>Not a JavaScript snippet, and not a platform pixel ID (a Facebook or Google pixel ' +
+          'belongs on <em>your</em> pages, not here).</li>' +
+        '<li>Dynamic values we fill in when it fires: <code>{transaction_id}</code> · ' +
+          '<code>{sale_amount}</code> · <code>{xsubid}</code>.</li>' +
+        '<li>Need more than one pixel? Send the second to Logan and we\'ll add it.</li>' +
+        '</ul></div></div>';
     if (su.pixelUrl) {
       h += '<div class="tile-label">Pixel on file</div>' + mono(A.esc(su.pixelUrl)) +
         '<div style="display:flex;gap:8px;margin-top:10px">' +
@@ -208,9 +263,17 @@
       '<li><span class="mark">3</span><span><strong>Consumer Blocked.</strong> Repeating the same ' +
         'email, phone or IP — normal during testing — trips our block. Tell Logan and we\'ll ' +
         'whitelist your testing IP.</span></li></ul>' +
-      '<div class="tile-label" style="margin-top:12px">Required fields</div>' +
-      '<p style="font-size:13px;color:var(--ink-2);margin:4px 0 10px">' + A.esc(spec.required) + '</p>' +
-      '<p style="font-size:13px;color:var(--ink-2)">Pass your tracking keys on every post — ' +
+      '<div class="tile-label" style="margin-top:12px">Required fields — every one, on every post</div>' +
+      '<p style="font-size:13px;color:var(--ink-2);margin:4px 0 8px">A post missing any of ' +
+      'these is rejected before it reaches a single filter. The linked documentation is the ' +
+      'spec — option lists below are abbreviated, the doc has the exact strings.</p>' +
+      '<div class="table-wrap"><table class="data"><tbody>' +
+      spec.required.map(function (r) {
+        return '<tr><th style="width:34%;text-align:left;font-weight:600;' +
+          'font-family:ui-monospace,monospace;font-size:12px">' + A.esc(r.f) + '</th>' +
+          '<td style="font-size:12.5px">' + A.esc(r.n) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<p style="font-size:13px;color:var(--ink-2);margin-top:10px">Pass your tracking keys on every post — ' +
       '<code>subid</code>, <code>xsubid</code>, <code>transid</code> and the rest are in the doc. ' +
       'A successful post returns your <code>lead_id</code>; the response tells you accepted or ' +
       'rejected per lead.</p>' +
@@ -236,6 +299,18 @@
       (su.live || D.campaignSetup(state.partnerId, c.id).steps.filter(function (s) { return s.key === 'creatives'; })[0].state === 'done'
         ? '' : '<button type="button" class="btn btn-sm" id="creatives-sent">I\'ve sent them</button>') +
       '</div>' +
+      /* The button relies on a mail handler being registered; plenty of
+         browsers have none, so the address is always spelled out. */
+      '<div style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0;padding:9px 12px;' +
+        'border:1px solid var(--border);border-radius:6px;background:var(--surface-2)">' +
+        'If the button doesn\'t open your email app, send it manually:<br>' +
+        '<strong>To:</strong> <span style="font-family:ui-monospace,monospace">' +
+          A.esc(D.COMPLIANCE_CONTACT.email) + '</span> ' +
+        '<button type="button" class="btn btn-sm" data-copy="' + A.esc(D.COMPLIANCE_CONTACT.email) + '">Copy</button><br>' +
+        '<strong>Cc:</strong> <span style="font-family:ui-monospace,monospace">logan@financialize.com</span> ' +
+        '<button type="button" class="btn btn-sm" data-copy="logan@financialize.com">Copy</button><br>' +
+        '<strong>Subject:</strong> Creatives for review — ' + A.esc(c.name) + ' (CID ' + c.id + ')' +
+      '</div>' +
       '<p style="font-size:12.5px;color:var(--ink-muted);margin:8px 0 0">Goes to ' +
       A.esc(D.COMPLIANCE_CONTACT.name) + ' (' + A.esc(D.COMPLIANCE_CONTACT.email) +
       '), copying Logan. Unsure an angle will pass? Send it before running it — quick feedback ' +
@@ -248,7 +323,10 @@
       h = '<p style="margin-top:0">Open your test URL — it loads the landing page with test ' +
         'parameters attached. Submit the form with:</p>' +
         '<ul class="checklist">' +
-        '<li><span class="mark">·</span><span>ZIP code <strong>99996</strong> or <strong>99997</strong></span></li>' +
+        '<li><span class="mark">·</span><span>First name <strong>' + A.esc(D.TEST_LEAD.firstName) +
+          '</strong> — how our team spots test rows.</span></li>' +
+        '<li><span class="mark">·</span><span>ZIP code <strong>' + A.esc(D.TEST_LEAD.zip) +
+          '</strong></span></li>' +
         '<li><span class="mark">·</span><span>A <strong>unique email and phone</strong> every ' +
           'test — duplicates get rejected.</span></li></ul>' +
         copyRow('Test URL', testUrl) +
@@ -258,8 +336,9 @@
     } else {
       h = '<p style="margin-top:0">There is no separate test endpoint — your first test posts ' +
         'to production. A <code>success</code> response with a <code>lead_id</code> means we ' +
-        'received it; the response also tells you whether it was accepted. Use ZIP ' +
-        '<strong>99996/99997</strong> and a unique email and phone per test.</p>' +
+        'received it; the response also tells you whether it was accepted. On every test post, ' +
+        'use first name <strong>' + A.esc(D.TEST_LEAD.firstName) + '</strong>, ZIP ' +
+        '<strong>' + A.esc(D.TEST_LEAD.zip) + '</strong>, and a unique email and phone.</p>' +
         '<p style="font-size:13px;color:var(--ink-2)">We verify the test lead on our side and ' +
         'confirm with you before go-live.</p>';
     }
@@ -323,6 +402,25 @@
         try { navigator.clipboard.writeText(b.dataset.copy); } catch (e) {}
         b.textContent = 'Copied';
         setTimeout(function () { b.textContent = 'Copy'; }, 1400);
+      });
+    });
+    /* Parameter checkboxes rebuild only the URL row, so the open step and
+       the rest of the page never flicker. */
+    document.querySelectorAll('[data-trkparam]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        paramSel[cb.dataset.trkparam] = cb.checked;
+        persistParams();
+        var row = document.getElementById('tracking-url-row');
+        if (row) {
+          row.innerHTML = copyRow('Your tracking URL', trackingUrlNow());
+          row.querySelectorAll('[data-copy]').forEach(function (b) {
+            b.addEventListener('click', function () {
+              try { navigator.clipboard.writeText(b.dataset.copy); } catch (e) {}
+              b.textContent = 'Copied';
+              setTimeout(function () { b.textContent = 'Copy'; }, 1400);
+            });
+          });
+        }
       });
     });
     var pf = document.getElementById('pixel-form');

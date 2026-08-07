@@ -79,7 +79,7 @@ below; this is the summary to work from.
 | B12 | **Per-affiliate agreement URL** | The "Your agreement" card | A Google Doc URL on the affiliate record, different for every partner. An affiliate with none set renders "not linked yet", never a dead button. §7c |
 | B13 | **Per-affiliate lead criteria** | Every criteria line on Targeting, and the age wording in rejection labels | The OptiLabX 45–79 band already proves criteria are negotiated per account. **Any** criteria value may differ, not just age. §1 |
 | B14 | **Comp model as a real campaign column** | The entire column projection | Currently parsed out of the campaign *name*. This is the most load-bearing value in the system and it is being inferred from a string. §2 |
-| B15 | **Monthly lead-statement URL per affiliate** | Lead statements on the Compensation page | A Google Sheet URL per affiliate per month, pasted by the admin after the statement is generated (first business day after month close, give or take). A month with none renders "Not linked yet", never a dead button. §7d |
+| B15 | **Monthly lead-statement URL per affiliate** | Lead statements on the Compensation page | A Google Sheet URL per affiliate per month, pasted by the admin after the statement is generated (first business day after month close, give or take). A month with none renders "Not linked yet", never a dead button. §7e |
 
 ### C. Confirmed present — no work needed
 
@@ -628,7 +628,7 @@ Steps per path (sources: Onboarding packet V7.16.26, LP & Pixel Guide V7.14.26, 
 
 | Path | Steps |
 |---|---|
-| Landing pages | Tracking link → **place pixel** (required for rev share, skippable for CPL) → creatives review → test lead (test URL, ZIP 99996/99997, unique email+phone, both-sides confirmation) → go live |
+| Landing pages | Tracking link (with parameter picker) → **place pixel** (required for rev share, skippable for CPL) → creatives review → test lead (test URL, first name `dev_test`, ZIP 99996, unique email+phone, both-sides confirmation) → go live |
 | API | CID + docs → build integration (headers, exact option text, Consumer Blocked) → creatives review → test lead (posts to production; response says accepted/rejected) → go live |
 
 | Field / element | Source in mock | Status |
@@ -637,15 +637,18 @@ Steps per path (sources: Onboarding packet V7.16.26, LP & Pixel Guide V7.14.26, 
 | `campaign.traffic_source` (`email` / `non_email`) | parsed off the campaign name (`[Non-email …]`) | **NEEDS BUILDING** as a real field; name-parsing is the same fragility as comp model |
 | `campaign.tracking_url` / `test_url` | placeholder URLs built from product domain + CID | **NEEDS BUILDING** — admin generates these today via the campaign listing's Tracking URL button; the portal needs them stored on the campaign record |
 | **`campaign.pixel_url`** — the affiliate-writable field | sessionStorage via `saveSetupState()` | **NEEDS BUILDING** with an **audit trail**. We install it as the 1×1 iframe on the thank-you page (Pixel Code → Thank You Page), gated to accepted leads. Changing it after go-live notifies Logan and is re-verified with a test lead before taking effect. Multiple pixels = multiple iframes, added by us |
-| `campaign_setup` step states | `campaignSetup()` + sessionStorage | **NEEDS BUILDING** — `(campaign_id, step_key, state, updated_by, updated_at)`. Admin sets every state except the pixel submission and the affiliate's "sent" claims; test-lead confirmation can auto-set from an actual received test lead (ZIP 99996/99997) |
+| `campaign_setup` step states | `campaignSetup()` + sessionStorage | **NEEDS BUILDING** — `(campaign_id, step_key, state, updated_by, updated_at)`. Admin sets every state except the pixel submission and the affiliate's "sent" claims; test-lead confirmation can auto-set from an actual received test lead (first name `dev_test`, ZIP 99996) |
+| **Tracking-URL parameter list** | `TRACKING_PARAMS` in `data.js` — 25 keys in 5 groups, checkbox picker on the tracking step; all on by default, unchecking drops the key from the generated URL | **NEEDS CONNECTING** — the key list belongs to the **tracking system**: the admin's Tracking URL generator (campaign listing → Tracking URL button) selects from the same set. The portal must read that source, not carry its own copy, or the portal will offer keys the system drops. Per-affiliate selection is a client-side convenience; nothing needs storing |
+| **Test-lead conventions** | `TEST_LEAD` in `data.js` — first name `dev_test`, ZIP `99996`, unique email+phone per test | **LIVE VALUES**, but they are SYSTEM routing values — if the test ZIP or the dev_test convention ever changes in the intake system, this constant must change with it. Should live in config, one source for both sides |
+| **API required-field lists** | `API_SPECS[product].required` — every required field per product, rendered as a table on the integrate step | Transcribed from Lead Submission API V5.22.26 and the Life Lead POST API doc. **The linked doc is the spec** — when either doc revs, this list must rev with it. Ideally generated from the same source as the docs |
 | Unsubscribe links | `UNSUB_LINKS`, CID substituted per campaign | **LIVE VALUES** (global per product line). Rendered only on email-traffic campaigns |
 | API endpoints + required-field summaries | `API_SPECS` | **LIVE VALUES** from the two API docs. The summary is orientation; the linked doc is the spec — keep them from drifting |
-| Compliance contact | `COMPLIANCE_CONTACT` — Jephanie Genilla, jgenilla@financialize.com, CC Logan | constant; creative policy: build and iterate freely, every creative reviewed before running, **re-send the current set on every change** |
+| Compliance contact | `COMPLIANCE_CONTACT` — Jefanie Genilla, jgenilla@financialize.com, CC Logan | constant; creative policy: build and iterate freely, every creative reviewed before running, **re-send the current set on every change** |
 | Demo campaigns | `SETUP_CAMPAIGNS` — one synthetic in-setup campaign each for Heritage (LP path) and OptiLabX (API path) | **MOCK ONLY.** Not in `CAMPAIGNS`, so queries, filters and metrics never see them. Delete when real setup records exist |
 
 ---
 
-## 7d. Compensation page
+## 7e. Compensation page
 
 Added August 6. Money in one place: what the window earned, the billing terms, the monthly
 statements, and the clawback record. Reached from the sidebar or by clicking the Billing details

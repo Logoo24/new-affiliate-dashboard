@@ -240,13 +240,13 @@ which the build must keep:
 4. **An account with no campaigns shows one sentence** — "There are no active campaigns on this
    account." — and no setup prompt. There is deliberately no "create your first campaign" flow;
    campaigns exist before logins do.
-5. **Creatives go to compliance, not to a form.** Jephanie Genilla (jgenilla@financialize.com),
+5. **Creatives go to compliance, not to a form.** Jefanie Genilla (jgenilla@financialize.com),
    CC Logan. The policy register is flexible on purpose: partners build and iterate their own
    creatives as they see fit, but every creative is reviewed before it runs and **the current
    running set must be re-sent every time it changes** so what's on file matches what's live.
 
 The old "test-lead sandbox" want is satisfied inside this flow: the *Send a test lead* step is
-the pixel/integration verification (test URL + ZIP 99996/99997 on the LP path, production post
+the pixel/integration verification (test URL, first name dev_test, ZIP 99996 on the LP path, production post
 on the API path), confirmed from both sides before go-live.
 
 ---
