@@ -18,22 +18,18 @@
 
       <div id="filter-host"></div>
 
+      <!-- The score IS the page. One dial, same drawing as the Partnership
+           summary, with everything explanatory pushed into the info button,
+           hover descriptors, and the collapsible section at the bottom. -->
       <section class="card">
-        <div class="card-body" style="padding-top:18px">
-          <div class="hero">
-            <div>
-              <div class="hero-label" id="score-label">Lead health score</div>
-              <div class="hero-figure" id="hero-score">—</div>
-              <div id="hero-tier" style="margin-top:8px"></div>
-            </div>
-            <div style="flex:1;min-width:260px">
-              <div id="hero-action" style="font-size:14px;font-weight:600;margin-bottom:6px"></div>
-              <p class="hero-note" id="hero-note"></p>
-              <div id="hero-provisional"></div>
-            </div>
+        <div class="card-body" style="padding-top:20px">
+          <div style="display:flex;flex-direction:column;align-items:center">
+            <div class="hero-label" id="score-label" style="display:flex;align-items:center">Lead health score</div>
+            <div id="gauge" style="margin-top:6px"></div>
+            <div id="score-chips" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;justify-content:center"></div>
           </div>
         </div>
-        <div class="card-foot" id="window-note"></div>
+        <div class="card-foot" style="justify-content:center" id="window-note"></div>
       </section>
 
       <div class="grid-2">
@@ -63,17 +59,12 @@
         </section>
       </div>
 
-      <!-- States we need, ideal send windows and the ideal daily split used to
-           sit here. They are targeting guidance rather than score explanation,
-           so they now live on the Targeting page and are not duplicated. -->
-
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <h2>How the score is built</h2>
-            <p class="sub">What each band means, and what to do about it.</p>
-          </div>
-        </div>
+      <details class="card" id="how-built">
+        <summary>
+          <h2>How the score is built</h2>
+          <span class="chev">▼</span>
+        </summary>
+        <div class="card-body" id="how-built-body"></div>
         <div class="table-wrap">
           <table class="data" id="tier-table"></table>
         </div>
@@ -81,7 +72,7 @@
           Refreshed every Monday. Rolling 30-day window with a 10-day maturity buffer on
           outcome metrics, so leads still inside their sales cycle are not counted against you.
         </div>
-      </section>
+      </details>
 
     </div>
   </div>
@@ -115,102 +106,121 @@
     subid: state.subid
   });
 
-  /* ---- "what is this score?" ---------------------------------------------
-     The pillar list and weights are read from the live engine rather than
-     written out as prose, so this explanation cannot drift away from the
-     scoring that actually runs. */
+  /* One builder for the full explanation, used by BOTH the info-button modal
+     and the collapsible section below, so the two can never disagree. The
+     pillar list and weights are read from the live engine rather than written
+     out as prose, so this cannot drift away from the scoring that runs. */
+  function explainHtml() {
+    var live = result.pillars.filter(function (p) { return !p.parked; });
+    var parked = result.pillars.filter(function (p) { return p.parked; });
+
+    var rows = live.map(function (p) {
+      var inputs = (p.parts || [])
+        .filter(function (x) { return x.display !== undefined; })
+        .map(function (x) { return A.esc(x.label); })
+        .join(' · ') || '—';
+      return '<tr>' +
+        '<td><strong>' + A.esc(p.label) + '</strong></td>' +
+        '<td class="num">' + Math.round((p.effectiveWeight || p.weight) * 100) + '%</td>' +
+        '<td style="color:var(--ink-2)">' + inputs + '</td>' +
+        '</tr>';
+    }).join('');
+
+    return '' +
+      '<p>Your lead health score is a single 0&ndash;100 read on how well your traffic is ' +
+      'performing, refreshed every Monday over a rolling 30-day window. It is anchored on one ' +
+      'question: <strong>of the leads you send, how many reach a qualified sale at the top ' +
+      'tiers &mdash; Priority or Hot &mdash; and how quickly.</strong></p>' +
+
+      '<p>Leads still inside their sales cycle are excluded, so recent volume is never counted ' +
+      'against you before it has had a chance to convert. Below <strong>100 matured leads</strong> ' +
+      'the score is marked provisional. The score is built from these parts:</p>' +
+
+      '<div class="table-wrap"><table class="data">' +
+      '<thead><tr><th>What we measure</th><th class="num">Weight</th><th>What goes into it</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>' +
+
+      (parked.length
+        ? '<p style="margin-top:14px"><strong>' +
+          parked.map(function (p) { return A.esc(p.label); }).join(' and ') +
+          '</strong> is in development — we are not reporting call timing back to you yet, so ' +
+          'it is left out of your score entirely rather than counted against you, and the ' +
+          'remaining weights are rebalanced to 100%.</p>'
+        : '') +
+
+      '<p>If you want to move the number, your rejection reasons and the ' +
+      '<a href="' + A.linkTo('targeting.html', state) + '">Targeting page</a> are the two ' +
+      'fastest places to look.</p>';
+  }
+
   A.infoButton(document.getElementById('score-label'), {
     title: 'How your lead health score works',
     ariaLabel: 'How your lead health score works',
-    html: function () {
-      var live = result.pillars.filter(function (p) { return !p.parked; });
-      var parked = result.pillars.filter(function (p) { return p.parked; });
-
-      var rows = live.map(function (p) {
-        var inputs = (p.parts || [])
-          .filter(function (x) { return x.display !== undefined; })
-          .map(function (x) { return A.esc(x.label); })
-          .join(' · ') || '—';
-        return '<tr>' +
-          '<td><strong>' + A.esc(p.label) + '</strong></td>' +
-          '<td class="num">' + Math.round((p.effectiveWeight || p.weight) * 100) + '%</td>' +
-          '<td style="color:var(--ink-2)">' + inputs + '</td>' +
-          '</tr>';
-      }).join('');
-
-      return '' +
-        '<p>Your lead health score is a single 0&ndash;100 read on how well your traffic is ' +
-        'performing for us, refreshed every Monday over a rolling 30-day window. It is anchored ' +
-        'on one question: <strong>of the leads you send, how many reach a qualified sale at the ' +
-        'top tiers &mdash; Priority or Hot &mdash; and how quickly.</strong> Everything else in ' +
-        'the model exists to explain or protect that number.</p>' +
-
-        '<p>Leads still inside their sales cycle are excluded, so recent volume is never counted ' +
-        'against you before it has had a chance to convert. Below ' +
-        '<strong>100 matured leads</strong> the score is marked provisional and should be read as ' +
-        'directional rather than final. The score is built from these parts:</p>' +
-
-        '<div class="table-wrap"><table class="data">' +
-        '<thead><tr><th>What we measure</th><th class="num">Weight</th><th>What goes into it</th></tr></thead>' +
-        '<tbody>' + rows + '</tbody></table></div>' +
-
-        (parked.length
-          ? '<p style="margin-top:14px"><strong>' +
-            parked.map(function (p) { return A.esc(p.label); }).join(' and ') +
-            '</strong> is not scored yet. We are not reporting call timing back to you, so rather ' +
-            'than counting it against you it is left out entirely and the remaining weights are ' +
-            'rebalanced to 100%.</p>'
-          : '') +
-
-        '<p>The band your score falls into is explained at the bottom of this page, along with ' +
-        'what each one means. If you want to move the number, your rejection reasons and the ' +
-        '<a href="' + A.linkTo('targeting.html', state) + '">Targeting page</a> are the two ' +
-        'fastest places to look.</p>';
-    }
+    html: explainHtml
   });
 
-  /* ---- hero ------------------------------------------------------------ */
-  document.getElementById('hero-score').textContent = result.score;
-  document.getElementById('hero-tier').innerHTML =
-    '<span class="badge ' + result.tier.badge + '" style="font-size:12px;padding:4px 12px">' +
-    '<span class="dot"></span>' + result.tier.label + '</span>';
-  document.getElementById('hero-action').textContent = result.tier.action;
-  document.getElementById('hero-note').textContent =
-    'The score is anchored on one question: of the leads we paid you for, how many reached ' +
-    'Priority or Hot, and how fast. Everything else in the model exists to explain or protect ' +
-    'that number.';
+  /* ---- the dial ---------------------------------------------------------- */
+  var sevSuffix = { '': '', 'is-warning': '-warning', 'is-serious': '-serious',
+                    'is-critical': '-critical' }[H.meterClass(result.score)];
+  C.gauge(document.getElementById('gauge'), {
+    score: result.score,
+    tier: result.tier,
+    sevSuffix: sevSuffix,
+    scale: 1.25
+  });
 
-  if (result.provisional) {
-    document.getElementById('hero-provisional').innerHTML =
-      '<div class="notice notice-warn" style="margin:12px 0 0"><span class="ico">▲</span><div>' +
-      '<strong>Provisional.</strong> ' + A.fmtInt(result.maturePaid) + ' matured paid leads in the ' +
-      'window, below the 100-lead gate. Treat the score as directional until volume builds.' +
-      '</div></div>';
-  }
+  /* ---- compact chips instead of paragraphs -------------------------------
+     Provisional status and penalties appear as short badges with hover
+     descriptors — the explanation is one hover away, not a block of text. */
+  (function () {
+    var chips = '';
+    if (result.provisional) {
+      chips += '<span class="badge badge-warn"><span class="dot"></span>Provisional</span>' +
+        A.tip('Fewer than 100 of your leads in this window have finished their sales cycle, ' +
+              'so read the score as directional rather than final.');
+    }
+    if (result.penalties.length) {
+      var total = result.penalties.reduce(function (a, p) { return a + p.points; }, 0);
+      chips += '<span class="badge badge-crit"><span class="dot"></span>Penalty −' + total + '</span>' +
+        A.tip('Point deductions applied on top of the pillar scores when a specific problem ' +
+              'crosses a threshold. Currently: ' +
+              result.penalties.map(function (p) { return p.label + ' (−' + p.points + ')'; }).join(', ') + '.');
+    }
+    document.getElementById('score-chips').innerHTML = chips;
+  })();
 
   document.getElementById('window-note').innerHTML =
     'Window: ' + A.fmtDate(result.range.from) + ' – ' + A.fmtDate(result.range.to) +
-    ' · ' + A.fmtInt(result.metrics.paid) + ' paid leads, ' +
-    A.fmtInt(result.maturePaid) + ' matured' +
-    (result.penalties.length
-      ? ' · <span style="color:var(--critical-text);font-weight:600">Penalties applied: ' +
-        result.penalties.map(function (p) { return A.esc(p.label) + ' (−' + p.points + ')'; }).join(', ') +
-        '</span>'
-      : ' · No penalties applied');
+    ' · refreshed every Monday';
 
-  /* ---- pillar meters --------------------------------------------------- */
+  /* ---- pillar meters ------------------------------------------------------
+     Slimmed on purpose: name + hover descriptor + score + bar + the raw
+     diagnostic values. The weight and the what-it-measures sentence live in
+     the descriptor, not on the page. */
   (function () {
+    var PILLAR_DESC = {
+      economics: 'How much of what you send reaches a qualified sale at the top tiers, and how fast.',
+      quality: 'How clean your leads are on arrival — acceptance rate, duplicates, and contact validity.',
+      operations: 'How quickly and how often we call your leads. We are not reporting this back ' +
+                  'to you yet, so it is left out of your score rather than counted against you.',
+      volume: 'How much you send, how steadily, and whether it lands in the states and on the ' +
+              'days we need most.'
+    };
+    function pillarTip(p) {
+      var weightPart = p.parked ? '' :
+        ' Counts for ' + Math.round((p.effectiveWeight || p.weight) * 100) + '% of your score right now.';
+      return A.tip((PILLAR_DESC[p.key] || '') + weightPart);
+    }
+
     var html = result.pillars.map(function (p) {
       if (p.parked) {
         return '<div class="meter is-parked">' +
           '<div class="meter-head">' +
-            '<span class="meter-name">' + A.esc(p.label) + '</span>' +
-            '<span class="meter-weight">' + Math.round(p.weight * 100) + '% weight</span>' +
+            '<span class="meter-name">' + A.esc(p.label) + '</span>' + pillarTip(p) +
             '<span class="spacer"></span>' +
-            '<span class="badge badge-warn"><span class="dot"></span>Parked</span>' +
+            '<span class="badge"><span class="dot"></span>In development</span>' +
           '</div>' +
           '<div class="meter-track is-parked"></div>' +
-          '<div class="meter-parts"><span>' + A.esc(p.note) + '</span></div>' +
           '</div>';
       }
       var parts = p.parts.map(function (part) {
@@ -221,12 +231,7 @@
 
       return '<div class="meter">' +
         '<div class="meter-head">' +
-          '<span class="meter-name">' + A.esc(p.label) + '</span>' +
-          '<span class="meter-weight">' + Math.round(p.weight * 100) + '% weight' +
-            (p.effectiveWeight && Math.abs(p.effectiveWeight - p.weight) > 0.001
-              ? ' · ' + Math.round(p.effectiveWeight * 100) + '% applied'
-              : '') +
-          '</span>' +
+          '<span class="meter-name">' + A.esc(p.label) + '</span>' + pillarTip(p) +
           '<span class="spacer"></span>' +
           '<span class="meter-score">' + Math.round(p.score) + '</span>' +
         '</div>' +
@@ -236,15 +241,8 @@
           '<div class="meter-fill ' + H.meterClass(p.score) + '" style="width:' + Math.round(p.score) + '%"></div>' +
         '</div>' +
         '<div class="meter-parts">' + parts + '</div>' +
-        (p.note ? '<div class="meter-parts" style="opacity:.85"><span>' + A.esc(p.note) + '</span></div>' : '') +
         '</div>';
     }).join('');
-
-    html += '<div class="mocknote">' +
-      'Speed &amp; operations is excluded rather than scored zero — a missing pillar should not ' +
-      'quietly cap the score at 90. The other three are renormalised to 100 and the applied ' +
-      'weights are shown above. When the two operations fields land, the weights snap back on ' +
-      'their own.</div>';
 
     document.getElementById('pillars').innerHTML = html;
   })();
@@ -272,12 +270,9 @@
       color + ');opacity:.35"></span>' + t.label + '</span>';
   }).join('');
 
-  /* Coverage asks (states we need, ideal send windows, ideal daily split)
-     were removed from this page — they are targeting guidance, not score
-     explanation, and now live on the Targeting page. H.coverage() is still
-     exported and is what that page consumes. */
+  /* ---- how the score is built (collapsible) ------------------------------ */
+  document.getElementById('how-built-body').innerHTML = explainHtml();
 
-  /* ---- tier table ------------------------------------------------------ */
   (function () {
     var head = '<thead><tr><th>Band</th><th class="num">Score</th><th>What it means for you</th></tr></thead>';
     var body = H.TIERS.map(function (t) {
@@ -294,10 +289,6 @@
     document.getElementById('tier-table').innerHTML = head + '<tbody>' + body + '</tbody>';
   })();
 
-
-  /* Sortable / resizable / configurable columns. Every table on this page
-     is fully rendered, so sorting the DOM sorts the whole dataset for the
-     selected window - not just the visible rows. */
   if (window.FZTable) FZTable.enhanceAll();
 
 })();

@@ -117,48 +117,71 @@
   var NORTH_STAR_TYPES = ['priority', 'hot'];
   var NEW_TIER_TYPES = ['livetransfer', 'appointment'];
 
-  /* Rejection reasons in the affiliate's language, each with the fix.
-     `age` is rendered through rejectLabel() because the accepted band is a
+  /* Rejection reasons. Three pieces per bucket, used in different places:
+
+       label — the SHORT name shown in tables and legends. Kept close to the
+               system's own vocabulary; the explanation is NOT crammed in
+               here any more — it lives in `desc` behind a hover info button.
+       desc  — one or two plain sentences shown in the hover box.
+       fix   — what the affiliate can do about it (the "What fixes it" column).
+
+     `age` is rendered through rejectDesc() because the accepted band is a
      negotiated commercial term that differs by partner. */
   var REJECT_REASONS = {
     duplicate: {
-      label: 'Duplicate — sold as Priority/Hot in last 365 days',
+      label: 'Duplicate',
+      desc: 'This phone number already sold as a Priority or Hot lead within the last 365 days, ' +
+            'so it is inside the exclusivity window and cannot be paid again.',
       fix: 'Screen the number in Duplicate Check before you pay to acquire it.'
     },
     assets: {
-      label: 'Investable assets under $25,000',
+      label: 'Investable assets',
+      desc: 'Reported investable assets were under $25,000. Leads under that threshold never ' +
+            'pay, on any comp model.',
       fix: 'Under $25K never pays under any model. Add an assets question to the funnel.'
     },
     advisor: {
-      label: 'Financial advisor or industry professional',
+      label: 'Financial advisor',
+      desc: 'The consumer is a financial advisor or industry professional rather than a ' +
+            'prospective client.',
       fix: 'Add an occupation exclusion or suppress advisor lists.'
     },
     consent: {
-      label: 'Consent / sign-up not captured',
+      label: 'Consent missing',
+      desc: 'No prior-express-written-consent certificate (TrustedForm or Jornaya) arrived with ' +
+            'the lead, so it cannot legally be worked.',
       fix: 'Confirm the TCPA disclosure is on the page and the certificate is posting.'
     },
     ipqs: {
-      label: 'Failed contact validation',
+      label: 'IPQS',
+      desc: 'The phone number or email failed automated contact validation — it did not look ' +
+            'like a reachable, real contact.',
       fix: 'Phone or email did not validate. Check traffic source quality.'
     },
     age: {
-      label: 'Age outside accepted criteria',
+      label: 'Age',
+      desc: 'The consumer\'s age is outside the band this account accepts.',
       fix: 'Add an age gate to the funnel before the lead posts.'
     },
     state: {
-      label: 'State not accepted',
+      label: 'State',
+      desc: 'The lead came from a state we do not accept. New York is never accepted.',
       fix: 'New York is never accepted. See Coverage for the states we want most.'
     },
     contact: {
-      label: 'Bad contact — wrong number or disconnected',
+      label: 'Bad contact',
+      desc: 'The phone number was wrong, disconnected, or otherwise not a way to reach the ' +
+            'consumer.',
       fix: 'Tighten phone verification at the source.'
     },
     income: {
-      label: 'Household income below criteria',
+      label: 'Household income',
+      desc: 'Reported household income was under the $40,000 minimum for life leads.',
       fix: 'Life leads need $40,000+ household income.'
     },
     interest: {
-      label: 'Consumer not interested',
+      label: 'Not interested',
+      desc: 'The consumer said they were not interested when reached.',
       fix: 'Usually a creative or expectation-setting issue upstream of the form.'
     },
     /* Buckets that only appear with a real export. `filter_error` is OUR
@@ -166,12 +189,15 @@
        XML filter responses on ~2,400 Heritage rows. Named plainly rather
        than dressed up as a lead-quality reason. */
     filter_error: {
-      label: 'Filter response error — our side',
+      label: 'Filter error — our side',
+      desc: 'Our filter wrote a raw error payload into the reason field instead of a reason. ' +
+            'This is a fault on our side, not a problem with your lead.',
       fix: 'Not a lead-quality problem. The filter wrote a raw error into the reason field; ' +
            'flagged for the dev team.'
     },
     other: {
       label: 'Other',
+      desc: 'A reason outside the standard categories.',
       fix: 'Uncategorised reason text. Ask your account manager for specifics.'
     }
   };
@@ -448,9 +474,20 @@
   }
 
   /** Criteria labels must carry the partner's negotiated band. */
-  function rejectLabel(key, partnerId) {
-    if (key === 'age') return 'Age outside ' + partner(partnerId).ageBand + ' criteria';
+  /** Short display name for a reject bucket. The explanation is NOT part of
+      the label any more — it lives in rejectDesc(), rendered behind a hover
+      info button, so tables stay scannable. */
+  function rejectLabel(key) {
     return REJECT_REASONS[key] ? REJECT_REASONS[key].label : key;
+  }
+  /** The hover-box explanation. Partner-aware where the criteria are — the
+      age sentence carries THIS account's negotiated band. */
+  function rejectDesc(key, partnerId) {
+    if (key === 'age') {
+      return 'The consumer\'s age is outside the ' + partner(partnerId).ageBand +
+        ' band this account accepts.';
+    }
+    return REJECT_REASONS[key] ? (REJECT_REASONS[key].desc || '') : '';
   }
   function rejectFix(key) {
     return REJECT_REASONS[key] ? REJECT_REASONS[key].fix : '';
@@ -1148,6 +1185,12 @@
         assetBand: row[f.assetBand] >= 0 ? bandKeys[row[f.assetBand]] : null,
         status: paid ? 'paid' : 'free',
         rejectReason: row[f.reject] >= 0 ? ds.rejects[row[f.reject]] : null,
+        /* The EXACT string the system recorded — what the lead table shows.
+           null on the XML-payload rows (the one documented exception; the
+           view falls back to the bucket's plain-language label) and on
+           datasets generated before this field existed. */
+        rejectReasonRaw: (f.rejectRaw !== undefined && row[f.rejectRaw] >= 0)
+          ? ds.rejectsRaw[row[f.rejectRaw]] : null,
         soldType: st,
         soldAt: soldOn,
         daysToSale: (soldOn && recv) ? daysBetween(recv, soldOn) : null,
@@ -1396,6 +1439,9 @@
          It is a property of the campaign the affiliate already knows about,
          not a disclosure. */
       row.comp = src.comp;
+      /* The exact system reject string rides with its bucket — same column,
+         same visibility (intake, locked, both comp models), finer grain. */
+      if ('rejectReason' in row) row.rejectReasonRaw = src.rejectReasonRaw || null;
       out.push(row);
     }
     return out;
@@ -2007,6 +2053,61 @@
      file is worthless to anyone else, cannot be cross-referenced against
      another affiliate's copy, and a leak is attributable to whoever it was
      issued to. */
+  /* ---------------------------------------------------------------------- */
+  /* Documents                                                              */
+  /* ---------------------------------------------------------------------- */
+  /* STANDS IN FOR AN ADMIN-MANAGED DOCUMENT LIBRARY. In production this is a
+     table, not a constant — the team adds, retires and re-links documents
+     without a deploy, so the Setup page renders whatever rows exist rather
+     than a list typed into the page.
+
+       scope 'global'  — same document for every affiliate.
+       scope 'partner' — a DIFFERENT URL per affiliate. `agreement` is the
+                         only one today: each partner's signed agreement is
+                         its own Google Doc, so the admin pastes a URL on the
+                         affiliate's record and it renders only for them.
+
+     See ADMIN-MAPPING §7. */
+  var DOCUMENTS = [
+    { key: 'onboarding', label: 'Affiliate onboarding', scope: 'global', featured: true,
+      desc: 'Start here. How to get set up, post leads and get paid.',
+      url: 'https://docs.google.com/document/d/FZ-onboarding' },
+    { key: 'criteria', label: 'Lead criteria', scope: 'global',
+      desc: 'The full accepted-lead criteria for every product.',
+      url: 'https://docs.google.com/document/d/FZ-lead-criteria' },
+    { key: 'agreement', label: 'Your agreement', scope: 'partner',
+      desc: 'Your signed partnership agreement and commercial terms.' },
+    { key: 'api_annuity', label: 'Annuity API documentation', scope: 'global',
+      desc: 'Endpoint, field spec and response codes for annuity posts.',
+      url: 'https://docs.google.com/document/d/FZ-api-annuity' },
+    { key: 'api_life', label: 'Life API documentation', scope: 'global',
+      desc: 'Endpoint, field spec and response codes for life posts.',
+      url: 'https://docs.google.com/document/d/FZ-api-life' }
+  ];
+
+  /* Per-partner document URLs. sessionStorage stands in for the admin field;
+     a missing URL renders as "not linked yet", never as a dead button. */
+  function partnerDocUrl(partnerId, key) {
+    var pid = resolvePartnerId(partnerId);
+    try { return sessionStorage.getItem('fz_doc_' + pid + '_' + key) || null; }
+    catch (e) { return null; }
+  }
+  function savePartnerDocUrl(partnerId, key, url) {
+    var pid = resolvePartnerId(partnerId);
+    try {
+      if (url) sessionStorage.setItem('fz_doc_' + pid + '_' + key, url);
+      else sessionStorage.removeItem('fz_doc_' + pid + '_' + key);
+    } catch (e) {}
+  }
+  /** The document list as this partner sees it, per-partner URLs resolved. */
+  function documentsFor(partnerId) {
+    return DOCUMENTS.map(function (d) {
+      var url = d.scope === 'partner' ? partnerDocUrl(partnerId, d.key) : d.url;
+      return { key: d.key, label: d.label, desc: d.desc, scope: d.scope,
+               featured: !!d.featured, url: url || null };
+    });
+  }
+
   var SUPPRESSION = {
     identifier: 'Phone number',
     algorithm: 'HMAC-SHA-256, per-affiliate key',
@@ -2148,6 +2249,10 @@
 
     REJECT_REASONS: REJECT_REASONS,
     rejectLabel: rejectLabel,
+    rejectDesc: rejectDesc,
+    DOCUMENTS: DOCUMENTS,
+    documentsFor: documentsFor,
+    savePartnerDocUrl: savePartnerDocUrl,
     rejectFix: rejectFix,
     SOLD_TYPES: SOLD_TYPES,
     NORTH_STAR_TYPES: NORTH_STAR_TYPES,

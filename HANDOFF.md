@@ -37,16 +37,25 @@ These are the minimum bar. Everything else is upside.
 |---|---|---|
 | `partnership.html` | 0 | Partnership summary — who they are, active campaigns with CID and comp model, account terms, our operating hours |
 | `index.html` | A | Performance overview — date range, headline tiles, daily charts, campaign and sub-ID breakdown, rejection reasons |
-| `leads.html` | B | Lead table — every column available to that affiliate, plain-language rejection reasons, CSV export |
-| `duplicate-check.html` | C | 365-day Priority/Hot phone lookup, single and bulk |
-| `health.html` | D | Health score, tier badge, four pillar sub-scores, 90-day trend, three coverage widgets |
-| `setup.html` | E | New-affiliate first-login walkthrough |
+| `leads.html` | B | Lead table — every column available to that affiliate, exact system values, CSV export |
+| `duplicate-check.html` | C | **Duplicates & suppression** — the suppression file leads the page, then the 365-day Priority/Hot lookup, single and bulk |
+| `health.html` | D | Health scorecard — the score dial as the hero, pillar breakdown, 90-day trend, and a collapsible "how the score is built" |
+| `targeting.html` | — | Call-centre hours, ideal send windows and day split, lead criteria, and the top-10 states we need |
+| `setup.html` | E | **Setup & docs** — a hub: new/edit campaign (both placeholders), the document library, and who to contact |
+| `account.html` | — | Account, users and contacts |
 
-Plus one **temporary, internal, non-partner-facing** page: `admin-preview.html`, under an "Internal
-— temporary" heading in the nav. It shows the shape of the settings the admin side needs to
-control. **Delete it and its `INTERNAL_NAV` entry in `app.js` before anything ships.** The settings
-themselves are specified in **[ADMIN-MAPPING.md](ADMIN-MAPPING.md)**, which is the document to keep
-current as fields are added.
+Plus **three temporary, internal, non-partner-facing** pages under an "Internal — temporary"
+heading in the nav:
+
+| File | What it is for |
+|---|---|
+| `admin-preview.html` | **Admin settings.** The build list — every setting the portal needs, what it controls, the storage it needs, and why it matters. Then previews of the screens themselves. |
+| `data-source.html` | **Data connections.** Every live value on the portal, the field behind it, whether we have it today, and how it needs to connect. Plus the data-quality blockers. |
+| `assets/js/handoff.js` | The registry **both of those pages render from**, so the field side and the settings side cannot drift apart. |
+
+**Delete all three, and the `INTERNAL_NAV` entry in `app.js`, before anything ships.** The
+long-form reasoning stays in **[ADMIN-MAPPING.md](ADMIN-MAPPING.md)**, which is the document to
+keep current as fields are added.
 
 The revenue-share vs CPL difference is demonstrated with the **"Viewing as"** selector in the
 header. That selector is a **mock-up affordance only** — see the next section.
@@ -149,6 +158,43 @@ Pillar names changed too: *Economics* → **Conversion & value**, because "econo
 
 **When adding any copy to a partner-facing page, the test is: would I be comfortable if the
 affiliate read this line aloud on a call?**
+
+One more vocabulary fix, Aug 6: a scoring pillar we have not built yet used to render as
+**"Parked"**. To us that means "excluded from the weighting, coming later"; to a partner it reads
+like their account has been shelved. It now reads **"In development."**
+
+---
+
+### The descriptor pattern — say less on screen, explain on hover
+
+Added Aug 6, and it is the main tool for keeping affiliate-facing pages readable.
+
+Anything that needs explaining carries a small **i** button to its right; hovering it shows a
+short box. The label stays short. `FZApp.tip(text)` renders the button, and `app.js` manages one
+shared box for the page.
+
+This replaced a habit of writing the explanation *into* the label — the rejection reason
+`Duplicate` used to render as *"Duplicate — sold as Priority/Hot in last 365 days"*, which is
+accurate, unscannable in a table, and still not enough to explain the exclusivity window. Now the
+cell says `Duplicate` and the hover says the rest.
+
+It also resolves a real tension with the fidelity rule below. A cell has to show the system's own
+value **and** a partner has to be able to understand it; those two requirements fight each other
+until the explanation moves off the label.
+
+### The fidelity rule — cells show what the system recorded
+
+Also Aug 6. **A table cell renders the value the system actually stored, verbatim.** The rejection
+reason column shows `Duplicate`, `IPQS`, `Age Filter` — the exact strings, not paraphrases.
+
+This is about reconciliation, not pedantry. An affiliate querying an invoice, or Zakira diffing
+this portal against a report cut straight from the database, must be able to match rows cell for
+cell. A portal that translates values into friendlier prose cannot be used as evidence in either
+conversation.
+
+The one exception is documented: the ~2,700 rows whose reject reason is a raw XML filter payload
+have no usable value to show, so they fall back to a plain-language bucket label. Fixing the
+reject-reason column at source retires that fallback.
 
 ---
 
@@ -473,11 +519,17 @@ changes every conversion figure quoted in this document from earlier versions.**
 
 Replacing the old two-row table on the scorecard:
 
-1. **States we need** — states carrying unfilled budget, richest first, shown as both leads needed
-   and unused dollars. Pacific and Mountain dominate because that is the standing gap.
-2. **Ideal send windows** — their actual arrival split with the two ideal windows starred.
-3. **Ideal daily split** — their weekly volume distribution against Mon 20% / Tue 19% / Wed 19% /
-   Thu 19% / Fri 15% / Sat 8% / **Sun 0%**, with the biggest gap called out.
+1. **States we need** — the states we want more volume in.
+2. **Ideal send windows** — the two windows where contact is fastest.
+3. **Ideal daily split** — Mon 20% / Tue 19% / Wed 19% / Thu 19% / Fri 15% / Sat 8% / **Sun 0%**.
+
+**Amended Aug 6 — the states widget is now a top-10 list of state names and nothing else.** It
+previously showed unused budget in dollars and the implied leads needed. That is our unspent
+budget: it tells a partner exactly how much room we have and how badly we need them, which is our
+negotiating position and not theirs. The ranking is still computed from budget internally; only
+the ranked names are projected. **It also changes often, so it needs to be genuinely easy to
+reorder in the admin** — a stale list is worse than none, because partners will chase states we
+no longer need.
 
 **All three are asks, not rules, and the framing is not optional.** Every rendering carries the
 note: we accept leads any day and any hour; these are the windows where our team is working hardest

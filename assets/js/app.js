@@ -30,7 +30,7 @@
     { href: 'leads.html',          label: 'Lead table',       ico: '☰' },
     { href: 'health.html',         label: 'Health scorecard', ico: '◈' },
     { href: 'targeting.html',      label: 'Targeting',        ico: '◎' },
-    { href: 'duplicate-check.html',label: 'Duplicate check',  ico: '⌕' },
+    { href: 'duplicate-check.html',label: 'Duplicates & suppression', ico: '⌕' },
     { href: 'setup.html',          label: 'Setup & docs',     ico: '⚙' }
   ];
 
@@ -44,7 +44,7 @@
      DELETE BOTH THIS AND admin-preview.html BEFORE ANYTHING SHIPS. */
   var INTERNAL_NAV = [
     { href: 'admin-preview.html', label: 'Admin settings', ico: '⚑' },
-    { href: 'data-source.html',   label: 'Data source',    ico: '⌸' }
+    { href: 'data-source.html',   label: 'Data connections', ico: '⌸' }
   ];
 
   /* ---------------------------------------------------------------------- */
@@ -130,6 +130,7 @@
   /* ---------------------------------------------------------------------- */
 
   function shell(state, opts) {
+    wireTips();               /* every page gets the hover-descriptor layer */
     var active = opts.active;
     var side = document.querySelector('[data-shell="sidebar"]');
     var top = document.querySelector('[data-shell="topbar"]');
@@ -418,10 +419,17 @@
         return row.status === 'paid'
           ? '<span class="pill-paid">Paid</span>'
           : '<span class="pill-free">Rejected</span>';
+      /* The cell shows the EXACT value the system recorded ("Duplicate",
+         "IPQS", "Age Filter"…) so this table reconciles 1:1 against any
+         other report cut from the same data — see ADMIN-MAPPING §3. The
+         explanation lives behind the hover descriptor, not in the label.
+         Fallback to the bucket's plain label covers the XML-payload rows and
+         the generated mock, which have no raw string. */
       case 'rejectReason':
         if (!row.rejectReason) return '—';
-        return '<span style="color:var(--ink-2)" title="' + esc(D.rejectFix(row.rejectReason)) + '">' +
-          esc(D.rejectLabel(row.rejectReason, state.partnerId)) + '</span>';
+        return '<span style="color:var(--ink-2)">' +
+          esc(row.rejectReasonRaw || D.rejectLabel(row.rejectReason)) + '</span>' +
+          tip(D.rejectDesc(row.rejectReason, state.partnerId));
       case 'soldType':     return 'soldType' in row ? soldBadge(row.soldType) : '—';
       case 'soldAt':       return row.soldAt ? fmtDate(row.soldAt) : '—';
       case 'daysToSale':   return row.daysToSale == null ? '—' : String(row.daysToSale);
@@ -442,7 +450,10 @@
       case 'dow':          return D.DOW_LABEL[row.dow] || '';
       case 'status':       return row.status === 'paid' ? 'Paid' : 'Rejected';
       case 'rejectReason':
-        return row.rejectReason ? D.rejectLabel(row.rejectReason, state.partnerId) : '';
+        /* CSV carries the exact system value too, so an affiliate's export
+           reconciles against ours cell for cell. */
+        return row.rejectReason
+          ? (row.rejectReasonRaw || D.rejectLabel(row.rejectReason)) : '';
       case 'soldType':     return row.soldType ? D.SOLD_TYPES[row.soldType].label : '';
       case 'soldAt':       return row.soldAt ? isoDate(row.soldAt) : '';
       case 'daysToSale':   return row.daysToSale == null ? '' : row.daysToSale;
@@ -505,6 +516,57 @@
         '<span class="ico">▲</span><div><strong>' + esc(title) + '</strong><br>' +
         esc(reason) + '</div></div>';
     cardEl.appendChild(d);
+  }
+
+  /* ------------------------------------------------------------------------
+     Hover descriptors — THE pattern for explaining anything on screen.
+     ------------------------------------------------------------------------
+     Wherever a label, header, badge or value needs an explanation, the
+     explanation does NOT go in the label. The label stays short, and a small
+     "i" button sits to its right; hovering (or keyboard-focusing) it shows a
+     brief box. Usage from any page:
+
+         html += 'Duplicate' + A.tip('Already sold as Priority or Hot in the last 365 days.');
+
+     One fixed-position box is shared by every tip on the page and follows
+     whichever button is hovered. Fixed positioning is deliberate: tips live
+     inside .table-wrap containers that scroll, and an absolutely-positioned
+     box would be clipped by them. */
+  function tip(text, ariaLabel) {
+    if (!text) return '';
+    return '<button type="button" class="tip-btn" data-tip="' + esc(text) + '"' +
+      ' aria-label="' + esc(ariaLabel || 'What does this mean?') + '">i</button>';
+  }
+
+  function wireTips() {
+    if (document.getElementById('fz-tipbox')) return;
+    var box = document.createElement('div');
+    box.id = 'fz-tipbox';
+    box.setAttribute('role', 'tooltip');
+    document.body.appendChild(box);
+
+    function show(btn) {
+      box.textContent = btn.getAttribute('data-tip');
+      box.style.display = 'block';
+      var r = btn.getBoundingClientRect();
+      var bw = box.offsetWidth, bh = box.offsetHeight;
+      var left = Math.max(8, Math.min(window.innerWidth - bw - 8, r.left + r.width / 2 - bw / 2));
+      var top = r.top - bh - 8;
+      if (top < 8) top = r.bottom + 8;          /* flip below near the top edge */
+      box.style.left = Math.round(left) + 'px';
+      box.style.top = Math.round(top) + 'px';
+    }
+    function hide() { box.style.display = 'none'; }
+
+    document.addEventListener('mouseover', function (e) {
+      var btn = e.target.closest && e.target.closest('.tip-btn');
+      if (btn) show(btn); else if (!e.target.closest || !e.target.closest('#fz-tipbox')) hide();
+    });
+    document.addEventListener('focusin', function (e) {
+      var btn = e.target.closest && e.target.closest('.tip-btn');
+      if (btn) show(btn); else hide();
+    });
+    document.addEventListener('scroll', hide, true);
   }
 
   /**
@@ -674,6 +736,7 @@
     exportControl: exportControl,
     unsupported: unsupported,
     openModal: openModal,
+    tip: tip,
     infoButton: infoButton,
     viewToggle: viewToggle
   };

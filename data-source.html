@@ -3,10 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Data source (internal) — Financialize Partner Portal</title>
+<title>Data connections (internal) — Financialize Partner Portal</title>
 <link rel="stylesheet" href="assets/css/dashboard.css">
 </head>
 <body>
+
+<!--
+  TEMPORARY. INTERNAL. NOT PARTNER-FACING.
+
+  This page answers one question for the dev team: how does this portal connect
+  to the existing system? Every live value, the field behind it, whether we have
+  that field today, and how it needs to be wired.
+
+  It renders from assets/js/handoff.js — the same registry admin-preview.html
+  reads — so the data list and the settings list cannot drift apart.
+
+  DELETE THIS FILE, admin-preview.html, handoff.js AND THE INTERNAL_NAV ENTRY
+  IN app.js BEFORE SHIPPING.
+-->
 
 <div class="app">
   <aside class="sidebar" data-shell="sidebar"></aside>
@@ -20,21 +34,60 @@
         <span class="ico">▲</span>
         <div>
           <strong>Internal — temporary, not partner-facing.</strong>
-          What the dashboard is running on, and exactly which widgets the current export
-          cannot support. Delete this page along with the other internal ones before anything
-          ships. The connection work is specified in <code>ADMIN-MAPPING.md</code>.
+          Every live value in the portal, the field behind it, and how it connects. The settings
+          side of the handoff is on <strong>Admin settings</strong>; the long-form reasoning is in
+          <code>ADMIN-MAPPING.md</code> and <code>HANDOFF.md</code>.
         </div>
       </div>
 
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Where the connection work stands</h2>
+            <p class="sub">Counted from the registry, not typed in.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="tiles" id="summary"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Field connections</h2>
+            <p class="sub">Every value the portal reads. "How it connects" is the instruction.</p>
+          </div>
+          <div class="spacer"></div>
+          <div id="field-filter"></div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="field-table"></table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Data-quality blockers</h2>
+            <p class="sub">Real findings in the current export. These corrupt metrics regardless of what gets built.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="blocker-table"></table>
+        </div>
+      </section>
+
       <div class="grid-2">
         <section class="card">
-          <div class="card-head"><div><h2>Source</h2><p class="sub">What was ingested.</p></div></div>
+          <div class="card-head"><div><h2>Current source</h2>
+            <p class="sub">What this prototype is running on.</p></div></div>
           <div class="table-wrap"><table class="data" id="src-table"></table></div>
         </section>
 
         <section class="card">
-          <div class="card-head"><div><h2>Capability gaps</h2>
-            <p class="sub">Widgets switched off because the export cannot feed them.</p></div></div>
+          <div class="card-head"><div><h2>Widgets switched off</h2>
+            <p class="sub">Turned off honestly rather than rendering fabricated values.</p></div></div>
           <div class="table-wrap"><table class="data" id="gap-table"></table></div>
         </section>
       </div>
@@ -43,12 +96,6 @@
         <div class="card-head"><div><h2>Partner views built from the data</h2>
           <p class="sub">Every affiliate in the export becomes a selectable view.</p></div></div>
         <div class="table-wrap"><table class="data" id="partner-table"></table></div>
-      </section>
-
-      <section class="card">
-        <div class="card-head"><div><h2>Data quality found in this export</h2>
-          <p class="sub">Real findings, not mock-up artefacts. Each one needs a decision.</p></div></div>
-        <div class="table-wrap"><table class="data" id="quality-table"></table></div>
       </section>
 
     </div>
@@ -61,18 +108,108 @@
 <script src="assets/js/charts.js"></script>
 <script src="assets/js/app.js"></script>
 <script src="assets/js/tables.js"></script>
+<script src="assets/js/handoff.js"></script>
 <script>
 (function () {
   'use strict';
-  var D = FZData, A = FZApp;
+  var D = FZData, A = FZApp, HO = FZHandoff;
   var state = A.params();
 
   A.shell(state, {
     active: 'data-source.html',
-    title: 'Data source',
-    subtitle: 'Internal — what this prototype is running on.'
+    title: 'Data connections',
+    subtitle: 'Internal — how this portal connects to the existing system.'
   });
 
+  function badge(status) {
+    var s = HO.STATUS[status];
+    return '<span class="badge ' + s.badge + '"><span class="dot"></span>' + s.label + '</span>';
+  }
+
+  /* ---- summary tiles ---------------------------------------------------- */
+  (function () {
+    var c = HO.counts(HO.FIELDS);
+    var tiles = [
+      { label: 'Fields tracked', value: HO.FIELDS.length, sub: 'every live value on the portal' },
+      { label: 'Ready to wire', value: c.have || 0, sub: 'exists today, nothing to build' },
+      { label: 'Unusable as-is', value: c.partial || 0, sub: 'exists but the values are wrong' },
+      { label: 'Missing entirely', value: c.missing || 0, sub: 'must be added to the system' }
+    ];
+    document.getElementById('summary').innerHTML = tiles.map(function (t) {
+      return '<div class="tile"><div class="tile-label">' + A.esc(t.label) + '</div>' +
+        '<div class="tile-value">' + A.fmtInt(t.value) + '</div>' +
+        '<div class="tile-sub">' + A.esc(t.sub) + '</div></div>';
+    }).join('');
+  })();
+
+  /* ---- field table ------------------------------------------------------- */
+  (function () {
+    var filter = 'all';
+
+    document.getElementById('field-filter').innerHTML =
+      '<div class="view-toggle">' +
+        '<button type="button" class="is-on" data-fs="all">All</button>' +
+        '<button type="button" data-fs="todo">Needs work</button>' +
+        '<button type="button" data-fs="have">Ready</button>' +
+      '</div>';
+
+    function render() {
+      var rows = HO.FIELDS.filter(function (f) {
+        if (filter === 'todo') return f.status !== 'have';
+        if (filter === 'have') return f.status === 'have';
+        return true;
+      });
+
+      var lastGroup = null, html = '';
+      rows.forEach(function (f) {
+        if (f.group !== lastGroup) {
+          lastGroup = f.group;
+          html += '<tr><td colspan="5" style="background:var(--surface-2);font-weight:700;' +
+            'font-size:12px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-2)">' +
+            A.esc(f.group) + '</td></tr>';
+        }
+        html += '<tr>' +
+          '<td><strong>' + A.esc(f.name) + '</strong></td>' +
+          '<td class="lead-id">' + A.esc(f.source) + '</td>' +
+          '<td>' + badge(f.status) + '</td>' +
+          '<td style="color:var(--ink-2);font-size:12.5px">' + A.esc(f.where) + '</td>' +
+          '<td style="font-size:12.5px">' + A.esc(f.how) + '</td>' +
+          '</tr>';
+      });
+
+      document.getElementById('field-table').innerHTML =
+        '<thead><tr><th>Value on the portal</th><th>Field in the export</th><th>Status</th>' +
+        '<th>Where it shows</th><th>How it needs to connect</th></tr></thead><tbody>' +
+        (html || '<tr><td colspan="5" class="empty">Nothing in this filter.</td></tr>') + '</tbody>';
+    }
+
+    document.querySelectorAll('[data-fs]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        document.querySelectorAll('[data-fs]').forEach(function (x) { x.classList.remove('is-on'); });
+        b.classList.add('is-on');
+        filter = b.dataset.fs;
+        render();
+      });
+    });
+    render();
+  })();
+
+  /* ---- blockers ---------------------------------------------------------- */
+  (function () {
+    var TONE = { critical: 'badge-crit', serious: 'badge-warn', warning: 'badge-warn' };
+    document.getElementById('blocker-table').innerHTML =
+      '<thead><tr><th>Finding</th><th>Severity</th><th>What is actually in the data</th>' +
+      '<th>What it breaks</th></tr></thead><tbody>' +
+      HO.BLOCKERS.map(function (b) {
+        return '<tr><td><strong>' + A.esc(b.name) + '</strong></td>' +
+          '<td><span class="badge ' + TONE[b.severity] + '"><span class="dot"></span>' +
+            b.severity.charAt(0).toUpperCase() + b.severity.slice(1) + '</span></td>' +
+          '<td style="font-size:12.5px;color:var(--ink-2)">' + A.esc(b.detail) + '</td>' +
+          '<td style="font-size:12.5px">' + A.esc(b.impact) + '</td></tr>';
+      }).join('') + '</tbody>';
+  })();
+
+  /* ---- current source ---------------------------------------------------- */
   var n = D.datasetNotes && D.datasetNotes();
 
   function kv(id, rows) {
@@ -86,8 +223,6 @@
     kv('src-table', [['Mode', '<strong>Generated mock data</strong> — no export loaded.']]);
     kv('gap-table', [['—', 'Not applicable.']]);
     document.getElementById('partner-table').innerHTML =
-      '<tbody><tr><td class="empty">No dataset loaded.</td></tr></tbody>';
-    document.getElementById('quality-table').innerHTML =
       '<tbody><tr><td class="empty">No dataset loaded.</td></tr></tbody>';
     return;
   }
@@ -106,32 +241,25 @@
   ]);
 
   kv('gap-table', [
-    ['Arrival window', '<strong>Off.</strong> The export has a date but no time of day ' +
-      '(<code>TimeStamp</code> is empty on every row), so hour-of-day cannot be derived.'],
-    ['Sub-ID drilldown', '<strong>Off for most partners.</strong> Only ' +
-      n.subidFillPct + '% of rows carry a sub-ID. Madrivo passes them; the two largest ' +
-      'accounts pass none.'],
-    ['Speed to lead', '<strong>Unusable.</strong> The column is populated but the values are ' +
-      'not — negatives and a median of zero. Operations pillar stays parked.'],
-    ['Margin in the health score', '<strong>Excluded.</strong> Lead Cost is the $1 phantom ' +
-      'COGS, so margin computed from it would be fiction.'],
-    ['Partner since', '<strong>Not derivable.</strong> The earliest row is the start of the ' +
-      'export window, not of the relationship.'],
-    ['Billing terms, contacts, users', '<strong>Not in the export.</strong> Placeholders until ' +
-      'the admin fields exist.']
+    ['Arrival window', '<strong>Off.</strong> No time of day on any row.'],
+    ['Sub-ID drilldown', '<strong>Off for most partners.</strong> ' + n.subidFillPct + '% fill.'],
+    ['Speed &amp; operations pillar', '<strong>In development.</strong> Values are not usable.'],
+    ['Margin in the health score', '<strong>Excluded.</strong> $1 phantom COGS.'],
+    ['Partner since', '<strong>Not derivable</strong> from the export.'],
+    ['Billing terms, contacts, users', '<strong>Not in the export.</strong> Placeholders.']
   ]);
 
-  /* ---- partners ---- */
+  /* ---- partners ---------------------------------------------------------- */
   (function () {
-    var ids = Object.keys(D.PARTNERS);
-    var rows = ids.map(function (id) {
-      var p = D.PARTNERS[id];
-      var camps = D.campaignsFor(id);
-      var act = D.isPartnerActive(id);
-      var comps = D.compsFor(id).map(function (c) { return c.label; }).join(', ') || '—';
+    var rows = Object.keys(D.PARTNERS).map(function (id) {
       var lc = D.queryLeads({ partnerId: id, from: D.addDays(D.TODAY, -400), to: D.TODAY });
-      var m = D.computeMetrics(lc, null, { rateBasis: D.rateBasisFor(id) });
-      return { id: id, p: p, camps: camps.length, comps: comps, act: act, m: m };
+      return {
+        id: id, p: D.PARTNERS[id],
+        camps: D.campaignsFor(id).length,
+        comps: D.compsFor(id).map(function (c) { return c.label; }).join(', ') || '—',
+        act: D.isPartnerActive(id),
+        m: D.computeMetrics(lc, null, { rateBasis: D.rateBasisFor(id) })
+      };
     }).sort(function (a, b) { return b.m.raw - a.m.raw; });
 
     document.getElementById('partner-table').innerHTML =
@@ -155,44 +283,6 @@
       }).join('') + '</tbody>';
   })();
 
-  /* ---- data quality ---- */
-  document.getElementById('quality-table').innerHTML =
-    '<thead><tr><th>Finding</th><th>Detail</th><th>What it means</th></tr></thead><tbody>' +
-    [
-      ['$1 phantom COGS — <strong>confirmed live</strong>',
-       'All 41,627 accepted rows carry a non-zero Lead Cost with a median of exactly $1.00.',
-       'Margin on rev-share campaigns is fabricated. Must be $0 before any margin metric means anything.'],
-      ['Reject Reason is not a clean field',
-       '2,917 distinct values. Most of the tail is raw XML filter responses written into the reason column.',
-       'Normalised into buckets on ingest. The field needs a controlled vocabulary at source.'],
-      ['Affiliate name mismatch',
-       'The export says <code>ObtilabX</code>; the tracker says OptiLabX.',
-       'Mapped on ingest. Ungrouped, it splits one partner into two.'],
-      ['No time of day anywhere',
-       '<code>TimeStamp</code> is empty on all 71,725 rows; <code>Created On</code> is date-only.',
-       'Arrival-window analysis is impossible. Adding a time component unlocks it.'],
-      ['Speed to Lead is populated but invalid',
-       'Range runs from &minus;113,426,741 to 4,109,200 with a median of 0.',
-       'Cannot be used. The operations pillar stays parked on this field.'],
-      ['Sub-IDs almost entirely absent',
-       n.subidFillPct + '% fill overall. Madrivo 99%; Heritage and OptiLabX 0%.',
-       'Per-publisher scoring is impossible for the accounts that matter most.'],
-      ['Assets1 is free text',
-       '29 spelling variants including mojibake dashes and duplicate ranges. 81.6% sit in one band.',
-       'Parsed to bands on ingest, but the concentration in one band is worth checking at source.'],
-      ['Sold with no sold type',
-       A.fmtInt(n.soldMarkedSoldButNoType) + ' rows are marked Sold but carry no Sold Type.',
-       'Small, but they are invisible to any tier-based metric.']
-    ].map(function (r) {
-      return '<tr><td style="width:24%"><strong>' + r[0] + '</strong></td>' +
-        '<td style="width:36%">' + r[1] + '</td>' +
-        '<td style="color:var(--ink-2)">' + r[2] + '</td></tr>';
-    }).join('') + '</tbody>';
-
-
-  /* Sortable / resizable / configurable columns. Every table on this page
-     is fully rendered, so sorting the DOM sorts the whole dataset for the
-     selected window - not just the visible rows. */
   if (window.FZTable) FZTable.enhanceAll();
 
 })();

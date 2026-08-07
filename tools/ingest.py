@@ -128,20 +128,38 @@ REJECT_BUCKETS = [
 ]
 
 
+def is_garbage_reason(s):
+    """The reason column's long tail is raw XML filter payloads written into a
+    field meant for a short code — a system fault, not an affiliate fault, and
+    unfit to render verbatim."""
+    low = s.lower()
+    return low.startswith('<?xml') or '<response>' in low or low.startswith('<') or len(s) > 80
+
+
 def reject_bucket(raw):
     s = norm_ws(raw)
     if not s:
         return None
-    low = s.lower()
-    # 2,917 distinct values, most of them raw XML error payloads written into
-    # the reason field. They are a system fault, not an affiliate fault.
-    if low.startswith('<?xml') or '<response>' in low or low.startswith('<'):
+    if is_garbage_reason(s):
         return 'filter_error'
+    low = s.lower()
     for key, needles in REJECT_BUCKETS:
         for nd in needles:
             if nd in low:
                 return key
     return 'other'
+
+
+def reject_raw(raw):
+    """The EXACT system value, for the lead table — cells there must mirror
+    the source 1:1 (see ADMIN-MAPPING §3). Only 21 distinct clean values exist
+    in the current export. XML/garbage payloads return None, the one
+    documented exception: the view falls back to the bucket's plain-language
+    label rather than printing an XML blob at an affiliate."""
+    s = norm_ws(raw)
+    if not s or is_garbage_reason(s):
+        return None
+    return s
 
 
 def comp_for_campaign(name, rev_share_pct):
@@ -281,6 +299,7 @@ def main():
             'sold_on': sold_on,
             'paid': paid,
             'rej': reject_bucket(g('Reject Reason')) if not paid else None,
+            'rejRaw': reject_raw(g('Reject Reason')) if not paid else None,
             'st': st,
             'rev': money(g('Revenue')) if st else 0.0,
             'share': money(g('Revenue Share Amount')) if st else 0.0,
@@ -338,12 +357,14 @@ def main():
     states = sorted({r['state'] for r in rows if r['state']})
     subids = sorted({r['sub'] for r in rows if r['sub']})
     rejects = sorted({r['rej'] for r in rows if r['rej']})
+    rejects_raw = sorted({r['rejRaw'] for r in rows if r['rejRaw']})
     sold_types = ['priority', 'hot', 'auction', 'marketplace']
     bands = [b[0] for b in ASSET_BANDS]
 
     ix = lambda lst: {v: i for i, v in enumerate(lst)}
     p_ix, c_ix = ix([p['id'] for p in partners]), ix([c['cid'] for c in campaigns])
     s_ix, sub_ix, r_ix, st_ix, b_ix = ix(states), ix(subids), ix(rejects), ix(sold_types), ix(bands)
+    rr_ix = ix(rejects_raw)
 
     def cents(x):
         return int(round(x * 100))
@@ -366,11 +387,12 @@ def main():
             1 if r['ret'] else 0,
             r['att'],
             r['id'],
+            rr_ix.get(r['rejRaw'], -1),
         ])
 
     fields = ['recv', 'partner', 'campaign', 'paid', 'reject', 'soldType',
               'soldOn', 'revenueCents', 'shareCents', 'state', 'assetBand',
-              'subid', 'returned', 'attempts', 'leadId']
+              'subid', 'returned', 'attempts', 'leadId', 'rejectRaw']
     for bad in PII_COLUMNS | INTERNAL_COLUMNS:
         assert bad.lower().replace(' ', '') not in [f.lower() for f in fields], bad
 
@@ -400,6 +422,7 @@ def main():
         'states': states,
         'subids': subids,
         'rejects': rejects,
+        'rejectsRaw': rejects_raw,
         'soldTypes': sold_types,
         'assetBands': [{'key': b[0], 'label': b[1]} for b in ASSET_BANDS],
         'fields': fields,

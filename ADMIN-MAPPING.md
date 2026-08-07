@@ -42,6 +42,11 @@ cannot supply, in priority order. Each row is a thing that must be added to the 
 at source, or created as an admin-editable field. Detail for each is in the numbered sections
 below; this is the summary to work from.
 
+> **The same list is browsable in the prototype.** `assets/js/handoff.js` holds it as data, and
+> two internal pages render from it: **Data connections** (`data-source.html`) for the field
+> side, **Admin settings** (`admin-preview.html`) for the settings side. They read one registry
+> so the two halves cannot drift apart. Delete all three before shipping.
+
 ### A. Fields missing from the lead export
 
 | # | Field | Blocks | Status |
@@ -69,6 +74,10 @@ below; this is the summary to work from.
 | B8 | **Account-manager join** | Account manager block | Exists in the CRM, not joined to the portal |
 | B9 | **Google Chat deep link** | Chat button on Partnership summary | Currently a generic chat.google.com link |
 | B10 | **Per-user table preferences** | Which columns a user shows/hides, column widths, and their chosen sort | Every table is sortable, resizable and column-configurable. The mock persists this to `sessionStorage`, so it survives paging but dies with the tab. In production it should be a **stored user preference** on `affiliate_users` (see §1a) — a media buyer who hides six columns expects them to stay hidden next login |
+| B11 | **`documents` table** | The Helpful documents section on Setup & docs | Must support adding and re-linking documents **without a deploy**. §7c |
+| B12 | **Per-affiliate agreement URL** | The "Your agreement" card | A Google Doc URL on the affiliate record, different for every partner. An affiliate with none set renders "not linked yet", never a dead button. §7c |
+| B13 | **Per-affiliate lead criteria** | Every criteria line on Targeting, and the age wording in rejection labels | The OptiLabX 45–79 band already proves criteria are negotiated per account. **Any** criteria value may differ, not just age. §1 |
+| B14 | **Comp model as a real campaign column** | The entire column projection | Currently parsed out of the campaign *name*. This is the most load-bearing value in the system and it is being inferred from a string. §2 |
 
 ### C. Confirmed present — no work needed
 
@@ -203,6 +212,41 @@ side by side, and the lead table renders them in one view with different columns
 ## 3. Lead table columns — the admin-configurable part
 
 This is the setting you asked for: **which columns an affiliate can see, chosen per comp model.**
+
+### The fidelity rule — a cell shows the system's own value
+
+Added Aug 6, and it applies to **every table in the portal, not just this one.**
+
+**A cell renders the value the system actually recorded, verbatim.** Rejection reason shows
+`Duplicate`, `IPQS`, `Age Filter` — the exact strings out of the reject-reason column, not a
+prettied-up paraphrase. Same for state, campaign, sold type, dates and amounts.
+
+The reason is reconciliation. An affiliate disputing an invoice, or Zakira comparing this portal
+against a report cut straight from the database, has to be able to match rows **cell for cell**.
+The moment the portal renders "Failed contact validation" where the system says `IPQS`, every
+comparison becomes a translation exercise and the portal stops being usable as evidence.
+
+**Where a value needs explaining, the explanation goes in a hover descriptor, not in the cell.**
+See the descriptor rule below.
+
+**The one documented exception** is the XML-payload rows described in §7b: those have no usable
+system value, so they fall back to a plain-language bucket label. When the reject-reason column is
+cleaned up at source, that fallback stops firing on its own.
+
+### The descriptor rule — explain on hover, not in the label
+
+Also Aug 6, also portal-wide. Anything that needs explaining — a column header, a status badge, a
+metric name, a rejection reason, a pillar name — carries a small **i** button to its right.
+Hovering or keyboard-focusing it shows a short box. The label itself stays short.
+
+`FZApp.tip(text)` returns the button; `wireTips()` in `app.js` manages one shared, fixed-position
+box for the whole page. Fixed positioning is deliberate — descriptors live inside horizontally
+scrolling tables, and an absolutely-positioned box gets clipped by them.
+
+This exists because the alternative loses both ways: labels long enough to explain themselves make
+tables unscannable, and labels short enough to scan leave partners guessing. It also keeps the
+fidelity rule above workable — the cell can say `IPQS` *and* the partner can find out what that
+means, without the two requirements fighting.
 
 ### How it works in the mock
 
@@ -389,6 +433,15 @@ Status: **NEEDS BUILDING** — both the storage and a real (non-inert) admin for
 The widget sorts by unused budget and shows the top rows. In the mock this is `STATE_DEMAND` in
 `data.js`. Pacific and Mountain dominate because that is the standing coverage gap.
 
+**The affiliate sees state names only — a top-10 list, nothing else.** Changed Aug 6. The unused
+budget, the fill rate and the implied "leads needed" are all internal: they tell a partner how
+much money is sitting unspent, which is our negotiating position, not theirs. The ranking is
+computed from them; only the ranked names are projected.
+
+**This list changes often.** It needs to be genuinely easy to reorder in the admin — a deploy per
+change means it will go stale, and a stale list is worse than none because partners will chase
+states we no longer need.
+
 ### 5b. Ideal reception windows
 
 **These are real operating facts and must not be invented in code.** They belong in configuration
@@ -520,7 +573,30 @@ what §1 and §5 already list.
 | Campaign comp-model label | "Revenue share" / "Tiered CPL" / "Flat CPL" — the **model only**, no rates in the summary table; rates live behind View details | derived from campaign `comp_model` + rate card shape |
 | Targeting — call-centre hours, ideal windows, day split | §5b / §5c configuration | **NEEDS BUILDING** as config |
 | Targeting — lead criteria per product | standard criteria + the partner's `age_band` override (§1) | age band **NEEDS BUILDING**; the rest is constant criteria that should live in config, not code |
-| Targeting — states-we-need widget | §5a state demand | **NEEDS BUILDING** |
+| Targeting — states-we-need widget | §5a state demand, **top 10, names only** | **NEEDS BUILDING** |
+
+---
+
+## 7c. Documents — Setup & docs page
+
+Added August 6. The Setup page is a hub: two campaign actions (both **placeholders** pending
+Logan's spec), a document library, and the account-manager contact.
+
+| Element | Source | Status |
+|---|---|---|
+| Document list | `DOCUMENTS` in `data.js` | **NEEDS BUILDING** — `documents (key, label, description, url, scope, sort_order, featured)` |
+| Affiliate onboarding, Lead criteria, Annuity API, Life API | one global URL each | **NEEDS BUILDING** as rows in that table |
+| **Your agreement** | a **different URL per affiliate** | **NEEDS BUILDING** — a Google Doc URL field on the affiliate record |
+| New / edit campaign flows | — | **NOT SPECIFIED.** Placeholder modals pointing at Logan until he defines the flow |
+| Contact block | Logan Randall, logan@financialize.com | constant; should join from the CRM like §1's account manager |
+
+Two rules the implementation has to keep:
+
+1. **Adding a document must not require a deploy.** The page renders whatever rows exist. If the
+   team has to file a ticket to publish a PDF, the library will not be maintained.
+2. **A document with no URL renders "not linked yet", never a dead button.** `scope: 'partner'`
+   documents are unset for most affiliates on day one, and a button that 404s reads as a broken
+   portal rather than an unfinished record.
 
 ---
 
@@ -532,7 +608,7 @@ They are rendered in-app on the Data source page.
 | Finding | Evidence | Consequence |
 |---|---|---|
 | **$1 phantom COGS — confirmed live** | All **41,627** accepted rows carry a non-zero Lead Cost with a median of exactly **$1.00** | Margin is fabricated. The health score's margin input is **excluded** rather than computed on it |
-| **Reject Reason is not a controlled field** | **2,917 distinct values.** The tail is raw XML filter responses written into the reason column — ~2,400 rows on Heritage alone | Bucketed on ingest into a `filter_error` category, surfaced to the affiliate as *"Filter response error — our side"* so they are not blamed for our fault. Needs a controlled vocabulary at source |
+| **Reject Reason is not a controlled field** | **2,917 distinct values**, of which only **21 are clean labels**. The tail is raw XML filter responses written into the reason column — **2,713 rows** | Two fields are now emitted: the **exact system string** (rendered verbatim in the lead table and CSV so an affiliate's export reconciles 1:1 against ours) and a **bucket** for grouping. The XML rows have no usable exact value and fall back to the bucket's plain-language label — they are surfaced as *"Filter error — our side"* so the affiliate is not blamed for our fault. Needs a controlled vocabulary at source |
 | **Affiliate name mismatch** | Export says `ObtilabX`; the tracker says OptiLabX | Mapped on ingest. Ungrouped it splits one partner into two |
 | **Assets1 is free text** | 29 spelling variants, mojibake dashes, duplicate ranges. **81.6% of all rows sit in the single band `$50 000 - $100 000`** | Parsed to bands on ingest. The concentration is worth investigating — it looks like a default rather than a distribution |
 | **Sold but no sold type** | 16 rows marked Sold with an empty Sold Type | Invisible to any tier-based metric |

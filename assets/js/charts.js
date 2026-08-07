@@ -488,6 +488,78 @@
   }
 
   /* ---------------------------------------------------------------------- */
+  /* Gauge — the health-score dial                                          */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * One dial, shared by the Partnership summary and the Health scorecard so
+   * the two can never drift apart. Recessive axis arc, tick marks every 10
+   * points with majors at 0/50/100, a tapered needle in the caller-supplied
+   * severity colour, score + tier badge beneath.
+   *
+   * @param cfg.score      0–100
+   * @param cfg.tier       {label, badge}
+   * @param cfg.sevSuffix  '' | '-warning' | '-serious' | '-critical'
+   * @param cfg.scale      overall size multiplier (default 1)
+   * @param cfg.hint       optional muted line under the badge
+   * @param cfg.extraHtml  optional HTML appended inside the value row (e.g. a tip button)
+   */
+  function gauge(host, cfg) {
+    var k = cfg.scale || 1;
+    var needleColor = cssVar('--meter-fill' + (cfg.sevSuffix || ''));
+    var axis = cssVar('--axis');
+    var muted = cssVar('--ink-muted');
+    var surface = cssVar('--surface-1');
+
+    var W = Math.round(224 * k), HGT = Math.round(132 * k);
+    var cx = W / 2, cy = Math.round(116 * k), R = Math.round(92 * k);
+
+    function pt(t, r) {
+      var a = Math.PI * (1 - t);
+      return [cx + r * Math.cos(a), cy - r * Math.sin(a)];
+    }
+    function f(n) { return n.toFixed(1); }
+
+    var svg = '';
+    var a0 = pt(0, R), a1 = pt(1, R);
+    svg += '<path d="M' + f(a0[0]) + ',' + f(a0[1]) + ' A' + R + ',' + R + ' 0 1,1 ' +
+      f(a1[0]) + ',' + f(a1[1]) + '" fill="none" stroke="' + axis + '" stroke-width="3"/>';
+
+    for (var i = 0; i <= 10; i++) {
+      var t = i / 10;
+      var major = (i === 0 || i === 5 || i === 10);
+      var o = pt(t, R - 4 * k), n2 = pt(t, R - (major ? 16 : 11) * k);
+      svg += '<line x1="' + f(o[0]) + '" y1="' + f(o[1]) + '" x2="' + f(n2[0]) + '" y2="' + f(n2[1]) +
+        '" stroke="' + muted + '" stroke-width="' + (major ? 2 : 1.25) + '"/>';
+    }
+    svg += '<text x="' + f(cx - R) + '" y="' + (cy + 14) + '" text-anchor="middle" fill="' + muted + '" font-size="11">0</text>' +
+           '<text x="' + f(cx + R) + '" y="' + (cy + 14) + '" text-anchor="middle" fill="' + muted + '" font-size="11">100</text>';
+
+    var tScore = Math.max(0, Math.min(1, cfg.score / 100));
+    var tipPt = pt(tScore, R - 22 * k);
+    var ang = Math.PI * (1 - tScore);
+    var px = Math.sin(ang) * 4, py = Math.cos(ang) * 4;
+    svg += '<polygon points="' +
+        f(cx - px) + ',' + f(cy - py) + ' ' +
+        f(cx + px) + ',' + f(cy + py) + ' ' +
+        f(tipPt[0]) + ',' + f(tipPt[1]) + '" fill="' + needleColor + '"/>';
+    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="7" fill="' + needleColor +
+      '" stroke="' + surface + '" stroke-width="2"/>';
+
+    host.innerHTML =
+      '<div class="gauge-wrap">' +
+      '<svg width="' + W + '" height="' + HGT + '" viewBox="0 0 ' + W + ' ' + HGT + '" role="img" ' +
+        'aria-label="Health score ' + cfg.score + ' out of 100, ' + cfg.tier.label + '">' + svg + '</svg>' +
+      '<div style="display:flex;align-items:baseline;gap:10px;margin-top:10px">' +
+        '<span class="gauge-value">' + cfg.score + '</span>' +
+        '<span class="badge ' + cfg.tier.badge + '"><span class="dot"></span>' + cfg.tier.label + '</span>' +
+        (cfg.extraHtml || '') +
+      '</div>' +
+      (cfg.hint ? '<div class="gauge-hint">' + cfg.hint + '</div>' : '') +
+      '</div>';
+  }
+
+  /* ---------------------------------------------------------------------- */
   /* Pie — part-to-whole                                                    */
   /* ---------------------------------------------------------------------- */
 
@@ -746,6 +818,7 @@
   global.FZCharts = {
     mount: mount,
     setMode: setMode,
+    gauge: gauge,
     cssVar: cssVar,
     fmtDay: fmtDay,
     fmtDayFull: fmtDayFull

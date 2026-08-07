@@ -763,11 +763,13 @@
     var head = '<thead><tr><th>Reason</th><th class="num">Leads</th>' +
       '<th class="num">% of rejected</th><th>What fixes it</th></tr></thead>';
 
-    /* Criteria labels carry THIS partner's negotiated band, not the standard
-       one — the OptiLabX 45–79 exception has already caused a $5,194 invoice
-       variance by being applied as 45–75 somewhere downstream. */
+    /* Short label + hover descriptor, not a sentence crammed into the cell.
+       The descriptor is partner-aware where the criteria are — the age text
+       carries THIS account's negotiated band (the OptiLabX 45–79 exception
+       has already caused a $5,194 invoice variance when treated as 45–75). */
     var body = entries.map(function (e) {
-      return '<tr><td>' + A.esc(D.rejectLabel(e.key, state.partnerId)) + '</td>' +
+      return '<tr><td>' + A.esc(D.rejectLabel(e.key)) +
+        A.tip(D.rejectDesc(e.key, state.partnerId)) + '</td>' +
         '<td class="num">' + A.fmtInt(e.count) + '</td>' +
         '<td class="num">' + A.fmtPct(m.free ? e.count / m.free : 0, 1) + '</td>' +
         '<td style="color:var(--ink-2)">' + A.esc(D.rejectFix(e.key)) + '</td></tr>';
@@ -803,7 +805,7 @@
           mounted = true;
           C.mount(chartHost, 'pie', {
             slices: entries.map(function (e) {
-              return { label: A.esc(D.rejectLabel(e.key, state.partnerId)), value: e.count };
+              return { label: A.esc(D.rejectLabel(e.key)), value: e.count };
             }),
             ariaLabel: 'Share of rejected leads by reason'
           });

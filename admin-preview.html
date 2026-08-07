@@ -33,11 +33,30 @@
 
       <div class="notice notice-warn"><span class="ico">▲</span><div>
         <strong>Internal preview — not partner-facing, and nothing here saves.</strong>
-        This page exists so the build team can see what the admin side needs to control. The
-        toggles are inert. The storage, the screen and the audit trail all need building — see
-        <strong>ADMIN-MAPPING.md</strong>. Delete this page before anything goes in front of a
-        partner.
+        What the admin side has to be able to control, and what each one costs to build. The
+        toggles below are inert on purpose. The data side of the handoff is on
+        <strong>Data connections</strong>; the reasoning is in <strong>ADMIN-MAPPING.md</strong>.
+        Delete this page before anything goes in front of a partner.
       </div></div>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>The build list</h2>
+            <p class="sub">Every setting the portal needs. None of these exist in the admin today.</p>
+          </div>
+          <div class="spacer"></div>
+          <div id="setting-filter"></div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="setting-table"></table>
+        </div>
+        <div class="card-foot">
+          Rows marked with a risk note are the ones where getting it wrong has already cost money
+          or would disclose something to a partner. The previews below show the shape of the
+          screens these settings need.
+        </div>
+      </section>
 
       <section class="card">
         <div class="card-head">
@@ -142,10 +161,11 @@
 <script src="assets/js/charts.js"></script>
 <script src="assets/js/app.js"></script>
 <script src="assets/js/tables.js"></script>
+<script src="assets/js/handoff.js"></script>
 <script>
 (function () {
   'use strict';
-  var D = FZData, A = FZApp;
+  var D = FZData, A = FZApp, HO = FZHandoff;
 
   var state = A.params();
 
@@ -154,6 +174,58 @@
     title: 'Admin settings',
     subtitle: 'Internal preview of what the admin side needs to control.'
   });
+
+  /* ---- the build list ----------------------------------------------------
+     Rendered from the shared handoff registry, so this list and the field
+     list on Data connections cannot drift apart. */
+  (function () {
+    var filter = 'all';
+    var groups = [];
+    HO.SETTINGS.forEach(function (s) { if (groups.indexOf(s.group) === -1) groups.push(s.group); });
+
+    document.getElementById('setting-filter').innerHTML =
+      '<div class="view-toggle">' +
+        '<button type="button" class="is-on" data-sf="all">All</button>' +
+        '<button type="button" data-sf="risk">Has a risk note</button>' +
+      '</div>';
+
+    function render() {
+      var rows = HO.SETTINGS.filter(function (s) { return filter === 'risk' ? !!s.risk : true; });
+      var lastGroup = null, html = '';
+      rows.forEach(function (s) {
+        if (s.group !== lastGroup) {
+          lastGroup = s.group;
+          html += '<tr><td colspan="4" style="background:var(--surface-2);font-weight:700;' +
+            'font-size:12px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-2)">' +
+            A.esc(s.group) + '</td></tr>';
+        }
+        html += '<tr>' +
+          '<td><strong>' + A.esc(s.name) + '</strong><div style="font-size:12.5px;' +
+            'color:var(--ink-2);margin-top:3px">' + A.esc(s.controls) + '</div></td>' +
+          '<td style="font-size:12.5px;color:var(--ink-2)">' + A.esc(s.today) + '</td>' +
+          '<td style="font-size:12.5px">' + A.esc(s.storage) + '</td>' +
+          '<td style="font-size:12.5px">' + (s.risk
+            ? '<span style="color:var(--critical-text);font-weight:600">▲ </span>' + A.esc(s.risk)
+            : '<span style="color:var(--ink-muted)">—</span>') + '</td>' +
+          '</tr>';
+      });
+
+      document.getElementById('setting-table').innerHTML =
+        '<thead><tr><th style="width:24%">Setting</th><th style="width:18%">Today</th>' +
+        '<th style="width:29%">Storage it needs</th><th>Why it matters</th></tr></thead><tbody>' +
+        html + '</tbody>';
+    }
+
+    document.querySelectorAll('[data-sf]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        document.querySelectorAll('[data-sf]').forEach(function (x) { x.classList.remove('is-on'); });
+        b.classList.add('is-on');
+        filter = b.dataset.sf;
+        render();
+      });
+    });
+    render();
+  })();
 
   /* ---- column config ----------------------------------------------------
      Rendered straight off LEAD_COLUMNS so this screen cannot drift away from

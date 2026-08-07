@@ -171,75 +171,19 @@
     '<a class="btn btn-sm" href="' + A.linkTo('account.html', state) + '">Change primary contact</a>';
 
   /* ---- gauge --------------------------------------------------------------
-     A dial, not a fill meter: the arc is a recessive AXIS (grid weight, like
-     any chart axis), tick marks every 10 points carry the scale, and a
-     tapered needle in the validated severity colour points at the score. The
-     number and tier badge sit below the dial rather than floated over it. */
+     Drawn by the SHARED dial in charts.js — the same one the Health
+     scorecard's hero uses, so the two can never drift apart. */
   document.getElementById('gauge-link').href = A.linkTo('health.html', state);
   (function () {
     var hs = H.score({ partnerId: state.partnerId });
-    var C = FZCharts;
-
-    var sevSuffix = { '': '', 'is-warning': '-warning', 'is-serious': '-serious', 'is-critical': '-critical' }[H.meterClass(hs.score)];
-    var needleColor = C.cssVar('--meter-fill' + sevSuffix);
-    var axis = C.cssVar('--axis');
-    var muted = C.cssVar('--ink-muted');
-    var surface = C.cssVar('--surface-1');
-
-    var W = 224, HGT = 132;
-    var cx = W / 2, cy = 116, R = 92;
-
-    /* t: 0..1 across the semicircle, left → right. */
-    function pt(t, r) {
-      var a = Math.PI * (1 - t);
-      return [cx + r * Math.cos(a), cy - r * Math.sin(a)];
-    }
-    function f(n) { return n.toFixed(1); }
-
-    var svg = '';
-
-    /* Axis arc — hairline-weight, recessive. */
-    var a0 = pt(0, R), a1 = pt(1, R);
-    svg += '<path d="M' + f(a0[0]) + ',' + f(a0[1]) + ' A' + R + ',' + R + ' 0 1,1 ' +
-      f(a1[0]) + ',' + f(a1[1]) + '" fill="none" stroke="' + axis + '" stroke-width="3"/>';
-
-    /* Ticks every 10 points, longer at 0 / 50 / 100. */
-    for (var i = 0; i <= 10; i++) {
-      var t = i / 10;
-      var major = (i === 0 || i === 5 || i === 10);
-      var o = pt(t, R - 4), n = pt(t, R - (major ? 16 : 11));
-      svg += '<line x1="' + f(o[0]) + '" y1="' + f(o[1]) + '" x2="' + f(n[0]) + '" y2="' + f(n[1]) +
-        '" stroke="' + muted + '" stroke-width="' + (major ? 2 : 1.25) + '"/>';
-    }
-
-    /* End labels so the scale reads without a legend. */
-    svg += '<text x="' + f(cx - R) + '" y="' + (cy + 14) + '" text-anchor="middle" fill="' + muted + '" font-size="11">0</text>' +
-           '<text x="' + f(cx + R) + '" y="' + (cy + 14) + '" text-anchor="middle" fill="' + muted + '" font-size="11">100</text>';
-
-    /* Needle — a tapered polygon from the pivot to just short of the ticks,
-       with an arrowhead taper at the tip. */
-    var tScore = Math.max(0, Math.min(1, hs.score / 100));
-    var tip = pt(tScore, R - 22);
-    var ang = Math.PI * (1 - tScore);
-    var px = Math.sin(ang) * 4, py = Math.cos(ang) * 4;   /* perpendicular, 4px half-width */
-    svg += '<polygon points="' +
-        f(cx - px) + ',' + f(cy - py) + ' ' +
-        f(cx + px) + ',' + f(cy + py) + ' ' +
-        f(tip[0]) + ',' + f(tip[1]) + '" ' +
-      'fill="' + needleColor + '"/>';
-
-    /* Pivot, ringed in the surface colour like any end-marker. */
-    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="7" fill="' + needleColor +
-      '" stroke="' + surface + '" stroke-width="2"/>';
-
-    document.getElementById('gauge').innerHTML =
-      '<svg width="' + W + '" height="' + HGT + '" viewBox="0 0 ' + W + ' ' + HGT + '" role="img" ' +
-        'aria-label="Health score ' + hs.score + ' out of 100, tier ' + hs.tier.label + '">' + svg + '</svg>' +
-      '<div style="display:flex;align-items:baseline;gap:10px;margin-top:10px">' +
-        '<span class="gauge-value">' + hs.score + '</span>' +
-        '<span class="badge ' + hs.tier.badge + '"><span class="dot"></span>' + hs.tier.label + '</span>' +
-      '</div>' +
-      '<div class="gauge-hint">See the full breakdown →</div>';
+    var sevSuffix = { '': '', 'is-warning': '-warning', 'is-serious': '-serious',
+                      'is-critical': '-critical' }[H.meterClass(hs.score)];
+    FZCharts.gauge(document.getElementById('gauge'), {
+      score: hs.score,
+      tier: hs.tier,
+      sevSuffix: sevSuffix,
+      hint: 'See the full breakdown →'
+    });
   })();
 
   /* ---- volume ------------------------------------------------------------- */

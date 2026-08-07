@@ -438,6 +438,8 @@ h3 { font-size: 15px; }
   cursor: pointer;
 }
 .btn:hover { background: var(--surface-2); }
+/* For the one action a screen exists to make obvious. */
+.btn-lg { font-size: 15px; padding: 12px 22px; font-weight: 600; }
 /* Coral is the brand's call-to-action colour. Safe here because a button is
    chrome, not a data mark, and it carries a text label. */
 .btn-primary {
@@ -751,6 +753,85 @@ table.data tfoot td {
 .tooltip .tt-row .sw { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 9px; }
 .tooltip .tt-row .k { color: var(--ink-2); flex: 1; }
 .tooltip .tt-row .v { font-weight: 600; }
+
+/* --------------------------------------------------------------------------
+   Hover descriptors — small "i" beside any label that needs explaining.
+   The box itself (#fz-tipbox) is a fixed-position singleton managed by
+   wireTips() in app.js, so it can never be clipped by a scrolling table.
+   -------------------------------------------------------------------------- */
+
+.tip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  color: var(--ink-muted);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font);
+  line-height: 1;
+  cursor: help;
+  padding: 0;
+  vertical-align: middle;
+  margin-left: 6px;
+  flex: none;
+}
+.tip-btn:hover, .tip-btn:focus-visible {
+  color: var(--ink);
+  border-color: var(--series-1);
+}
+.tip-btn:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+
+#fz-tipbox {
+  display: none;
+  position: fixed;
+  /* Anchored at the origin from the start. Without an explicit left/top a
+     fixed box falls back to its static position, and the FIRST measurement
+     of its width comes back wrong — which put the very first tooltip of a
+     page several hundred pixels off-centre. */
+  left: 0;
+  top: 0;
+  z-index: 200;
+  width: max-content;
+  max-width: 300px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 20px rgba(11, 16, 28, 0.18);
+  padding: 9px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Collapsible card (native <details>)
+   -------------------------------------------------------------------------- */
+
+details.card > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+}
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary .chev {
+  margin-left: auto;
+  color: var(--ink-muted);
+  font-size: 12px;
+  transition: transform 120ms ease;
+}
+details.card[open] > summary .chev { transform: rotate(180deg); }
+details.card > summary:hover { background: var(--surface-2); border-radius: var(--radius); }
+details.card[open] > summary { border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; }
 
 /* --------------------------------------------------------------------------
    Info button + modal

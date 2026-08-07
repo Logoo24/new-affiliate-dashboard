@@ -16,175 +16,42 @@
 
     <div class="content">
 
-      <div class="notice notice-warn">
-        <span class="ico">▲</span>
-        <div>
-          <strong>Scope needs confirming.</strong> This flow is reconstructed from the
-          onboarding steps we already run by hand — the original scoping note trails off
-          mid-sentence. Two things to settle before it goes to the dev team: confirm the step
-          list with Michael, and draw the boundary against Mark Heberling's automated pixel
-          validation work so this is the front end to his backend rather than a second one.
+      <!-- A hub, not a page of content. Three destinations, then help. The
+           campaign flows are placeholders pending Logan's spec. -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Campaigns</h2>
+            <p class="sub">Launch something new, or change how an existing campaign runs.</p>
+          </div>
         </div>
-      </div>
-
-      <div class="steps" id="steps"></div>
-
-      <!-- 1 ------------------------------------------------------------ -->
-      <section class="card step-panel" data-step="0">
-        <div class="card-head"><div>
-          <h2>Which products are you running?</h2>
-          <p class="sub">Annuity and Life are separate campaigns either way — separate criteria, separate pixels, separate rate cards.</p>
-        </div></div>
         <div class="card-body">
-          <div class="choice-grid">
-            <label class="choice" data-choice="product" data-value="annuity">
-              <h3>Annuity</h3>
-              <p>Ages 45–75, investable assets criteria. Posts to <code>lead_post.php</code>.</p>
-            </label>
-            <label class="choice" data-choice="product" data-value="life">
-              <h3>Life</h3>
-              <p>Separate criteria set. Posts to <code>lead_post_life_insurance.php</code>.</p>
-            </label>
-          </div>
-          <div style="margin-top:12px">
-            <label class="choice" data-choice="product" data-value="both">
-              <h3>Both</h3>
-              <p>Two campaigns, two sets of credentials, one login. Most partners start with one and add the second.</p>
-            </label>
-          </div>
+          <div class="user-grid" id="actions" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))"></div>
         </div>
-        <div class="card-foot"><button class="btn btn-primary" data-next>Continue</button></div>
       </section>
 
-      <!-- 2 ------------------------------------------------------------ -->
-      <section class="card step-panel" data-step="1">
-        <div class="card-head"><div>
-          <h2>How will you send leads?</h2>
-          <p class="sub">This decides what we generate for you on the next step.</p>
-        </div></div>
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Helpful documents</h2>
+            <p class="sub">Everything you need to integrate, qualify and get paid.</p>
+          </div>
+        </div>
         <div class="card-body">
-          <div class="choice-grid">
-            <label class="choice" data-choice="integration" data-value="hosted">
-              <h3>Use our landing pages</h3>
-              <p>We host the funnel. You drive traffic to a tracking URL. Fastest path live — nothing to build.</p>
-            </label>
-            <label class="choice" data-choice="integration" data-value="api">
-              <h3>Post from my own funnel</h3>
-              <p>You own the form and post to our API. Full control of the questions and the user experience.</p>
-            </label>
-          </div>
-        </div>
-        <div class="card-foot">
-          <button class="btn" data-prev>Back</button>
-          <button class="btn btn-primary" data-next>Continue</button>
+          <div id="doc-featured"></div>
+          <div class="user-grid" id="doc-grid"
+               style="grid-template-columns:repeat(auto-fit,minmax(250px,1fr));margin-top:14px"></div>
+          <div class="mocknote" id="doc-note"></div>
         </div>
       </section>
 
-      <!-- 3 ------------------------------------------------------------ -->
-      <section class="card step-panel" data-step="2">
-        <div class="card-head"><div>
-          <h2>Your credentials and links</h2>
-          <p class="sub">Generated automatically from the campaign templates. No manual Admin Panel step.</p>
-        </div></div>
-        <div class="card-body" id="creds"></div>
-        <div class="card-foot">
-          <button class="btn" data-prev>Back</button>
-          <button class="btn btn-primary" data-next>Continue</button>
-        </div>
-      </section>
-
-      <!-- 4 ------------------------------------------------------------ -->
-      <section class="card step-panel" data-step="3">
-        <div class="card-head"><div>
-          <h2>Documentation</h2>
-          <p class="sub">Served here instead of emailed one at a time on request.</p>
-        </div></div>
-        <div class="card-body">
-          <ul class="doclist" id="doclist"></ul>
-        </div>
-        <div class="card-foot">
-          <button class="btn" data-prev>Back</button>
-          <button class="btn btn-primary" data-next>Continue</button>
-        </div>
-      </section>
-
-      <!-- 5 ------------------------------------------------------------ -->
-      <section class="card step-panel" data-step="4">
-        <div class="card-head"><div>
-          <h2>Send a test lead</h2>
-          <p class="sub">Self-verify the pixel without a round trip to your account manager.</p>
-        </div></div>
-        <div class="card-body">
-          <div class="notice notice-warn" style="margin-bottom:14px">
-            <span class="ico">▲</span>
-            <div>
-              <strong>There is no sandbox — your first test posts to production.</strong>
-              Use zip <strong>99997</strong> so the lead is flagged for pixel verification
-              (<strong>99996</strong> for annuity landing-page previews). Every test needs a
-              <strong>unique email and phone</strong> — reusing them trips the duplicate filter
-              and you will chase a rejection that is not real.
-            </div>
-          </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-            <button class="btn btn-primary" id="send-test">Send test lead</button>
-            <button class="btn btn-sm" id="clear-log">Clear</button>
-            <span class="spacer" style="flex:1"></span>
-            <span id="test-status"></span>
-          </div>
-          <div class="pixel-log" id="pixel-log"><div style="color:var(--ink-muted)">No test posts yet.</div></div>
-          <div class="mocknote">
-            The live PAID / FREE readout is the point of this step. Today a new partner posts a
-            test and then waits on someone to look at the lead table and tell them what happened.
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Have questions?</h2>
           </div>
         </div>
-        <div class="card-foot">
-          <button class="btn" data-prev>Back</button>
-          <button class="btn btn-primary" data-next>Continue</button>
-        </div>
-      </section>
-
-      <!-- 6 ------------------------------------------------------------ -->
-      <section class="card step-panel" data-step="5">
-        <div class="card-head"><div>
-          <h2>Confirm sub-ID passing</h2>
-          <p class="sub">A hard requirement, not a nice-to-have.</p>
-        </div></div>
-        <div class="card-body">
-          <p style="margin-top:0;color:var(--ink-2);max-width:70ch">
-            Without a sub-ID on every post we can only ever talk about your account as a whole.
-            With it, we can tell you which specific placement is producing the Priority and Hot
-            leads and which one is producing the duplicates — which is the difference between
-            "your quality dropped" and "placement 3 dropped."
-          </p>
-          <div class="cred" id="subid-example"></div>
-          <ul class="checklist" style="margin-top:14px">
-            <li><span class="mark">✓</span><span>Pass <code>subid</code> on every post, including tests</span></li>
-            <li><span class="mark">✓</span><span>Keep values stable — a sub-ID that changes weekly cannot be scored</span></li>
-            <li><span class="mark">✓</span><span>One sub-ID per placement or per publisher, not per lead</span></li>
-          </ul>
-          <div style="margin-top:16px">
-            <label style="display:flex;gap:9px;align-items:flex-start;font-size:13px">
-              <input type="checkbox" id="subid-confirm" style="margin-top:3px">
-              <span>I can pass a stable sub-ID on every lead post.</span>
-            </label>
-          </div>
-        </div>
-        <div class="card-foot">
-          <button class="btn" data-prev>Back</button>
-          <button class="btn btn-primary" id="finish">Finish setup</button>
-        </div>
-      </section>
-
-      <section class="card step-panel" data-step="6">
-        <div class="card-body" style="text-align:center;padding:40px 16px">
-          <div style="font-size:34px;line-height:1;margin-bottom:12px;color:var(--good)">✓</div>
-          <h2 style="font-size:18px;margin-bottom:6px">Setup complete</h2>
-          <p style="color:var(--ink-2);max-width:52ch;margin:0 auto 18px">
-            Your campaigns are live and your first leads will appear on the Performance view as
-            they post. Your health score starts reporting once 100 paid leads have matured.
-          </p>
-          <a class="btn btn-primary" id="go-perf" href="index.html">Go to Performance</a>
-        </div>
+        <div class="card-body" id="contact"></div>
       </section>
 
     </div>
@@ -206,180 +73,107 @@
   A.shell(state, {
     active: 'setup.html',
     title: 'Setup & docs',
-    subtitle: 'First-login walkthrough for a new partner.'
+    subtitle: 'Campaign setup, documentation and who to ask.'
   });
-  document.getElementById('go-perf').href = A.linkTo('index.html', state);
 
-  var STEP_LABELS = ['Products', 'Integration', 'Credentials', 'Documentation', 'Pixel test', 'Sub-IDs'];
-  var current = 0;
-  var choices = { product: 'annuity', integration: 'hosted' };
-
-  /* ---- stepper --------------------------------------------------------- */
-  function paintSteps() {
-    document.getElementById('steps').innerHTML = STEP_LABELS.map(function (s, i) {
-      var cls = 'step' + (i === current ? ' is-on' : '') + (i < current ? ' is-done' : '');
-      return '<button type="button" class="' + cls + '" data-goto="' + i + '">' +
-        '<span class="n">' + (i < current ? '✓' : (i + 1)) + '</span>' + s + '</button>';
+  /* ---- campaign actions --------------------------------------------------
+     Both flows are PLACEHOLDERS pending Logan's spec. They open a modal
+     saying so rather than a half-built form, because a form that looks real
+     and does nothing is worse than an honest stub. */
+  (function () {
+    var ACTIONS = [
+      { key: 'new', title: 'Set up new campaign', ico: '＋',
+        desc: 'Launch a new product, geo or traffic source on your account.' },
+      { key: 'edit', title: 'Edit existing campaign', ico: '✎',
+        desc: 'Change caps, targeting or where your leads post.' }
+    ];
+    document.getElementById('actions').innerHTML = ACTIONS.map(function (a) {
+      return '<button type="button" class="user-card" data-act="' + a.key + '" ' +
+        'style="display:block;text-align:left;cursor:pointer;font-family:inherit;width:100%">' +
+        '<div style="font-size:22px;line-height:1;margin-bottom:8px;color:var(--brand-coral)">' + a.ico + '</div>' +
+        '<div style="font-size:15px;font-weight:600">' + A.esc(a.title) + '</div>' +
+        '<div style="font-size:13px;color:var(--ink-2);margin-top:4px">' + A.esc(a.desc) + '</div>' +
+        '</button>';
     }).join('');
-    document.querySelectorAll('[data-goto]').forEach(function (b) {
-      b.addEventListener('click', function () { go(parseInt(b.dataset.goto, 10)); });
-    });
-  }
 
-  function go(n) {
-    current = n;
-    document.querySelectorAll('.step-panel').forEach(function (p) {
-      p.classList.toggle('is-on', parseInt(p.dataset.step, 10) === n);
-    });
-    paintSteps();
-    if (n === 2) paintCreds();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  document.querySelectorAll('[data-next]').forEach(function (b) {
-    b.addEventListener('click', function () { go(Math.min(current + 1, 5)); });
-  });
-  document.querySelectorAll('[data-prev]').forEach(function (b) {
-    b.addEventListener('click', function () { go(Math.max(current - 1, 0)); });
-  });
-  document.getElementById('finish').addEventListener('click', function () {
-    if (!document.getElementById('subid-confirm').checked) {
-      alert('Confirm sub-ID passing to finish. If you genuinely cannot pass one, contact your account manager — it changes how your campaign is priced.');
-      return;
-    }
-    current = 6;
-    document.querySelectorAll('.step-panel').forEach(function (p) {
-      p.classList.toggle('is-on', parseInt(p.dataset.step, 10) === 6);
-    });
-    document.getElementById('steps').innerHTML = STEP_LABELS.map(function (s) {
-      return '<button type="button" class="step is-done"><span class="n">✓</span>' + s + '</button>';
-    }).join('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-
-  /* ---- choices --------------------------------------------------------- */
-  document.querySelectorAll('[data-choice]').forEach(function (c) {
-    c.addEventListener('click', function () {
-      var group = c.dataset.choice;
-      document.querySelectorAll('[data-choice="' + group + '"]').forEach(function (x) {
-        x.classList.remove('is-on');
+    document.querySelectorAll('[data-act]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var a = ACTIONS.filter(function (x) { return x.key === b.dataset.act; })[0];
+        A.openModal({
+          title: a.title,
+          html: '<div class="notice notice-mock"><span class="ico">✎</span><div>' +
+            '<strong>Placeholder.</strong> This flow has not been designed yet. ' +
+            'For now, contact Logan Randall to ' +
+            (a.key === 'new' ? 'set up a new campaign' : 'change an existing campaign') + '.' +
+            '</div></div>' +
+            '<p style="color:var(--ink-2);font-size:14px">' +
+            '<a href="mailto:logan@financialize.com">logan@financialize.com</a></p>',
+          returnFocusTo: b
+        });
       });
-      c.classList.add('is-on');
-      choices[group] = c.dataset.value;
     });
-  });
-  document.querySelector('[data-choice="product"][data-value="annuity"]').classList.add('is-on');
-  document.querySelector('[data-choice="integration"][data-value="hosted"]').classList.add('is-on');
+  })();
 
-  /* ---- credentials ----------------------------------------------------- */
-  function paintCreds() {
-    var products = choices.product === 'both' ? ['annuity', 'life'] : [choices.product];
-    var html = products.map(function (p) {
-        var isAnnuity = p === 'annuity';
-      var campId = isAnnuity ? 'CR-ANN-2041' : 'CR-LIFE-2042';
-      var endpoint = isAnnuity ? 'lead_post.php' : 'lead_post_life_insurance.php';
-      var block = '<h3 style="margin-bottom:8px">' + (isAnnuity ? 'Annuity' : 'Life') + ' campaign</h3>' +
-        '<div style="font-size:12px;color:var(--ink-muted)">Campaign ID</div>' +
-        '<div class="cred">' + campId + '</div>' +
-        '<div style="font-size:12px;color:var(--ink-muted);margin-top:10px">API key</div>' +
-        '<div class="cred">fz_live_' + (isAnnuity ? '8f2a4c91d7e35b60' : '3d71b90ec4a82f15') + '</div>';
+  /* ---- documents ----------------------------------------------------------
+     Rendered from D.documentsFor(), NOT typed into this page, so the team can
+     add or retire a document without touching the portal. `agreement` is
+     per-affiliate: the admin pastes that partner's own Google Doc URL onto
+     their record. A document with no URL renders as "not linked yet" rather
+     than a dead button — see ADMIN-MAPPING §7. */
+  (function () {
+    var docs = D.documentsFor(state.partnerId);
 
-      if (choices.integration === 'hosted') {
-        block += '<div style="font-size:12px;color:var(--ink-muted);margin-top:10px">Tracking URL</div>' +
-          '<div class="cred">https://go.financialize.com/' + (isAnnuity ? 'annuity' : 'life') +
-          '/?c=' + campId + '&amp;subid={SUBID}&amp;click_id={CLICK_ID}</div>';
-      } else {
-        block += '<div style="font-size:12px;color:var(--ink-muted);margin-top:10px">POST endpoint</div>' +
-          '<div class="cred">https://admin.financialize.com/api/' + endpoint + '</div>';
+    function card(d, big) {
+      var linked = !!d.url;
+      var inner =
+        '<div style="font-size:' + (big ? '17' : '15') + 'px;font-weight:600">' + A.esc(d.label) +
+          (d.scope === 'partner'
+            ? A.tip('This document is specific to your account and is linked by your account manager.')
+            : '') + '</div>' +
+        '<div style="font-size:13px;color:var(--ink-2);margin-top:4px">' + A.esc(d.desc) + '</div>' +
+        (linked ? '' : '<div style="margin-top:8px"><span class="badge badge-warn">' +
+          '<span class="dot"></span>Not linked yet</span></div>');
+
+      if (!linked) {
+        return '<div class="user-card" style="display:block;opacity:.85' +
+          (big ? ';padding:18px' : '') + '">' + inner + '</div>';
       }
+      return '<a class="user-card" href="' + A.esc(d.url) + '" target="_blank" rel="noopener" ' +
+        'style="display:block;text-decoration:none;color:inherit' +
+        (big ? ';padding:18px;border-color:var(--brand-coral)' : '') + '">' + inner +
+        '<div style="font-size:13px;color:var(--brand-coral);font-weight:600;margin-top:8px">Open →</div></a>';
+    }
 
-      block += '<div style="font-size:12px;color:var(--ink-muted);margin-top:10px">Postback / pixel URL</div>' +
-        '<div class="cred">https://admin.financialize.com/pixel.php?c=' + campId +
-        '&amp;lead_id={LEAD_ID}&amp;subid={SUBID}&amp;status={STATUS}</div>';
+    var featured = docs.filter(function (d) { return d.featured; });
+    var rest = docs.filter(function (d) { return !d.featured; });
 
-      return '<div style="margin-bottom:22px">' + block + '</div>';
-    }).join('');
+    document.getElementById('doc-featured').innerHTML =
+      featured.map(function (d) { return card(d, true); }).join('');
+    document.getElementById('doc-grid').innerHTML =
+      rest.map(function (d) { return card(d, false); }).join('');
 
-    html += '<div class="mocknote">Values are fabricated for the mock-up. The real ones come ' +
-      'from the five existing campaign templates — the point of this step is that they are ' +
-      'issued on signup rather than created by hand in the Admin Panel afterwards.</div>';
+    var unlinked = docs.filter(function (d) { return !d.url; });
+    document.getElementById('doc-note').innerHTML =
+      '<strong>Build note.</strong> This list is admin-managed — documents are added and ' +
+      're-linked without a deploy. <strong>Your agreement</strong> is per-affiliate: the admin ' +
+      'pastes that partner\'s own Google Doc URL onto their record.' +
+      (unlinked.length
+        ? ' Currently unlinked in this mock: ' +
+          unlinked.map(function (d) { return A.esc(d.label); }).join(', ') + '.'
+        : '');
+  })();
 
-    document.getElementById('creds').innerHTML = html;
-  }
+  /* ---- contact ------------------------------------------------------------ */
+  document.getElementById('contact').innerHTML =
+    '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">' +
+      '<div style="flex:1;min-width:220px">' +
+        '<div style="font-size:15px;font-weight:600">Logan Randall</div>' +
+        '<div style="font-size:13px;color:var(--ink-2)">Affiliate Performance Manager</div>' +
+      '</div>' +
+      '<a class="btn btn-primary" href="mailto:logan@financialize.com">Email Logan</a>' +
+    '</div>';
 
-  /* ---- documentation --------------------------------------------------- */
-  var DOCS = [
-    ['Lead Criteria', 'What we accept and why — read this one first', 'PDF'],
-    ['Lead Submission API Documentation', 'Field list, required parameters, response codes', 'PDF'],
-    ['Pixel Setup & Testing Guide', 'How to fire and verify the conversion pixel', 'PDF'],
-    ['Affiliate Onboarding packet', 'Rate card, payment terms, contacts', 'PDF'],
-    ['Sub-ID & UTM conventions', 'How to name sub-IDs so they can be scored', 'PDF']
-  ];
-  document.getElementById('doclist').innerHTML = DOCS.map(function (d) {
-    return '<li><span style="font-size:15px;opacity:.6">▤</span>' +
-      '<span><strong>' + A.esc(d[0]) + '</strong><br>' +
-      '<span style="font-size:12px;color:var(--ink-muted)">' + A.esc(d[1]) + '</span></span>' +
-      '<span class="spacer"></span>' +
-      '<span class="badge">' + d[2] + '</span>' +
-      '<button class="btn btn-sm" disabled title="Mock-up — no file attached">Download</button></li>';
-  }).join('');
-
-  /* ---- pixel test ------------------------------------------------------ */
-  var testCount = 0;
-  document.getElementById('send-test').addEventListener('click', function () {
-    testCount++;
-    var log = document.getElementById('pixel-log');
-    if (testCount === 1) log.innerHTML = '';
-
-    var leadId = 'FZ-TEST-' + (90210 + testCount);
-    var stamp = new Date().toLocaleTimeString('en-US', { hour12: false });
-    /* First post is deliberately a rejection: a new partner almost always
-       misses a required field, and seeing the reason is the whole point. */
-    var willPass = testCount !== 1;
-
-    line(log, stamp + '  POST /api/lead_post.php  campaign=CR-ANN-2041 zip=99997 subid=test_01');
-    setTimeout(function () {
-      line(log, stamp + '  ← 200 OK   lead_id=' + leadId);
-      setTimeout(function () {
-        if (willPass) {
-          line(log, stamp + '  Lead table status: <strong style="color:var(--good-text)">PAID</strong> — all criteria met, pixel fired', true);
-          document.getElementById('test-status').innerHTML =
-            '<span class="badge badge-good"><span class="dot"></span>Pixel verified</span>';
-        } else {
-          line(log, stamp + '  Lead table status: <strong style="color:var(--critical-text)">FREE</strong> — rejected: consent token missing', true);
-          line(log, '          Fix: confirm the TCPA disclosure is on the page and <code>consent_token</code> is posting. Then send another test.', true);
-          document.getElementById('test-status').innerHTML =
-            '<span class="badge badge-crit"><span class="dot"></span>Test failed — see log</span>';
-        }
-        log.scrollTop = log.scrollHeight;
-      }, 550);
-    }, 350);
-  });
-
-  function line(host, text, isHtml) {
-    var d = document.createElement('div');
-    if (isHtml) d.innerHTML = text; else d.textContent = text;
-    host.appendChild(d);
-    host.scrollTop = host.scrollHeight;
-  }
-
-  document.getElementById('clear-log').addEventListener('click', function () {
-    testCount = 0;
-    document.getElementById('pixel-log').innerHTML =
-      '<div style="color:var(--ink-muted)">No test posts yet.</div>';
-    document.getElementById('test-status').innerHTML = '';
-  });
-
-  /* ---- sub-id example --------------------------------------------------- */
-  document.getElementById('subid-example').innerHTML =
-    'POST https://admin.financialize.com/api/lead_post.php<br>' +
-    '&nbsp;&nbsp;campaign_id=CR-ANN-2041<br>' +
-    '&nbsp;&nbsp;<strong>subid=placement_03</strong> &nbsp;← identifies the placement<br>' +
-    '&nbsp;&nbsp;<strong>click_id=8f21ac09</strong> &nbsp;← identifies the click<br>' +
-    '&nbsp;&nbsp;utm_campaign=... utm_medium=...';
-
-  paintSteps();
-  go(0);
+  if (window.FZTable) FZTable.enhanceAll();
 
 })();
 </script>

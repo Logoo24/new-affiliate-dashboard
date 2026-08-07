@@ -17,7 +17,6 @@
     <div class="content">
 
       <div id="filter-host"></div>
-      <div id="ctx-notice"></div>
 
       <section class="card">
         <div class="card-head">
@@ -40,17 +39,8 @@
         </div>
       </section>
 
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <h2>Rejection reasons</h2>
-            <p class="sub">Grouped, so a pattern is obvious rather than 30 rows apart.</p>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table class="data" id="reject-table"></table>
-        </div>
-      </section>
+      <!-- The grouped rejection-reason summary that used to sit here now
+           lives only on the Performance page — same numbers, one home. -->
 
     </div>
   </div>
@@ -102,28 +92,6 @@
   var available = D.columnsForPartner(state.partnerId);
   var tableCols = available.filter(function (c) { return !c.csvOnly; });
 
-  /* ---- context notice -------------------------------------------------- */
-  (function () {
-    var comps = state.comps;
-    var mixed = comps.length > 1;
-    var seesRevenue = comps.some(function (c) { return c.seesRevenue; });
-
-    var msg;
-    if (mixed) {
-      msg = 'This account runs more than one comp model, so the table is mixed: ' +
-        'revenue columns are populated on rows from revenue-share campaigns and ' +
-        'are not present at all on rows from CPL campaigns.';
-    } else if (seesRevenue) {
-      msg = 'Sale amount and your share show on every row that sold — <strong>including ' +
-        'leads we did not accept</strong>. Filter Status to "Rejected" to see those.';
-    } else {
-      msg = 'A rejected lead shows its reason and stops there — no sold type, no dates, ' +
-        'no price. Those fields are not in this comp model\'s query for a rejected row.';
-    }
-    document.getElementById('ctx-notice').innerHTML =
-      '<div class="notice notice-info"><span class="ico">◆</span><div>' + msg + '</div></div>';
-  })();
-
   /* ---- table -------------------------------------------------------------
      The lead table paginates, so sorting has to happen on the FULL filtered
      set and then re-paginate. Sorting the 50 rendered rows would sort one
@@ -144,7 +112,8 @@
       case 'assetBand':  return row.assetBand
                            ? D.ASSET_BANDS.map(function (b) { return b.key; }).indexOf(row.assetBand)
                            : '';
-      case 'rejectReason': return row.rejectReason ? D.rejectLabel(row.rejectReason, state.partnerId) : '';
+      case 'rejectReason': return row.rejectReason
+        ? (row.rejectReasonRaw || D.rejectLabel(row.rejectReason)) : '';
       case 'status':     return row.status === 'paid' ? 1 : 0;
       case 'dow':        return row.receivedAt ? row.receivedAt.getDay() : '';
       /* A lead that never sold has no sale amount — it is blank, not zero.
@@ -255,32 +224,6 @@
       toastHost: document.getElementById('export-toast')
     };
   });
-
-  /* ---- rejection grouping ------------------------------------------------ */
-  (function () {
-    var counts = {}, freeTotal = 0;
-    all.forEach(function (r) {
-      if (r.rejectReason) { counts[r.rejectReason] = (counts[r.rejectReason] || 0) + 1; freeTotal++; }
-    });
-    var entries = Object.keys(counts).map(function (k) { return { key: k, n: counts[k] }; })
-      .sort(function (a, b) { return b.n - a.n; });
-
-    var head = '<thead><tr><th>Reason</th><th class="num">Leads</th>' +
-      '<th class="num">% of rejected</th><th>What fixes it</th><th></th></tr></thead>';
-    var body = entries.map(function (e) {
-      var link = e.key === 'duplicate'
-        ? '<a class="btn btn-sm" href="' + A.linkTo('duplicate-check.html', state) + '">Screen numbers →</a>'
-        : '';
-      return '<tr><td>' + A.esc(D.rejectLabel(e.key, state.partnerId)) + '</td>' +
-        '<td class="num">' + A.fmtInt(e.n) + '</td>' +
-        '<td class="num">' + A.fmtPct(freeTotal ? e.n / freeTotal : 0, 1) + '</td>' +
-        '<td style="color:var(--ink-2)">' + A.esc(D.rejectFix(e.key)) + '</td>' +
-        '<td style="text-align:right">' + link + '</td></tr>';
-    }).join('');
-
-    document.getElementById('reject-table').innerHTML = head + '<tbody>' +
-      (body || '<tr><td colspan="5" class="empty">No rejected leads in this window.</td></tr>') + '</tbody>';
-  })();
 
 })();
 </script>

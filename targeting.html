@@ -21,75 +21,61 @@
         <div id="framing-note"></div>
       </div>
 
-      <div class="grid-2">
+      <!-- Dense top row: three compact facts side by side. Everything here is
+           short reference material, not analysis, so none of it earns a full-
+           width card. -->
+      <div class="grid-3">
         <section class="card">
           <div class="card-head">
             <div>
               <h2>Call center hours</h2>
-              <p class="sub">When our team is on the phones.</p>
             </div>
           </div>
-          <div class="table-wrap">
-            <table class="data" id="hours-table"></table>
-          </div>
+          <div class="card-body" id="hours-body"></div>
           <div class="card-foot" id="hours-foot"></div>
         </section>
 
         <section class="card">
           <div class="card-head">
             <div>
-              <h2>Ideal send windows &amp; day split</h2>
-              <p class="sub">Consumer local time. Weight sends here for the fastest contact.</p>
+              <h2>Best times to send<span id="windows-tip-host"></span></h2>
             </div>
           </div>
           <div class="card-body">
-            <div class="tile-label" style="margin-top:2px">Best windows, Monday–Friday</div>
-            <div id="windows" style="display:flex;gap:10px;margin:8px 0 16px;flex-wrap:wrap"></div>
-            <div class="tile-label">Ideal share of your weekly volume</div>
-            <div class="table-wrap" style="margin-top:6px">
-              <table class="data" id="dow-table"></table>
-            </div>
+            <div class="tile-label" style="margin-top:2px">Ideal windows, Mon–Fri</div>
+            <div id="windows" style="display:flex;gap:8px;margin:8px 0 14px;flex-wrap:wrap"></div>
+            <div class="tile-label">Ideal weekly split<span id="dow-tip-host"></span></div>
+            <div id="dow-chips" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"></div>
           </div>
         </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>States we need most<span id="states-tip-host"></span></h2>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="states-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"></div>
+          </div>
+          <div class="card-foot"><span>Volume in these states earns budget.</span></div>
+        </section>
       </div>
-
-      <section class="card" id="criteria-annuity-card">
-        <div class="card-head">
-          <div>
-            <h2>Lead criteria — Annuity</h2>
-            <p class="sub">What makes an annuity lead payable on your account.</p>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table class="data" id="criteria-annuity"></table>
-        </div>
-      </section>
-
-      <section class="card" id="criteria-life-card">
-        <div class="card-head">
-          <div>
-            <h2>Lead criteria — Life</h2>
-            <p class="sub">What makes a life lead payable.</p>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table class="data" id="criteria-life"></table>
-        </div>
-      </section>
 
       <section class="card">
         <div class="card-head">
           <div>
-            <h2>States we need most</h2>
-            <p class="sub">Approved budget nobody is filling. Volume here earns budget.</p>
+            <h2>Lead criteria<span id="criteria-tip-host"></span></h2>
+            <p class="sub">What makes a lead payable on your account.</p>
+          </div>
+          <div class="spacer"></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div id="product-toggle"></div>
+            <button class="btn btn-sm" id="full-criteria">View full criteria</button>
           </div>
         </div>
-        <div class="table-wrap">
-          <table class="data" id="states-table"></table>
-        </div>
-        <div class="card-foot">
-          <span>Full state coverage and your current split are on the
-          <a href="health.html" id="health-link">Health scorecard</a>.</span>
+        <div class="card-body">
+          <div id="criteria-chips" class="user-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))"></div>
         </div>
       </section>
 
@@ -115,25 +101,23 @@
     title: 'Targeting',
     subtitle: 'Everything that helps you send leads that qualify and sell.'
   });
-  document.getElementById('health-link').href = A.linkTo('health.html', state);
 
   /* The framing is not optional — a partner who reads these as gates sends
      less, not better. */
   document.getElementById('framing-note').textContent = D.COVERAGE_NOTE;
 
-  /* ---- hours ------------------------------------------------------------- */
+  /* ---- hours (compact) --------------------------------------------------- */
   (function () {
     var H = D.OPERATING_HOURS;
-    var rows = [
-      ['Monday – Friday', H.weekday.replace('Monday–Friday, ', '')],
-      ['Saturday', H.saturday.replace('Saturday, ', '')],
-      ['Sunday', 'Closed — anything landing Sunday sits until Monday morning']
-    ];
-    document.getElementById('hours-table').innerHTML = '<tbody>' +
-      rows.map(function (r) {
-        return '<tr><th style="width:34%;text-align:left;font-weight:600">' + A.esc(r[0]) + '</th>' +
-          '<td>' + A.esc(r[1]) + '</td></tr>';
-      }).join('') + '</tbody>';
+    document.getElementById('hours-body').innerHTML =
+      [['Mon–Fri', '9:00 AM – 7:00 PM local'],
+       ['Saturday', '9:00 AM – 8:00 PM ET'],
+       ['Sunday', 'Closed']].map(function (r) {
+        return '<div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;' +
+          'border-bottom:1px solid var(--grid)">' +
+          '<span style="font-weight:600">' + r[0] + '</span>' +
+          '<span style="color:var(--ink-2)">' + r[1] + '</span></div>';
+      }).join('');
 
     /* Saturday western caveat only for partners actually sending west. */
     var coh = D.cohort({ partnerId: state.partnerId, rateBasis: state.rateBasis });
@@ -146,70 +130,114 @@
     });
     document.getElementById('hours-foot').innerHTML =
       (total && western / total > 0.10)
-        ? '<span>▲ ' + A.esc(D.OPERATING_HOURS.saturdayWestCaveat) + '</span>'
-        : '<span>All hours local to the consumer\'s timezone unless marked ET.</span>';
+        ? '<span>Saturday closes early out west' + A.tip(D.OPERATING_HOURS.saturdayWestCaveat) + '</span>'
+        : '<span>Anything landing Sunday sits until Monday morning.</span>';
   })();
 
-  /* ---- windows + day split ----------------------------------------------- */
+  /* ---- windows + day split (chips, not a table) --------------------------- */
   (function () {
+    document.getElementById('windows-tip-host').innerHTML =
+      A.tip('The windows where our team is fully staffed and leads convert best. Sends outside ' +
+            'them are still accepted and worked.');
     document.getElementById('windows').innerHTML = D.IDEAL_WINDOWS.map(function (w) {
-      return '<span class="badge badge-info" style="font-size:13.5px;padding:6px 14px">' +
-        '<span class="dot"></span>' + A.esc(w.label) + '</span>';
+      return '<span class="badge badge-info"><span class="dot"></span>' + A.esc(w.label) + '</span>';
     }).join('');
 
+    document.getElementById('dow-tip-host').innerHTML =
+      A.tip('How we would ideally see your weekly volume spread across days. Sunday is 0% ' +
+            'because the call floor is closed.');
     var order = [1, 2, 3, 4, 5, 6, 0];
-    document.getElementById('dow-table').innerHTML =
-      '<thead><tr><th>Day</th><th class="num">Ideal share</th></tr></thead><tbody>' +
-      order.map(function (d) {
-        var pct = D.IDEAL_DOW_SPLIT[d];
-        return '<tr><td>' + D.DOW_LABEL[d] + '</td>' +
-          '<td class="num">' + (pct ? Math.round(pct * 100) + '%' : '—') + '</td></tr>';
-      }).join('') + '</tbody>';
+    document.getElementById('dow-chips').innerHTML = order.map(function (d) {
+      var pct = D.IDEAL_DOW_SPLIT[d];
+      return '<span class="badge"' + (pct ? '' : ' style="opacity:.55"') + '>' +
+        D.DOW_SHORT[d] + ' ' + Math.round(pct * 100) + '%</span>';
+    }).join('');
   })();
 
-  /* ---- criteria ----------------------------------------------------------- */
-  /* Age band renders from THIS partner's negotiated terms, not the standard
-     band — see the $5,194 warning in ADMIN-MAPPING.md §1. Only the products
-     this partner actually runs are shown. */
+  /* ---- states we need (top 10, names only) --------------------------------
+     Deliberately JUST the state names. The budget behind the list and the
+     lead counts it implies are internal — the affiliate only needs to know
+     where volume is wanted. The list itself is admin-set and changes often;
+     see ADMIN-MAPPING §5a. */
+  (function () {
+    document.getElementById('states-tip-host').innerHTML =
+      A.tip('States where we currently want more volume than we are getting. Updated as our ' +
+            'buyer demand shifts.');
+    document.getElementById('states-chips').innerHTML =
+      D.stateDemand({ limit: 10 }).map(function (s) {
+        return '<span class="badge"><strong>' + A.esc(s.st) + '</strong>&nbsp;' +
+          A.esc(s.name) + '</span>';
+      }).join('');
+  })();
+
+  /* ---- lead criteria — one box, product toggle, compact chips -------------
+     Every value here is a COMMERCIAL TERM that can differ per account (the
+     age band already does — OptiLabX runs 45–79 against the standard 45–75),
+     so all of it renders from leadCriteria(partnerId) and none of it is
+     typed into this page. The admin side needs per-affiliate editing for the
+     lot; see ADMIN-MAPPING §1. */
   (function () {
     var crit = D.leadCriteria(state.partnerId);
-    var products = {};
-    D.campaignsFor(state.partnerId).forEach(function (c) { products[c.product.toLowerCase()] = 1; });
+    var products = [];
+    D.campaignsFor(state.partnerId).forEach(function (c) {
+      var p = c.product.toLowerCase();
+      if (products.indexOf(p) === -1 && crit[p]) products.push(p);
+    });
+    if (!products.length) products = ['annuity'];
+    var current = products[0];
 
-    function fill(tableId, cardId, rows, show) {
-      if (!show) { document.getElementById(cardId).style.display = 'none'; return; }
-      document.getElementById(tableId).innerHTML = '<tbody>' +
-        rows.map(function (r) {
-          return '<tr' + (r.highlight ? ' style="background:var(--surface-2)"' : '') + '>' +
-            '<th style="width:26%;text-align:left;font-weight:600">' + A.esc(r.label) + '</th>' +
-            '<td>' + A.esc(r.value) +
-            (r.highlight ? ' <strong style="color:var(--good-text)">★</strong>' : '') +
-            '</td></tr>';
-        }).join('') + '</tbody>';
+    document.getElementById('criteria-tip-host').innerHTML =
+      A.tip('A lead that misses any of these rejects and does not pay. Your account\'s own ' +
+            'negotiated terms are shown — they can differ from our standard criteria.');
+
+    /* Product toggle only when the account actually runs both. */
+    var toggleHost = document.getElementById('product-toggle');
+    if (products.length > 1) {
+      toggleHost.innerHTML = '<div class="view-toggle">' +
+        products.map(function (p, i) {
+          return '<button type="button"' + (i === 0 ? ' class="is-on"' : '') +
+            ' data-prod="' + p + '">' + (p.charAt(0).toUpperCase() + p.slice(1)) + '</button>';
+        }).join('') + '</div>';
+      toggleHost.querySelectorAll('[data-prod]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          toggleHost.querySelectorAll('[data-prod]').forEach(function (x) { x.classList.remove('is-on'); });
+          b.classList.add('is-on');
+          current = b.dataset.prod;
+          renderChips();
+        });
+      });
     }
 
-    fill('criteria-annuity', 'criteria-annuity-card', crit.annuity, products.annuity);
-    fill('criteria-life', 'criteria-life-card', crit.life, products.life);
+    function renderChips() {
+      document.getElementById('criteria-chips').innerHTML =
+        crit[current].map(function (r) {
+          return '<div class="user-card" style="padding:11px 13px;display:block' +
+            (r.highlight ? ';background:var(--surface-2)' : '') + '">' +
+            '<div class="tile-label">' + A.esc(r.label) +
+              (r.highlight ? ' <strong style="color:var(--good-text)">★</strong>' : '') + '</div>' +
+            '<div style="font-size:14px;font-weight:600;margin-top:3px">' + A.esc(r.value.split(' — ')[0]) + '</div>' +
+          '</div>';
+        }).join('');
+    }
+    renderChips();
+
+    /* Full detail lives behind the button, not on the page. */
+    document.getElementById('full-criteria').addEventListener('click', function () {
+      var rows = crit[current].map(function (r) {
+        return '<tr' + (r.highlight ? ' style="background:var(--surface-2)"' : '') + '>' +
+          '<th style="width:28%;text-align:left;font-weight:600">' + A.esc(r.label) + '</th>' +
+          '<td>' + A.esc(r.value) + '</td></tr>';
+      }).join('');
+      A.openModal({
+        title: 'Full lead criteria — ' + current.charAt(0).toUpperCase() + current.slice(1),
+        html: '<div class="table-wrap"><table class="data"><tbody>' + rows + '</tbody></table></div>' +
+          '<p style="margin-top:14px;color:var(--ink-muted);font-size:13px">These are your ' +
+          'account\'s terms. If something looks wrong, contact your account manager.</p>',
+        returnFocusTo: document.getElementById('full-criteria')
+      });
+    });
   })();
 
-  /* ---- states we need ------------------------------------------------------ */
-  (function () {
-    var rows = D.stateDemand({ limit: 6 });
-    document.getElementById('states-table').innerHTML =
-      '<thead><tr><th>State</th><th>Timezone</th>' +
-      '<th class="num">Unused budget</th><th class="num">≈ Leads needed</th></tr></thead><tbody>' +
-      rows.map(function (s) {
-        return '<tr><td><strong>' + A.esc(s.name) + '</strong> (' + s.st + ')</td>' +
-          '<td>' + s.tz + '</td>' +
-          '<td class="num">' + A.fmtMoney0(s.unusedBudget) + '</td>' +
-          '<td class="num">' + A.fmtInt(s.leadsNeeded) + '</td></tr>';
-      }).join('') + '</tbody>';
-  })();
-
-
-  /* Sortable / resizable / configurable columns. Every table on this page
-     is fully rendered, so sorting the DOM sorts the whole dataset for the
-     selected window - not just the visible rows. */
   if (window.FZTable) FZTable.enhanceAll();
 
 })();

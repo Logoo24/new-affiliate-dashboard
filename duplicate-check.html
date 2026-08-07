@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Duplicate check — Financialize Partner Portal</title>
+<title>Duplicates &amp; suppression — Financialize Partner Portal</title>
 <link rel="stylesheet" href="assets/css/dashboard.css">
 </head>
 <body>
@@ -19,11 +19,58 @@
       <div class="notice notice-info">
         <span class="ico">◆</span>
         <div>
-          Check a phone number against everything sold as <strong>Priority or Hot in the last
-          365 days</strong> — the exclusivity window for those two tiers. Screen a number before
-          you pay to acquire it, instead of finding out at post time.
+          Everything here checks against numbers sold as <strong>Priority or Hot in the last
+          365 days</strong> — the exclusivity window for those two tiers.
         </div>
       </div>
+
+      <!-- The file leads the page: it is the bulk tool that prevents
+           duplicates before money is spent; the lookups below are the
+           one-at-a-time companion. -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Suppression file<span id="supp-tip-host"></span></h2>
+            <p class="sub">Every suppressed number as one file, rebuilt nightly. Match your list against it before you buy.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div style="display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center">
+            <div id="supp-download"></div>
+            <div id="supp-chips" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          </div>
+          <div style="padding-top:10px" id="supp-toast"></div>
+
+          <div class="grid-2" style="margin-top:16px">
+            <div>
+              <h3 style="margin-bottom:8px">How to use it</h3>
+              <ul class="checklist">
+                <li><span class="mark">1</span><span><strong>Normalize</strong> your numbers the
+                  same way we do<span id="tip-norm"></span></span></li>
+                <li><span class="mark">2</span><span><strong>Hash</strong> them with your account
+                  key<span id="tip-hash"></span></span></li>
+                <li><span class="mark">3</span><span><strong>Suppress every match</strong> — do
+                  not acquire, do not post</span></li>
+                <li><span class="mark">4</span><span><strong>Re-pull daily</strong><span id="tip-repull"></span></span></li>
+              </ul>
+            </div>
+            <div>
+              <h3 style="margin-bottom:8px">File details</h3>
+              <div class="table-wrap">
+                <table class="data" id="supp-manifest"></table>
+              </div>
+            </div>
+          </div>
+
+          <div class="mocknote">
+            <strong>Mock-up.</strong> The download returns a small <strong>sample</strong> with
+            fabricated digests so the format is reviewable. The real file is
+            <span id="supp-size"></span> and must be served authenticated, per affiliate, and
+            rate-limited like the lookup API.
+          </div>
+        </div>
+        <div class="card-foot" id="supp-foot"></div>
+      </section>
 
       <div class="grid-2">
         <section class="card">
@@ -87,65 +134,6 @@
         <div class="table-wrap">
           <table class="data" id="bulk-table"></table>
         </div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <h2>Suppression file</h2>
-            <p class="sub">The whole exclusivity window as a file — screen your list before you spend, not at post time.</p>
-          </div>
-          <div class="spacer"></div>
-          <div id="supp-download"></div>
-        </div>
-        <div style="padding:0 18px" id="supp-toast"></div>
-        <div class="card-body">
-          <p style="margin-top:0;color:var(--ink-2);font-size:14px">
-            The lookups above answer one number at a time and are capped daily. The suppression
-            file is the bulk companion: every number currently inside the
-            <strong>365-day Priority/Hot exclusivity window</strong>, rebuilt nightly. Match your
-            list against it before you buy traffic and a duplicate never costs you an acquisition.
-          </p>
-
-          <div class="grid-2">
-            <div>
-              <h3 style="margin-bottom:8px">How to use it</h3>
-              <ul class="checklist">
-                <li><span class="mark">1</span><span><strong>Normalize</strong> every number the
-                  same way we do — 10 digits, digits only, leading 1 stripped, no formatting.
-                  <em>Most failed matches are a normalization mismatch, not a missing entry.</em></span></li>
-                <li><span class="mark">2</span><span><strong>Hash</strong> with the algorithm in
-                  the manifest, using the key issued to you.</span></li>
-                <li><span class="mark">3</span><span><strong>Match</strong> against the file and
-                  <strong>suppress the hits</strong> — do not acquire, do not post.</span></li>
-                <li><span class="mark">4</span><span><strong>Re-pull daily.</strong> Check the row
-                  count against the manifest; a short file is a truncated download, not a shrinking
-                  window.</span></li>
-              </ul>
-            </div>
-            <div>
-              <h3 style="margin-bottom:8px">This file</h3>
-              <div class="table-wrap">
-                <table class="data" id="supp-manifest"></table>
-              </div>
-            </div>
-          </div>
-
-          <div class="notice notice-info" style="margin-top:16px"><span class="ico">◆</span><div>
-            <strong>The file is a snapshot; the lookup is live.</strong> Numbers sell continuously,
-            so between one nightly build and the next some become suppressed. Use the file to screen
-            in bulk before you spend, and the lookup above for the moment-of-truth check on
-            anything high-value. Neither replaces the other.
-          </div></div>
-
-          <div class="mocknote">
-            <strong>Mock-up.</strong> The download returns a small <strong>sample</strong> with
-            fabricated digests so the format is reviewable. The real file is
-            <span id="supp-size"></span> and must be served authenticated, per affiliate, and
-            rate-limited like the lookup API.
-          </div>
-        </div>
-        <div class="card-foot" id="supp-foot"></div>
       </section>
 
       <section class="card">
@@ -280,8 +268,8 @@
   var state = A.params();
   A.shell(state, {
     active: 'duplicate-check.html',
-    title: 'Duplicate check',
-    subtitle: '365-day Priority/Hot exclusivity lookup.'
+    title: 'Duplicates & suppression',
+    subtitle: 'Screen numbers against the 365-day Priority/Hot exclusivity window.'
   });
 
   /* Rate limiting is mocked here with a session counter purely so the quota
@@ -343,6 +331,19 @@
   (function () {
     var man = D.suppressionManifest(state.partnerId);
 
+    document.getElementById('supp-tip-host').innerHTML =
+      A.tip('A file of every number currently inside the 365-day Priority/Hot exclusivity ' +
+            'window. Match your list against it before you buy traffic and a duplicate never ' +
+            'costs you an acquisition.');
+
+    /* The three facts that decide whether to re-download, as chips beside the
+       button. The rest of the metadata stays in the details table. */
+    document.getElementById('supp-chips').innerHTML =
+      '<span class="badge badge-good"><span class="dot"></span>Updated ' +
+        A.esc(A.fmtDate(man.generatedAt)) + '</span>' +
+      '<span class="badge">' + A.fmtInt(man.recordCount) + ' numbers</span>' +
+      '<span class="badge">Rebuilt nightly</span>';
+
     /* Manifest table — the metadata an affiliate needs to trust the file. */
     var rows = [
       ['Generated', A.fmtDateTime(man.generatedAt) + ' ET'],
@@ -359,6 +360,16 @@
         '<td style="font-size:12.5px">' + A.esc(r[1]) + '</td></tr>';
     }).join('') + '</tbody>';
 
+    /* The detail behind each step lives in a hover box, not in the step. */
+    document.getElementById('tip-norm').innerHTML =
+      A.tip('10 digits, digits only, leading 1 stripped, no formatting. Most failed matches ' +
+            'are a normalization mismatch, not a missing entry.');
+    document.getElementById('tip-hash').innerHTML =
+      A.tip('Use the algorithm named in the file details and the key issued to your account.');
+    document.getElementById('tip-repull').innerHTML =
+      A.tip('Numbers sell continuously, so the file changes every night. Check the row count ' +
+            'against the file details — a short file is a truncated download, not a shrinking window.');
+
     document.getElementById('supp-size').textContent = man.fileSizeLabel;
     document.getElementById('supp-foot').innerHTML =
       'Issued to <strong>' + A.esc(man.partner) + '</strong> under your account key. ' +
@@ -367,7 +378,7 @@
     /* Download — a SAMPLE with fabricated digests, so the format is
        reviewable without anything real leaving the mock. */
     document.getElementById('supp-download').innerHTML =
-      '<button type="button" class="btn btn-primary" id="supp-btn">↓ Download suppression file</button>';
+      '<button type="button" class="btn btn-primary btn-lg" id="supp-btn">↓ Download suppression file</button>';
     document.getElementById('supp-btn').addEventListener('click', function () {
       var sample = D.suppressionSample();
       var lines = [
