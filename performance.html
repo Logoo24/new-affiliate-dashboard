@@ -406,7 +406,11 @@
      that is what the target is defined in — the dashed mark sits partway up
      each stacked bar, at the height the blue portion needs to reach. */
   var cplTargetValues = null;
-  if (D.isCplPartner(state.partnerId)) {
+  /* MIXED ACCOUNTS: the ticks compare the target against this chart's own
+     accepted counts, which include rev-share leads when the scope does. So
+     they render only on a pure-CPL scope — the whole account, or a CPL
+     campaign filter. The weekly card above stays: it counts CPL-only. */
+  if (D.isCplPartner(state.partnerId) && D.cplScopeIsPure(state.partnerId, state.campaignId)) {
     var sawTarget = false;
     cplTargetValues = days.map(function (d) {
       var v = D.dailyCplTarget(state.partnerId, d.date, state.campaignId);

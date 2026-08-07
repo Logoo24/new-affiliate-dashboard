@@ -373,6 +373,15 @@ and is a distinct field from a campaign's actual contracted `cpl_rate` — the a
 both side by side so a gap between "what we're planning to" and "what we're actually paying" is
 visible, not silently absorbed.)
 
+### Mixed accounts (added Aug 7)
+
+Targets are a CPL construct, and on an account that also runs revenue-share campaigns the
+counting must respect that: `cplWeeklyProgress()` **filters its accepted-lead counts to CPL
+campaigns**, and the per-day target ticks on the volume chart render only when the scope is
+pure CPL (`cplScopeIsPure()`), because the chart compares the target against its own
+scope-wide accepted counts. A rev-share lead must never make a CPL target look on-pace. The
+full set of mixed-account rules is in HANDOFF.md ("THE MIXED-ACCOUNT CONTRACT").
+
 ### Cadence: weekly, not monthly
 
 Targets are **Sunday–Saturday weeks**, matching the real Friday-night budget-distribution cadence

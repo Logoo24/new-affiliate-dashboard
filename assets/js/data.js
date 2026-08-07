@@ -1506,16 +1506,25 @@
   }
 
   /**
-   * @param opts.rateBasis 'paid' | 'all'
+   * @param opts.rateBasis 'paid' | 'all' | 'mixed'
    *   'paid' (CPL) — of the leads we ACCEPTED and paid for, how many
    *      converted. The right question for a partner paid per accepted lead.
    *   'all' (RevShare) — of EVERY lead submitted. A revenue-share partner is
    *      paid on any sale, accepted or not, so dividing by accepted leads
    *      alone overstates conversion and undervalues the volume they send.
+   *   'mixed' (both models on one account) — THE DENOMINATOR IS RESOLVED PER
+   *      ROW from that row's campaign: matured leads on rev-share campaigns
+   *      count whether accepted or not, matured leads on CPL campaigns count
+   *      only when accepted. Neither account-level basis is right for a
+   *      mixed book — 'all' would drag the CPL campaigns' rates down by
+   *      their own rejects, 'paid' would understate the rev-share volume.
+   *      Same per-row principle as the column projection.
    */
   function computeMetrics(rows, asOf, opts) {
     asOf = asOf || TODAY;
-    var basis = (opts && opts.rateBasis) === 'all' ? 'all' : 'paid';
+    var basis = (opts && opts.rateBasis);
+    if (basis !== 'all' && basis !== 'mixed') basis = 'paid';
+    var mixedDenom = 0;
 
     var raw = rows.length;
     var paid = 0, free = 0, mature = 0, maturePaid = 0, immaturePaid = 0;
@@ -1544,6 +1553,16 @@
         if (r.rejectReason) rejects[r.rejectReason] = (rejects[r.rejectReason] || 0) + 1;
       }
       if (matured) mature++;
+
+      /* Mixed basis: this row counts toward the rate denominator on its own
+         campaign's terms — rev share on any matured lead, CPL on matured
+         accepted only. Resolved from the campaign record, mirroring the
+         per-row column projection. */
+      if (basis === 'mixed' && matured) {
+        var mc = CAMPAIGN_BY_ID[r.campaignId];
+        if (mc && mc.comp === 'revshare') mixedDenom++;
+        else if (r.status === 'paid') mixedDenom++;
+      }
 
       if (r.soldType && byType[r.soldType] !== undefined) byType[r.soldType]++;
 
@@ -1582,7 +1601,7 @@
     var soldNewTiers = byType.appointment + byType.livetransfer;
     var soldAny = soldPH + soldNewTiers + byType.auction + byType.marketplace;
 
-    var rateDenom = basis === 'all' ? mature : maturePaid;
+    var rateDenom = basis === 'all' ? mature : basis === 'mixed' ? mixedDenom : maturePaid;
     var phRate = rateDenom ? soldPH / rateDenom : 0;
 
     var points = 0;
@@ -1720,12 +1739,17 @@
   /** The rate basis a partner's headline figures should use. */
   function rateBasisFor(partnerId) {
     var comps = compsFor(partnerId);
-    /* A partner running any revenue-share campaign is paid on unaccepted
-       sales too, so their headline conversion is on all submitted leads. */
+    var hasAll = false, hasPaid = false;
     for (var i = 0; i < comps.length; i++) {
-      if (comps[i].rateBasis === 'all') return 'all';
+      if (comps[i].rateBasis === 'all') hasAll = true;
+      else hasPaid = true;
     }
-    return 'paid';
+    /* Both models on one account → neither account-level basis is honest.
+       'all' would drag the CPL campaigns down by their own rejects; 'paid'
+       would understate the rev-share volume. 'mixed' resolves the
+       denominator per row — see computeMetrics. */
+    if (hasAll && hasPaid) return 'mixed';
+    return hasAll ? 'all' : 'paid';
   }
 
   /* ---------------------------------------------------------------------- */
@@ -1769,6 +1793,22 @@
   function isCplPartner(partnerId) {
     var pid = resolvePartnerId(partnerId);
     return compsFor(pid).some(function (c) { return !c.seesRevenue; });
+  }
+
+  /** Whether every lead the current scope counts is on a CPL campaign.
+      The per-day target ticks on the volume chart compare the target
+      against the chart's own accepted counts, so on a MIXED account the
+      ticks only render when the scope is pure CPL — either filtered to a
+      CPL campaign, or an account with no rev-share campaigns at all. The
+      weekly-target card does not need this gate: cplWeeklyProgress()
+      filters its own counts to CPL campaigns. */
+  function cplScopeIsPure(partnerId, campaignId) {
+    var pid = resolvePartnerId(partnerId);
+    if (campaignId && campaignId !== 'all') {
+      var c = campaignById(campaignId);
+      return !!c && c.comp !== 'revshare';
+    }
+    return campaignsFor(pid).every(function (c) { return c.comp !== 'revshare'; });
   }
 
   /* Sunday-start week containing `d`, at local midnight. */
@@ -1960,6 +2000,13 @@
 
     var wk = currentWeek();
     var rows = queryLeads({ partnerId: pid, campaignId: opts.campaignId, from: wk.start, to: wk.to });
+    /* MIXED-ACCOUNT RULE: the target is a CPL construct, so only leads on
+       CPL campaigns count toward it. Unscoped on a mixed account, the query
+       above returns rev-share rows too — a rev-share lead must never make a
+       CPL volume target look on-pace. */
+    var cplIds = {};
+    campaignsFor(pid).forEach(function (c) { if (c.comp !== 'revshare') cplIds[c.id] = 1; });
+    rows = rows.filter(function (r) { return cplIds[r.campaignId]; });
     var acceptedActual = computeMetrics(rows, TODAY, { rateBasis: 'paid' }).paid;
     var spendActual = t.targetCpl != null ? round2(acceptedActual * t.targetCpl) : null;
 
@@ -2845,6 +2892,7 @@
     queryLeadsBySold: queryLeadsBySold,
     cohort: cohort,
     isCplPartner: isCplPartner,
+    cplScopeIsPure: cplScopeIsPure,
     dowWeightsFor: dowWeightsFor,
     saveDowWeights: saveDowWeights,
     revenuePerAcceptedLead: revenuePerAcceptedLead,

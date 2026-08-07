@@ -108,6 +108,44 @@ Both current partners happen to run a single comp model across all their campaig
 revenue share, OptiLabX all CPL, on their real terms. The schema does not assume that and neither
 does the query layer. **Do not reintroduce a single per-account branch.**
 
+### THE MIXED-ACCOUNT CONTRACT (Aug 7) — and two accounts are ALREADY mixed
+
+We assumed no partner ran both models. **The export says otherwise: Ignite Media Group (three
+CPL campaigns + "Ignite - Rev Share [Non-Email]") and CX3 (two CPL + "CX3 - Annuity [Non-email
+- Revshare]") are live mixed accounts today** — low volume, which is exactly why nobody
+noticed. Every rule below is therefore current behaviour, not future-proofing, and both real
+accounts verify clean against all of it. The rules were additionally stress-tested against a
+synthetically mixed account at volume (one OptiLabX campaign flipped to rev share in-memory:
+2,472 rev-share rows against 1,401 CPL): ALL of the following must hold **on one account, in
+one table, per row**:
+
+1. **Sale amounts appear only on rev-share rows.** Their CPL rows must not carry the field at
+   all — not the column, not a null. (Verified: 501 rev-share sold rows with amounts, 0 CPL
+   rows with the field.)
+2. **Rejected leads die at the door on their CPL campaigns only.** CPL rejected rows show the
+   reason and nothing after it, and are excluded outright from sold-date queries; their
+   rev-share rejected-but-sold rows stay fully visible — same partner, same screen. (Verified:
+   147 rev-share rejected-but-sold visible, 0 CPL rejected with outcomes, 0 CPL rejected in
+   the sold-basis query.)
+3. **Conversion denominators resolve per row** — `rateBasis: 'mixed'` in `computeMetrics()`:
+   matured leads on rev-share campaigns count regardless of acceptance, matured CPL leads only
+   when accepted. Neither account-level basis is honest for a mixed book. (Verified: mixed
+   denominator 2,553 sits strictly between accepted-only 1,490 and all-matured 3,291.)
+4. **CPL targets count CPL-campaign leads only.** A rev-share lead must never make a CPL
+   volume target look on-pace — `cplWeeklyProgress()` filters to CPL campaigns, and the
+   per-day target ticks on the volume chart render only on a pure-CPL scope
+   (`cplScopeIsPure()`), since the chart compares against its own scope-wide counts.
+5. **`partner_share` is computed from the ROW'S campaign model** — the PHP build gets this
+   free from the JOIN in the rev-share SELECT, but any cached or precomputed share must be
+   keyed by campaign, not account.
+6. **The health score already handles it**: the campaign is the scoring unit and every
+   conversion rate uses the accepted basis regardless of model, so a mixed account's rollup is
+   apples-to-apples and the score-by-campaign table shows both models side by side.
+
+Latent refinement, deliberately deferred: benchmark pools are keyed by campaign class but not
+comp model, and rev-share campaigns attract structurally broader traffic. When the book has
+enough campaigns to fill class × model pools, add model as a second dimension.
+
 ### Which columns are available is admin-configurable, per comp model
 
 Two pieces, both in `data.js`:

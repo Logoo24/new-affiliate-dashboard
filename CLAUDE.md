@@ -89,7 +89,11 @@ In PHP this means **two different SELECT lists**, not one SELECT plus an `if` in
 **Comp model is a property of the campaign, not the account**, so the projection is resolved **per
 row** from that row's campaign. A partner running both models gets revenue columns on their
 rev-share rows and no revenue field at all on their CPL rows, in one table. Do not reintroduce a
-single per-account branch.
+single per-account branch. **Two real accounts are already mixed — Ignite Media Group and CX3
+each run CPL campaigns alongside a rev-share campaign** (low volume, easy to miss). HANDOFF.md
+carries "THE MIXED-ACCOUNT CONTRACT", six verified per-row rules (per-row projection and row
+rule, `rateBasis: 'mixed'` per-row denominators, CPL targets counting CPL leads only via
+`cplScopeIsPure()`, per-campaign share) that any change touching visibility or rates must keep.
 
 **Which columns are available is admin-configurable per comp model**, via two pieces in `data.js`:
 `LEAD_COLUMNS` (the registry — one entry per affiliate-visible column, declaring which comp models
