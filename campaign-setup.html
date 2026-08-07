@@ -133,26 +133,27 @@
   var baseTrackingUrl = 'https://' + domain + '/?cid=' + c.id;
   var testUrl = 'https://' + domain + '/?cid=' + c.id + '&test=1';
 
-  /* Which tracking parameters ride on the URL. All on by default — the
-     affiliate unchecks what they don't pass. Selection persists per
-     campaign so the copied URL survives a reload. */
+  /* Which tracking parameters ride on the URL. All OFF by default — the
+     affiliate ticks only what they actually pass, so the copied URL never
+     carries placeholder keys their system won't fill. Selection persists
+     per campaign so the copied URL survives a reload. */
   var paramSel = (function () {
     var all = {};
     D.TRACKING_PARAMS.forEach(function (g) {
-      g.keys.forEach(function (k) { all[k] = true; });
+      g.keys.forEach(function (k) { all[k] = false; });
     });
     try {
       var raw = sessionStorage.getItem('fz_trkparams_' + state.partnerId + '_' + c.id);
       if (raw) {
-        var off = JSON.parse(raw);
-        off.forEach(function (k) { all[k] = false; });
+        var on = JSON.parse(raw);
+        on.forEach(function (k) { if (k in all) all[k] = true; });
       }
     } catch (e) {}
     return all;
   })();
   function persistParams() {
-    var off = Object.keys(paramSel).filter(function (k) { return !paramSel[k]; });
-    try { sessionStorage.setItem('fz_trkparams_' + state.partnerId + '_' + c.id, JSON.stringify(off)); }
+    var on = Object.keys(paramSel).filter(function (k) { return paramSel[k]; });
+    try { sessionStorage.setItem('fz_trkparams_' + state.partnerId + '_' + c.id, JSON.stringify(on)); }
     catch (e) {}
   }
   function trackingUrlNow() {
@@ -164,11 +165,11 @@
   }
 
   function bodyTracking() {
-    var h = '<p style="margin-top:0">Send your traffic to this link. The checkboxes control ' +
-      'which tracking parameters ride on the URL — untick anything you don\'t pass and it drops ' +
-      'out. Each <code>{value}</code> is a placeholder your system fills in. Sub-IDs are the ' +
-      'ones to keep: they get you per-source feedback and per-source pricing, and protect your ' +
-      'strong sources from weaker ones.</p>' +
+    var h = '<p style="margin-top:0">Send your traffic to this link. Tick the tracking ' +
+      'parameters you pass and they\'re added to the URL — each <code>{value}</code> is a ' +
+      'placeholder your system fills in. Sub-IDs are the ones worth passing: they get you ' +
+      'per-source feedback and per-source pricing, and protect your strong sources from ' +
+      'weaker ones.</p>' +
       D.TRACKING_PARAMS.map(function (g) {
         return '<div style="margin:8px 0 2px"><span class="tile-label">' + A.esc(g.group) + '</span></div>' +
           '<div style="display:flex;gap:4px 12px;flex-wrap:wrap">' +
@@ -300,21 +301,10 @@
         ? '' : '<button type="button" class="btn btn-sm" id="creatives-sent">I\'ve sent them</button>') +
       '</div>' +
       /* The button relies on a mail handler being registered; plenty of
-         browsers have none, so the address is always spelled out. */
-      '<div style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0;padding:9px 12px;' +
-        'border:1px solid var(--border);border-radius:6px;background:var(--surface-2)">' +
-        'If the button doesn\'t open your email app, send it manually:<br>' +
-        '<strong>To:</strong> <span style="font-family:ui-monospace,monospace">' +
-          A.esc(D.COMPLIANCE_CONTACT.email) + '</span> ' +
-        '<button type="button" class="btn btn-sm" data-copy="' + A.esc(D.COMPLIANCE_CONTACT.email) + '">Copy</button><br>' +
-        '<strong>Cc:</strong> <span style="font-family:ui-monospace,monospace">logan@financialize.com</span> ' +
-        '<button type="button" class="btn btn-sm" data-copy="logan@financialize.com">Copy</button><br>' +
-        '<strong>Subject:</strong> Creatives for review — ' + A.esc(c.name) + ' (CID ' + c.id + ')' +
-      '</div>' +
-      '<p style="font-size:12.5px;color:var(--ink-muted);margin:8px 0 0">Goes to ' +
-      A.esc(D.COMPLIANCE_CONTACT.name) + ' (' + A.esc(D.COMPLIANCE_CONTACT.email) +
-      '), copying Logan. Unsure an angle will pass? Send it before running it — quick feedback ' +
-      'beats a paused campaign.</p>';
+         browsers have none, so the addresses are quietly spelled out. */
+      '<p style="font-size:12.5px;color:var(--ink-muted);margin:8px 0 0">If the button ' +
+      'doesn\'t work, send the creatives to ' + A.esc(D.COMPLIANCE_CONTACT.name) + ' (' +
+      A.esc(D.COMPLIANCE_CONTACT.email) + ') and Logan (logan@financialize.com).</p>';
   }
 
   function bodyTest() {
