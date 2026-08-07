@@ -24,18 +24,22 @@
       '<path d="M6 15.6 h9 a3.2 3.2 0 0 1 0 6.4 H6 z" fill="#FFFFFF"/>' +
     '</svg>';
 
+  /* Icons are plain text glyphs, chosen to READ as the thing they sit next
+     to: home, trend, rows, health, target, lookup, money, gear. Monochrome
+     on purpose — they inherit the rail's ink like the labels do. */
   var NAV = [
-    { href: 'partnership.html',    label: 'Partnership summary', ico: '◇' },
-    { href: 'index.html',          label: 'Performance',      ico: '▤' },
+    { href: 'partnership.html',    label: 'Partnership summary', ico: '⌂' },
+    { href: 'index.html',          label: 'Performance',      ico: '↗' },
     { href: 'leads.html',          label: 'Lead table',       ico: '☰' },
-    { href: 'health.html',         label: 'Health scorecard', ico: '◈' },
+    { href: 'health.html',         label: 'Lead health',      ico: '♥' },
     { href: 'targeting.html',      label: 'Targeting',        ico: '◎' },
     { href: 'duplicate-check.html',label: 'Duplicates & suppression', ico: '⌕' },
+    { href: 'compensation.html',   label: 'Compensation',     ico: '$' },
     { href: 'setup.html',          label: 'Setup & docs',     ico: '⚙' }
   ];
 
   var ACCOUNT_NAV = [
-    { href: 'account.html', label: 'Account & users', ico: '◉' }
+    { href: 'account.html', label: 'Account & users', ico: '☺' }
   ];
 
   /* TEMPORARY AND INTERNAL. Not part of the partner portal — it exists so the
@@ -43,8 +47,8 @@
      ADMIN-MAPPING.md. A partner must never see this group.
      DELETE BOTH THIS AND admin-preview.html BEFORE ANYTHING SHIPS. */
   var INTERNAL_NAV = [
-    { href: 'admin-preview.html', label: 'Admin settings', ico: '⚑' },
-    { href: 'data-source.html',   label: 'Data connections', ico: '⌸' }
+    { href: 'admin-preview.html', label: 'Admin settings', ico: '⚒' },
+    { href: 'data-source.html',   label: 'Data connections', ico: '⇄' }
   ];
 
   /* ---------------------------------------------------------------------- */

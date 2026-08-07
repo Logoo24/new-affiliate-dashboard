@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compensation — Financialize Partner Portal</title>
+<link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar" data-shell="sidebar"></aside>
+
+  <div class="main">
+    <header class="topbar" data-shell="topbar"></header>
+
+    <div class="content">
+
+      <div id="filters"></div>
+
+      <div class="grid-2">
+        <!-- What they earned in the selected window, on the basis their
+             invoice actually uses. -->
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Earned this period</h2>
+              <p class="sub" id="earned-sub"></p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="tile-label" style="margin-top:2px" id="earned-label">Total compensation</div>
+            <div class="tile-value" id="earned-total" style="font-size:34px">—</div>
+            <div class="tile-sub" id="earned-basis"></div>
+            <div class="tile-sub" id="earned-caveat" style="margin-top:8px;line-height:1.5"></div>
+            <div id="earned-extra"></div>
+          </div>
+          <div class="table-wrap">
+            <table class="data" id="earned-table"></table>
+          </div>
+          <div class="card-foot" id="earned-foot"></div>
+        </section>
+
+        <!-- Same billing card as the Partnership summary — one source of
+             truth for terms, rendered in the place money questions live. -->
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Billing details</h2>
+              <p class="sub">Terms and who to ask.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="tile-label" style="margin-top:2px">Next payment</div>
+            <div class="tile-value" id="billing-next" style="font-size:24px">—</div>
+            <div class="tile-sub" id="billing-terms"></div>
+            <div class="tile-sub" id="billing-cadence" style="margin-top:8px;line-height:1.5"></div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)" id="billing-contacts"></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Lead statements</h2>
+            <p class="sub" id="stmt-sub"></p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="stmt-table"></table>
+        </div>
+        <div class="card-foot" id="stmt-foot"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Clawback report</h2>
+            <p class="sub" id="cb-sub"></p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="cb-table"></table>
+        </div>
+        <div class="card-foot" id="cb-foot"></div>
+        <div class="card-body" id="cb-note" style="padding-top:0"></div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="assets/data/dataset.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/health.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/tables.js"></script>
+<script>
+(function () {
+  'use strict';
+  var D = FZData, A = FZApp;
+
+  /* Money defaults to the month the next invoice covers, not the last 7
+     days — "what will the check be" is a month-shaped question. */
+  var state = A.params({ defaultRange: 'mtd' });
+  var p = state.partner;
+
+  A.shell(state, {
+    active: 'compensation.html',
+    title: 'Compensation',
+    subtitle: 'What you’ve earned, your monthly statements, and any adjustments.'
+  });
+
+  A.filterBar(document.getElementById('filters'), state, ['range']);
+
+  /* "−$102.00", not the "$-102.00" that fmtMoney produces on a negative. */
+  function fmtSigned(n) {
+    return n < 0 ? '−' + A.fmtMoney(-n) : A.fmtMoney(n);
+  }
+
+  var BASIS_TIP = {
+    revshare: 'Revenue share is paid on the date a lead sells, so this window counts every sale that closed inside it — including sales of leads submitted earlier, and your share of any sale of a lead we declined.',
+    cpl: 'CPL is billed on acceptance, so this window counts every lead accepted inside it. Whether it later sells does not change what you are owed.'
+  };
+  var AUDIT_TIP = 'This figure is provisional until the monthly statement closes. We audit accepted leads weekly; any lead that should not have been accepted is removed and never billed — removals appear in the Clawback report below.';
+
+  /* ---- earned this period ------------------------------------------------ */
+  (function () {
+    var pay = D.payoutForWindow({ partnerId: state.partnerId,
+                                  from: state.range.from, to: state.range.to });
+
+    document.getElementById('earned-sub').textContent =
+      'On the basis your invoice uses.';
+    document.getElementById('earned-label').innerHTML =
+      'Total compensation' + A.tip(AUDIT_TIP);
+    document.getElementById('earned-total').textContent =
+      pay.known || pay.total ? A.fmtMoney(pay.total) : '—';
+
+    var bits = [];
+    if (pay.acceptedCount) bits.push(A.fmtInt(pay.acceptedCount) + ' accepted leads, billed on the received date');
+    if (pay.soldCount) bits.push(A.fmtInt(pay.soldCount) + ' sales, paid on the sold date');
+    document.getElementById('earned-basis').textContent =
+      bits.join(' · ') || 'Nothing billable in this window.';
+    document.getElementById('earned-caveat').innerHTML =
+      '<strong>Subject to change.</strong> We run weekly audits to make sure no ' +
+      'incorrectly accepted leads slipped through — your statement is the final figure.';
+
+    /* Effective CPL — moved here from Performance. CPL only, and only when
+       every CPL campaign in scope has a rate on file. */
+    if (pay.effectiveCpl != null) {
+      document.getElementById('earned-extra').innerHTML =
+        '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
+          '<div class="tile-label">Effective cost per lead' +
+            A.tip('Your CPL spend in this window divided by every lead you submitted — accepted or not. Rejected leads cost you nothing, so this reads below your rate card; the gap between the two is your acceptance rate at work.') +
+          '</div>' +
+          '<div class="tile-value" style="font-size:24px">' + A.fmtMoney(pay.effectiveCpl) + '</div>' +
+          '<div class="tile-sub">across ' + A.fmtInt(pay.cplRaw) +
+            ' leads submitted, accepted or not' +
+            (pay.cplRawExcluded
+              ? ' · excludes ' + A.fmtInt(pay.cplRawExcluded) +
+                ' on campaigns with no rate on file'
+              : '') + '</div>' +
+        '</div>';
+    }
+
+    var head = '<thead><tr><th>Campaign</th><th>Model</th><th>Basis</th>' +
+      '<th style="text-align:right">Leads</th><th style="text-align:right">Amount</th></tr></thead>';
+    var body = pay.campaigns.map(function (c) {
+      var basis = c.comp === 'revshare' ? 'Sold date' : 'Received date';
+      return '<tr>' +
+        '<td><strong>' + A.esc(c.name) + '</strong></td>' +
+        '<td>' + (c.comp === 'revshare' ? 'Revenue share' : 'CPL') + '</td>' +
+        '<td>' + basis + A.tip(BASIS_TIP[c.comp]) + '</td>' +
+        '<td style="text-align:right">' + A.fmtInt(c.count) + '</td>' +
+        '<td style="text-align:right">' +
+          (c.known ? A.fmtMoney(c.amount)
+                   : '—' + A.tip('No rate card is on file for this campaign in the mock, so a dollar figure here would be invented. Rate cards are an admin field — see ADMIN-MAPPING.md.')) +
+        '</td></tr>';
+    }).join('');
+    document.getElementById('earned-table').innerHTML = head + '<tbody>' +
+      (body || '<tr><td colspan="5" class="empty">No compensation in this window.</td></tr>') +
+      '</tbody>';
+
+    document.getElementById('earned-foot').innerHTML =
+      'Revenue share counts every sale inside the window — including your share of sales ' +
+      'of leads we declined. CPL counts leads on acceptance; a rejected lead is never billed.';
+  })();
+
+  /* ---- billing details (same source as the Partnership summary) ---------- */
+  (function () {
+    var pay = D.nextPaymentDate();
+    document.getElementById('billing-next').textContent =
+      A.fmtDate(pay.date) + (pay.isToday ? ' — today' : '');
+    document.getElementById('billing-terms').textContent =
+      p.billingPeriod + ' · ' + p.billingBasis.charAt(0).toLowerCase() + p.billingBasis.slice(1) +
+      ' · payment usually lands three business days after the month closes';
+    document.getElementById('billing-cadence').innerHTML =
+      'We send your lead report immediately after the month closes — ' +
+      '<strong>please return your invoice as soon as you receive it</strong> so payment ' +
+      'is not held up.';
+    document.getElementById('billing-contacts').innerHTML =
+      D.BILLING_CONTACTS.map(function (c) {
+        return '<div style="margin-bottom:9px">' +
+          '<div style="font-size:13.5px;font-weight:600">' + A.esc(c.name) +
+          ' <span style="font-weight:400;color:var(--ink-muted)">· ' + A.esc(c.note) + '</span></div>' +
+          '<div style="font-size:13px"><a href="mailto:' + A.esc(c.email) + '">' + A.esc(c.email) + '</a></div>' +
+        '</div>';
+      }).join('');
+  })();
+
+  /* ---- lead statements ---------------------------------------------------
+     Admin-linked Google Sheets, one per closed month — NOT affected by the
+     date filter above. A month with no URL renders "Not linked yet", never a
+     dead button (same rule as the documents library). */
+  (function () {
+    var st = D.leadStatementsFor(state.partnerId);
+
+    document.getElementById('stmt-sub').innerHTML =
+      'One statement per closed month' +
+      A.tip('Statements are prepared in Google Sheets on the first business day after the month closes and linked here by your account manager. They are the final, reconciled version of the figures above.');
+
+    var head = '<thead><tr><th>Statement</th><th>Generated</th><th></th></tr></thead>';
+
+    /* Current month first, as an in-progress row — it shows the cadence
+       instead of leaving the newest month mysteriously absent. */
+    var rows = '<tr>' +
+      '<td style="color:var(--ink-2)"><strong>' + A.esc(st.current.label) + '</strong> — in progress</td>' +
+      '<td style="color:var(--ink-muted)">expected ' + A.fmtDate(st.current.expectedAt) + '</td>' +
+      '<td style="text-align:right"><span class="badge badge-unsold"><span class="dot"></span>Month still open</span></td>' +
+      '</tr>';
+
+    rows += st.months.map(function (m) {
+      return '<tr>' +
+        '<td><strong>' + A.esc(m.label) + '</strong></td>' +
+        '<td style="color:var(--ink-2)">' + A.fmtDate(m.generatedAt) + '</td>' +
+        '<td style="text-align:right">' +
+          (m.url
+            ? '<a class="btn btn-sm" href="' + A.esc(m.url) + '" target="_blank" rel="noopener">Open in Google Sheets →</a>'
+            : '<span class="badge badge-warn"><span class="dot"></span>Not linked yet</span>' +
+              A.tip('Your account manager links each statement shortly after it is generated. If a recent month is missing, it is being prepared — not lost.')) +
+        '</td></tr>';
+    }).join('');
+
+    document.getElementById('stmt-table').innerHTML = head + '<tbody>' + rows + '</tbody>';
+
+    document.getElementById('stmt-foot').innerHTML =
+      '<strong>Build note.</strong> Statement links are admin-managed — a Google Sheet URL per ' +
+      'affiliate per month, pasted after the statement is generated (first business day after ' +
+      'month close, give or take). Storage spec in ADMIN-MAPPING §7d.';
+  })();
+
+  /* ---- clawback report ---------------------------------------------------
+     Leads unfired in the weekly audit, with affiliate-safe reasons. Reasons
+     come from RETURN_REASONS only — the internal clawback_reason field stays
+     forbidden along with the rest of the how-we-work-leads internals. */
+  (function () {
+    var rows = D.queryClawbacks({ partnerId: state.partnerId,
+                                  from: state.range.from, to: state.range.to });
+    var real = D.usingRealData();
+
+    document.getElementById('cb-sub').innerHTML =
+      'Leads removed by audit in this window — you are not billed for these' +
+      A.tip('We audit accepted leads weekly. A lead that should not have been accepted is unfired: the charge is removed from your statement (CPL) or the share reversed (revenue share). This list is the line-by-line record, so a smaller statement never reads as us shorting you.');
+
+    var head = '<thead><tr><th>Lead ID</th><th>Received</th><th>Campaign</th>' +
+      '<th>Unfired' + (real ? A.tip('The lead export carries only a returned flag — the unfire date arrives with the unfire feed. See the build note below.') : '') + '</th>' +
+      '<th>Reason</th>' +
+      '<th style="text-align:right">Adjustment</th></tr></thead>';
+
+    var total = 0, knownAdj = 0;
+    var body = rows.map(function (r) {
+      if (r.adjustment != null) { total += r.adjustment; knownAdj++; }
+      var reason = r.reason && D.RETURN_REASONS[r.reason];
+      return '<tr>' +
+        '<td class="lead-id">' + A.esc(r.id) + '</td>' +
+        '<td style="white-space:nowrap">' + A.fmtDate(r.receivedAt) + '</td>' +
+        '<td>' + A.esc(r.campaignName) + '</td>' +
+        '<td style="white-space:nowrap">' + (r.returnedAt ? A.fmtDate(r.returnedAt) : '—') + '</td>' +
+        '<td>' + (reason
+          ? '<span style="color:var(--ink-2)">' + A.esc(reason.label) + '</span>' + A.tip(reason.desc)
+          : '—') + '</td>' +
+        /* data-sort: the typographic minus in fmtSigned() is not parseable
+           as a number, so hand the sorter the raw value. */
+        '<td style="text-align:right"' +
+          (r.adjustment != null ? ' data-sort="' + r.adjustment + '"' : '') + '>' +
+          (r.adjustment != null ? fmtSigned(r.adjustment) : '—') +
+        '</td></tr>';
+    }).join('');
+
+    document.getElementById('cb-table').innerHTML = head + '<tbody>' +
+      (body || '<tr><td colspan="6" class="empty">No leads were removed by audit in this window.</td></tr>') +
+      '</tbody>';
+
+    /* A summed total is only honest when every row's amount is known — a
+       "$0.00" over 335 unknown amounts reads as a real zero. */
+    document.getElementById('cb-foot').innerHTML = rows.length
+      ? '<strong>' + A.fmtInt(rows.length) + '</strong> lead' + (rows.length === 1 ? '' : 's') +
+        ' unfired in this window' +
+        (knownAdj === rows.length
+          ? ' · total adjustment <strong>' + fmtSigned(total) + '</strong>'
+          : ' · credited amounts arrive with the unfire feed')
+      : 'Most weeks this list is empty — that is the audit working, not the report failing.';
+
+    document.getElementById('cb-note').innerHTML =
+      '<div class="notice notice-mock"><span class="ico">✎</span><div>' +
+      '<strong>Build note.</strong> The lead export carries only a <code>returned</code> flag. ' +
+      'The unfire date, affiliate-safe reason code and credited amount are the <strong>unfire ' +
+      'feed</strong> — on the gating-dependency list in HANDOFF.md for Sagar to connect. ' +
+      (real ? 'Running on the real export, those three columns render as absent rather than invented.'
+            : 'The mock derives them (audits run Mondays) so the page demonstrates.') +
+      '</div></div>';
+  })();
+
+  if (window.FZTable) FZTable.enhanceAll();
+
+})();
+</script>
+</body>
+</html>

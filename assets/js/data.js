@@ -2031,6 +2031,103 @@
     return '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
   }
 
+  /* ======================================================================
+     TEST-LEAD SANDBOX (mock)
+     ----------------------------------------------------------------------
+     "Post a test lead, see exactly what our filter returns — pass, or which
+     rule failed." Kills the integration-debugging email chain.
+
+     Rules are evaluated IN INTAKE ORDER against THIS account's criteria
+     record: the age band is read off the partner record — the same field
+     rejectDesc() renders — so OptiLabX's negotiated 45–79 holds here
+     without any page knowing about it. Check keys ARE reject-bucket keys,
+     so the sandbox's rejection reason is the exact string the lead table
+     would show for the same failure (the fidelity rule).
+
+     IN PRODUCTION THIS MUST RUN THE REAL FILTER CHAIN against the
+     partner's criteria record, behind a sandbox endpoint. A re-implemented
+     rule list drifts, and a sandbox that disagrees with intake is worse
+     than none. Auth, logging and rate limits mirror the duplicate lookup.
+     ====================================================================== */
+  function sandboxCheck(opts) {
+    opts = opts || {};
+    var p = partner(opts.partnerId);
+    var product = opts.product === 'life' ? 'life' : 'annuity';
+    var checks = [];
+    /* pass: true | false | null — null means "not evaluated", e.g. the
+       duplicate check cannot run without a valid phone. */
+    function add(key, label, pass, detail) {
+      checks.push({ key: key, label: label, pass: pass, detail: detail });
+    }
+
+    var digits = String(opts.phone || '').replace(/\D/g, '');
+    if (digits.length === 11 && digits.charAt(0) === '1') digits = digits.slice(1);
+    var phoneOk = digits.length === 10;
+    add('ipqs', 'Valid, working US phone', phoneOk,
+        phoneOk ? formatPhone(digits) : 'Needs a 10-digit US number.');
+
+    var dup = phoneOk ? checkDuplicate(digits) : null;
+    add('duplicate', 'Outside the 365-day Priority/Hot exclusivity window',
+        phoneOk ? !dup.duplicate : null,
+        !phoneOk ? 'Not checked — needs a valid phone first.'
+          : dup.duplicate ? 'Sold as Priority or Hot; last sold ' + dup.lastSoldMonth + '.'
+          : 'No match in the window.');
+
+    var st = String(opts.state || '').trim().toUpperCase();
+    var stateOk = /^[A-Z]{2}$/.test(st) && st !== 'NY';
+    add('state', 'Accepted state', stateOk,
+        st === 'NY' ? 'New York is never accepted.'
+          : stateOk ? st : 'Needs a two-letter US state code. US only.');
+
+    var band;
+    if (product === 'life') band = [25, 73];
+    else {
+      var m = /(\d+)\D+(\d+)/.exec(p.ageBand || '');
+      band = m ? [+m[1], +m[2]] : [45, 75];
+    }
+    var age = parseInt(opts.age, 10);
+    var ageOk = !isNaN(age) && age >= band[0] && age <= band[1];
+    add('age', 'Age within your ' + band[0] + '–' + band[1] + ' band', ageOk,
+        isNaN(age) ? 'Needs an age.'
+          : ageOk ? String(age) : age + ' is outside ' + band[0] + '–' + band[1] + '.');
+
+    var money = Number(String(opts.money == null ? '' : opts.money).replace(/[$,\s]/g, ''));
+    if (product === 'life') {
+      var incomeOk = !isNaN(money) && money >= 40000;
+      add('income', 'Household income $40,000 or greater', incomeOk,
+          isNaN(money) ? 'Needs a figure.'
+            : incomeOk ? '$' + money.toLocaleString('en-US') : 'Under the $40,000 minimum.');
+    } else {
+      var assetsOk = !isNaN(money) && money > 25000;
+      add('assets', 'Investable assets greater than $25,000', assetsOk,
+          isNaN(money) ? 'Needs a figure.'
+            : assetsOk ? '$' + money.toLocaleString('en-US')
+            : 'Under $25K never pays, on any comp model.');
+    }
+
+    var consentOk = opts.consent === 'trustedform' || opts.consent === 'jornaya';
+    add('consent', 'Consent certificate attached', consentOk,
+        consentOk ? (opts.consent === 'trustedform' ? 'TrustedForm' : 'Jornaya')
+                  : 'TrustedForm or Jornaya certificate required — prior express written consent.');
+
+    var firstFail = null;
+    for (var i = 0; i < checks.length; i++) {
+      if (checks[i].pass === false) { firstFail = checks[i]; break; }
+    }
+
+    /* The response body the sandbox endpoint would return. Rejected uses the
+       SAME reason string the lead table shows for this bucket, so what the
+       integrator sees in testing reconciles with what they see in reporting. */
+    var h = 0, seed = digits + st + age + product;
+    for (var c = 0; c < seed.length; c++) h = (h * 31 + seed.charCodeAt(c)) >>> 0;
+    var response = firstFail
+      ? { status: 'rejected', reason: rejectLabel(firstFail.key) }
+      : { status: 'accepted', lead_id: 'TEST-' + String(100000 + (h % 900000)) };
+
+    return { checks: checks, accepted: !firstFail,
+             failKey: firstFail ? firstFail.key : null, response: response };
+  }
+
   /* ---------------------------------------------------------------------- */
   /* Suppression file                                                       */
   /* ---------------------------------------------------------------------- */
@@ -2156,6 +2253,280 @@
       expiry: SUPPRESSION.expiry,
       scope: SUPPRESSION.scope,
       fileSizeLabel: SUPPRESSION.fileSizeLabel
+    };
+  }
+
+  /* ======================================================================
+     COMPENSATION — earnings, statements, clawbacks
+     ----------------------------------------------------------------------
+     Everything on the Compensation page. Three rules carried from the rest
+     of the module:
+
+       · Earnings are measured on the basis the invoice uses — rev-share on
+         the SOLD date (including rejected-but-sold, per the Aug 5 2026
+         ruling), CPL on the RECEIVED date. Same attribution split as
+         targetProgress(); mixing the two is what makes a report look broken.
+       · Clawback rows are built field-by-field from an allowlist, like
+         runQuery(). The internal clawback_reason never leaves this module —
+         affiliates see the RETURN_REASONS vocabulary only.
+       · A statement with no URL renders "not linked yet", never a dead
+         button — same rule as the per-partner documents.
+     ====================================================================== */
+
+  /**
+   * What the affiliate earned inside a window, on their invoice basis:
+   *
+   *   rev-share rows → their share of every sale SOLD in the window,
+   *     accepted or not (queryLeadsBySold — hiding rejected-but-sold sales
+   *     understates what we owe and makes their invoice unreconcilable)
+   *   CPL rows      → leads ACCEPTED in the window × that campaign's rate
+   *     (we owe on acceptance, so the received date is the billing date)
+   *
+   * A mixed account gets both, summed, with a per-campaign breakdown. A CPL
+   * campaign with no rate on file reports known:false rather than a
+   * confident $0 — rate cards are a NEEDS BUILDING field, see ADMIN-MAPPING.
+   */
+  function payoutForWindow(opts) {
+    opts = opts || {};
+    var base = {
+      partnerId: resolvePartnerId(opts.partnerId),
+      from: opts.from, to: opts.to,
+      campaignId: opts.campaignId, subid: opts.subid
+    };
+    var byCamp = {}, order = [];
+    function entry(r, comp) {
+      if (!byCamp[r.campaignId]) {
+        byCamp[r.campaignId] = { campaignId: r.campaignId, name: r.campaignName,
+                                 comp: comp, count: 0, amount: 0, unrated: 0 };
+        order.push(r.campaignId);
+      }
+      return byCamp[r.campaignId];
+    }
+
+    queryLeadsBySold(base).forEach(function (r) {
+      if (r.comp !== 'revshare' || !r.soldType) return;
+      var e = entry(r, 'revshare');
+      e.count++;
+      e.amount += r.partnerShare || 0;
+    });
+    /* cplRaw counts EVERY lead received in the window on a RATED CPL
+       campaign, accepted or not — the denominator of effective cost per
+       lead, which is what a lead actually cost the affiliate to send (lower
+       than the rate card, since rejected leads are free). Campaigns with no
+       rate on file are excluded from BOTH sides of that division — a $0
+       spend over a real denominator would understate the number — and
+       reported in cplRawExcluded so the view can say so. */
+    var cplRaw = 0, cplRawExcluded = 0;
+    queryLeads(base).forEach(function (r) {
+      if (r.comp === 'revshare') return;
+      var camp = CAMPAIGN_BY_ID[r.campaignId];
+      var rated = camp && camp.cplRate != null;
+      if (rated) cplRaw++; else cplRawExcluded++;
+      if (r.status !== 'paid') return;
+      var e = entry(r, 'cpl');
+      if (rated) { e.count++; e.amount += camp.cplRate; }
+      else e.unrated++;
+    });
+
+    var total = 0, known = true, soldCount = 0, acceptedCount = 0, cplSpend = 0;
+    var campaigns = order.map(function (cid) {
+      var e = byCamp[cid];
+      e.amount = round2(e.amount);
+      e.known = !e.unrated;
+      if (!e.known) known = false;
+      total += e.amount;
+      if (e.comp === 'revshare') soldCount += e.count;
+      else { acceptedCount += e.count; cplSpend += e.amount; }
+      return e;
+    });
+    return { total: round2(total), known: known, campaigns: campaigns,
+             soldCount: soldCount, acceptedCount: acceptedCount,
+             cplRaw: cplRaw, cplRawExcluded: cplRawExcluded, cplSpend: round2(cplSpend),
+             effectiveCpl: (cplRaw && cplSpend) ? round2(cplSpend / cplRaw) : null };
+  }
+
+  /* Affiliate-safe vocabulary for a lead removed in audit. Deliberately
+     DISJOINT from the internal clawback_reason field, which stays on the
+     forbidden list with the rest of the how-we-work-leads internals. Nothing
+     here may reference margin, buyers, or call outcomes. */
+  var RETURN_REASONS = {
+    criteria: {
+      label: 'Outside criteria',
+      desc: 'A weekly audit found this lead fell outside your campaign’s accepted-lead criteria, so it should not have been accepted. The charge has been removed.'
+    },
+    duplicate: {
+      label: 'Duplicate found in audit',
+      desc: 'The consumer matched an earlier record that was not caught at intake. You are never billed for duplicates.'
+    },
+    invalid_contact: {
+      label: 'Invalid contact details',
+      desc: 'The phone or email on this lead could not be validated as belonging to the consumer.'
+    },
+    consumer_request: {
+      label: 'Consumer requested removal',
+      desc: 'The consumer asked to be removed after the lead was accepted.'
+    }
+  };
+  var RETURN_REASON_KEYS = ['criteria', 'duplicate', 'invalid_contact', 'consumer_request'];
+
+  /* Deterministic derivations for the MOCK ONLY. They deliberately use the
+     lead id rather than rnd() — an extra rnd() call mid-generation would
+     shift the PRNG stream and change every number quoted in HANDOFF.md. */
+  function idHash(id) {
+    var h = 0, s = String(id);
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100003;
+    return h;
+  }
+  function auditMondayAfter(d) {
+    var out = new Date(d.getTime());
+    do { out.setDate(out.getDate() + 1); } while (out.getDay() !== 1);
+    return out;
+  }
+
+  /**
+   * The clawback report — leads unfired in audit, affiliate-safe.
+   *
+   * MEMBERSHIP COMES FROM THE UNFIRE RECORD ITSELF, nothing inferred. In the
+   * live export that is the `returned` flag — and note its shape: unfiring
+   * flips the lead's paid flag back off, so an unfired lead renders as
+   * Rejected in the lead table with no visible trace of ever having been
+   * billed. That silent disappearance is exactly the reconciliation gap this
+   * report closes (Heritage alone carries 335 returned rows, none of them
+   * sold — the flag is our audit's removal, not a buyer's return). The mock
+   * generator sets the same flag on ~3.5% of sold accepted leads.
+   *
+   * Leak check: a row here says only "this lead was removed from billing".
+   * No sold-derived field is projected, so a CPL partner learns nothing
+   * about declined leads being worked — the row rule holds.
+   *
+   * The live export carries only the flag — no unfire date, reason, or
+   * credited amount. Those fields are the unfire feed Sagar is connecting
+   * (HANDOFF.md, gating dependencies); until then they render as absent, not
+   * fabricated. The mock derives them so the page demonstrates: audits run
+   * weekly, so the unfire date is the Monday after the sale.
+   */
+  function queryClawbacks(opts) {
+    opts = opts || {};
+    var pid = resolvePartnerId(opts.partnerId);
+    var from = opts.from || addDays(TODAY, -29);
+    var to = opts.to || TODAY;
+    var fromMs = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
+    var toMs = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999).getTime();
+
+    var out = [];
+    for (var i = 0; i < ALL_LEADS.length; i++) {
+      var l = ALL_LEADS[i];
+      if (l.partnerId !== pid || !l._clawback) continue;
+      if (opts.campaignId && opts.campaignId !== 'all' && l.campaignId !== opts.campaignId) continue;
+
+      var returnedAt = null, reason = null;
+      if (!USING_REAL_DATA) {
+        returnedAt = auditMondayAfter(l.soldAt || l.receivedAt);
+        if (returnedAt > TODAY) continue;              /* not audited yet */
+        reason = RETURN_REASON_KEYS[idHash(l.id) % RETURN_REASON_KEYS.length];
+      }
+
+      /* Window on the unfire date when we have one; the received date is the
+         only anchor the live export offers until the feed lands. */
+      var t = (returnedAt || l.receivedAt).getTime();
+      if (t < fromMs || t > toMs) continue;
+
+      var camp = CAMPAIGN_BY_ID[l.campaignId];
+      var adj = l.comp === 'revshare'
+        ? (l.partnerShare ? -l.partnerShare : null)
+        : (camp && camp.cplRate != null ? -camp.cplRate : null);
+
+      /* Field-by-field allowlist — nothing internal rides along. */
+      out.push({
+        id: l.id,
+        receivedAt: l.receivedAt,
+        campaignId: l.campaignId,
+        campaignName: l.campaignName,
+        comp: l.comp,
+        returnedAt: returnedAt,
+        reason: reason,
+        adjustment: adj == null ? null : round2(adj)
+      });
+    }
+    out.sort(function (a, b) {
+      return (b.returnedAt || b.receivedAt) - (a.returnedAt || a.receivedAt);
+    });
+    return out;
+  }
+
+  /**
+   * Monthly lead statements. Generated in Google Sheets on the first
+   * business day after the month closes and LINKED BY THE ADMIN each month —
+   * same per-partner-URL pattern as the agreement document. sessionStorage
+   * stands in for the admin field; see ADMIN-MAPPING §7d.
+   *
+   * The mock links every closed month except the most recent, which renders
+   * "Not linked yet" — that is the monthly admin step, shown as a state
+   * rather than hidden.
+   */
+  function firstBusinessDayAfter(d) {
+    var out = new Date(d.getTime());
+    do { out.setDate(out.getDate() + 1); } while (out.getDay() === 0 || out.getDay() === 6);
+    return out;
+  }
+  function statementUrl(partnerId, key) {
+    var pid = resolvePartnerId(partnerId);
+    try { return sessionStorage.getItem('fz_stmt_' + pid + '_' + key) || null; }
+    catch (e) { return null; }
+  }
+  function saveStatementUrl(partnerId, key, url) {
+    var pid = resolvePartnerId(partnerId);
+    try {
+      if (url) sessionStorage.setItem('fz_stmt_' + pid + '_' + key, url);
+      else sessionStorage.removeItem('fz_stmt_' + pid + '_' + key);
+    } catch (e) {}
+  }
+  function leadStatementsFor(partnerId) {
+    var pid = resolvePartnerId(partnerId);
+    var p = PARTNERS[pid];
+
+    /* Earliest month a statement could exist for: the partnership start when
+       we know it, else the start of the export window. */
+    var startIso = p.sinceISO || (DATASET_NOTES && DATASET_NOTES.dateFrom) || null;
+    var start;
+    if (startIso) {
+      var m = /^(\d{4})-(\d{2})/.exec(startIso);
+      start = new Date(+m[1], +m[2] - 1, 1);
+    } else {
+      var h = addDays(TODAY, -HISTORY_DAYS);
+      start = new Date(h.getFullYear(), h.getMonth(), 1);
+    }
+
+    var months = [];
+    var cur = new Date(TODAY.getFullYear(), TODAY.getMonth() - 1, 1);
+    while (cur >= start && months.length < 12) {
+      var key = cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0');
+      var monthEnd = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
+      var url = statementUrl(pid, key);
+      if (!url && months.length > 0) {
+        /* Demo URL for older months; the newest closed month stays unlinked
+           so the monthly admin step is visible. Fabricated, like every other
+           document URL in the mock. */
+        url = 'https://docs.google.com/spreadsheets/d/FZ-statement-' + pid + '-' + key;
+      }
+      months.push({
+        key: key,
+        label: cur.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        monthEnd: monthEnd,
+        generatedAt: firstBusinessDayAfter(monthEnd),
+        url: url
+      });
+      cur = new Date(cur.getFullYear(), cur.getMonth() - 1, 1);
+    }
+
+    var curEnd = new Date(TODAY.getFullYear(), TODAY.getMonth() + 1, 0);
+    return {
+      months: months,
+      current: {
+        label: TODAY.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        closesAt: curEnd,
+        expectedAt: firstBusinessDayAfter(curEnd)
+      }
     };
   }
 
@@ -2300,7 +2671,13 @@
     windowSplit: windowSplit,
     dailySeries: dailySeries,
     groupBy: groupBy,
+    payoutForWindow: payoutForWindow,
+    RETURN_REASONS: RETURN_REASONS,
+    queryClawbacks: queryClawbacks,
+    leadStatementsFor: leadStatementsFor,
+    saveStatementUrl: saveStatementUrl,
     checkDuplicate: checkDuplicate,
+    sandboxCheck: sandboxCheck,
     SUPPRESSION: SUPPRESSION,
     suppressionSample: suppressionSample,
     suppressionManifest: suppressionManifest,

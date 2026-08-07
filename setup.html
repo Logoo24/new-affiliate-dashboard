@@ -30,6 +30,68 @@
         </div>
       </section>
 
+      <!-- Post a test lead, see exactly what the filter returns — pass, or
+           which rule failed. The pre-send idea from IMPROVEMENTS §3, built
+           where integrations happen. -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Test lead sandbox<span id="sbx-tip-host"></span></h2>
+            <p class="sub">Post a test lead against your account’s own criteria and see exactly what our filter returns.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="grid-2">
+            <form id="sbx-form">
+              <div style="display:flex;flex-wrap:wrap;gap:12px">
+                <div class="field" id="sbx-product-field" style="display:none">
+                  <label for="sbx-product">Product</label>
+                  <select id="sbx-product"></select>
+                </div>
+                <div class="field">
+                  <label for="sbx-phone">Phone number</label>
+                  <input type="text" id="sbx-phone" placeholder="(555) 213-4470"
+                         autocomplete="off" inputmode="tel" style="min-width:180px">
+                </div>
+                <div class="field">
+                  <label for="sbx-age">Age</label>
+                  <input type="number" id="sbx-age" min="18" max="99" style="width:90px">
+                </div>
+                <div class="field">
+                  <label for="sbx-state">State</label>
+                  <input type="text" id="sbx-state" placeholder="TX" maxlength="2"
+                         autocomplete="off" style="width:70px;text-transform:uppercase">
+                </div>
+                <div class="field">
+                  <label for="sbx-money" id="sbx-money-label">Investable assets ($)</label>
+                  <input type="text" id="sbx-money" placeholder="120,000" inputmode="numeric"
+                         style="width:130px">
+                </div>
+                <div class="field">
+                  <label for="sbx-consent">Consent certificate</label>
+                  <select id="sbx-consent">
+                    <option value="trustedform">TrustedForm</option>
+                    <option value="jornaya">Jornaya</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
+                <button type="submit" class="btn btn-primary">Post test lead</button>
+                <button type="button" class="btn btn-sm" id="sbx-example">Fill with a passing example</button>
+              </div>
+            </form>
+            <div id="sbx-result"></div>
+          </div>
+          <div class="mocknote">
+            <strong>Mock-up.</strong> Nothing posts anywhere — the rules run in your browser
+            against your account’s criteria record. The production sandbox must run the
+            <strong>real intake filter chain</strong> behind a test endpoint: a re-implemented
+            rule list drifts, and a sandbox that disagrees with intake is worse than none.
+          </div>
+        </div>
+      </section>
+
       <section class="card">
         <div class="card-head">
           <div>
@@ -111,6 +173,101 @@
           returnFocusTo: b
         });
       });
+    });
+  })();
+
+  /* ---- test lead sandbox --------------------------------------------------
+     Validation lives in D.sandboxCheck(), which reads THIS account's
+     criteria record — the page only renders. Reasons come back as the same
+     reject-bucket strings the lead table shows, so a failure seen here
+     reconciles with a rejection seen in reporting. */
+  (function () {
+    var host = document.getElementById('sbx-tip-host');
+    if (host) host.insertAdjacentHTML('beforeend',
+      A.tip('A safe way to test your integration before sending real traffic. Post a lead here and see the pass/fail of every intake rule on your account — the same rules, the same reason labels, as live posting.'));
+
+    /* Product choice only appears when the account actually runs both. */
+    var products = [];
+    D.activeCampaignsFor(state.partnerId).forEach(function (c) {
+      var k = /life/i.test(c.product) ? 'life' : 'annuity';
+      if (products.indexOf(k) === -1) products.push(k);
+    });
+    if (!products.length) products = ['annuity'];
+    /* Annuity first when both run — it is every mixed account's primary. */
+    products.sort(function (a, b) { return a === 'annuity' ? -1 : b === 'annuity' ? 1 : 0; });
+    var prodSel = document.getElementById('sbx-product');
+    prodSel.innerHTML = products.map(function (k) {
+      return '<option value="' + k + '">' + (k === 'life' ? 'Life' : 'Annuity') + '</option>';
+    }).join('');
+    if (products.length > 1) {
+      document.getElementById('sbx-product-field').style.display = '';
+    }
+    function product() { return prodSel.value || products[0]; }
+
+    /* The money field asks the question the chosen product's criteria ask. */
+    function syncMoneyLabel() {
+      document.getElementById('sbx-money-label').textContent =
+        product() === 'life' ? 'Household income ($)' : 'Investable assets ($)';
+    }
+    prodSel.addEventListener('change', syncMoneyLabel);
+    syncMoneyLabel();
+
+    function run() {
+      var res = D.sandboxCheck({
+        partnerId: state.partnerId,
+        product: product(),
+        phone: document.getElementById('sbx-phone').value,
+        age: document.getElementById('sbx-age').value,
+        state: document.getElementById('sbx-state').value,
+        money: document.getElementById('sbx-money').value,
+        consent: document.getElementById('sbx-consent').value
+      });
+
+      var list = res.checks.map(function (c) {
+        var mark = c.pass === true ? '✓' : c.pass === false ? '✕' : '·';
+        var col = c.pass === true ? 'var(--good-text)'
+                : c.pass === false ? 'var(--critical-text)' : 'var(--ink-muted)';
+        return '<li><span class="mark" style="color:' + col + '">' + mark + '</span>' +
+          '<span><strong>' + A.esc(c.label) + '</strong>' +
+          (c.pass === false ? ' — failed' : c.pass === null ? ' — not checked' : '') +
+          '<br><span style="color:var(--ink-2);font-size:12.5px">' + A.esc(c.detail) + '</span></span></li>';
+      }).join('');
+
+      document.getElementById('sbx-result').innerHTML =
+        '<div class="notice ' + (res.accepted ? 'notice-info' : 'notice-warn') + '" style="margin-top:0">' +
+          '<span class="ico">' + (res.accepted ? '✓' : '▲') + '</span>' +
+          '<div><strong>' + (res.accepted
+            ? 'This lead would be accepted.'
+            : 'This lead would be rejected — ' + A.esc(res.response.reason) + '.') + '</strong>' +
+          (res.accepted ? '' : ' The reason below is the exact label the lead table would show.') +
+          '</div></div>' +
+        '<ul class="checklist" style="margin-top:12px">' + list + '</ul>' +
+        '<div style="margin-top:12px;font-family:ui-monospace,monospace;font-size:12px;' +
+          'padding:10px 12px;border:1px solid var(--border);border-radius:6px;' +
+          'background:var(--surface-2);color:var(--ink-2)">' +
+          'POST /v1/sandbox/leads → 200<br>' + A.esc(JSON.stringify(res.response)) +
+        '</div>';
+    }
+
+    document.getElementById('sbx-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      run();
+    });
+
+    /* A passing example on one click, so the first experience of the tool is
+       a green result, not a form full of validation errors. The phone is
+       searched at runtime for one outside the mock's duplicate window. */
+    document.getElementById('sbx-example').addEventListener('click', function () {
+      var n = 5552130000;
+      while (D.checkDuplicate(String(n)).duplicate) n++;
+      document.getElementById('sbx-phone').value = String(n);
+      var band = /(\d+)\D+(\d+)/.exec(state.partner.ageBand || '45–75');
+      document.getElementById('sbx-age').value =
+        product() === 'life' ? 52 : Math.round((+band[1] + +band[2]) / 2);
+      document.getElementById('sbx-state').value = 'TX';
+      document.getElementById('sbx-money').value = product() === 'life' ? '65,000' : '120,000';
+      document.getElementById('sbx-consent').value = 'trustedform';
+      run();
     });
   })();
 

@@ -47,6 +47,7 @@ at the bottom of each HTML file.
 | File | Module | Screen |
 |---|---|---|
 | `partnership.html` | 0 | Partnership summary — landing screen |
+| `compensation.html` | — | Compensation — earnings for the window, billing terms, monthly statements, clawback report |
 | `index.html` | A | Performance overview |
 | `leads.html` | B | Lead table + CSV export |
 | `duplicate-check.html` | C | 365-day phone lookup |

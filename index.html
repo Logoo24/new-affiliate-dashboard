@@ -298,12 +298,9 @@
   })();
 
   /* ---- tiles ----------------------------------------------------------- */
-  /* What this window is worth to the AFFILIATE — their invoice line, not our
-     cost. Rev share reads real per-lead shares; CPL multiplies accepted leads
-     by the campaign rate card where we hold one. */
-  var payout = D.affiliatePayout(sm.hasEarnings ? soldRows : rows);
-  var priorPayout = D.affiliatePayout(sm.hasEarnings ? priorSold : priorRows);
-
+  /* Money tiles (Your earnings, Effective cost per lead) moved to the
+     Compensation page — Performance answers "how is my traffic doing",
+     Compensation answers "what will the check be". */
   var tiles = [
     { label: 'Leads submitted (volume)', value: A.fmtInt(m.raw), sub: 'Everything you posted in this window',
       delta: A.deltaHtml(m.raw, pm.raw, {}) },
@@ -328,35 +325,6 @@
     sub: '<span class="badge ' + hs.tier.badge + '"><span class="dot"></span>' + hs.tier.label + '</span>',
     delta: '<div class="tile-delta delta-flat"><a href="' + A.linkTo('health.html', state) + '">See the breakdown →</a></div>'
   });
-
-  if (sm.hasEarnings) {
-    tiles.push({
-      label: 'Your earnings', value: A.fmtMoney0(sm.earnings),
-      sub: sm.rejectedEarnings
-        ? A.fmtMoney0(sm.rejectedEarnings) + ' from leads we did not accept'
-        : Math.round(state.partner.revSharePct * 100) + '% of leads sold in window',
-      delta: A.deltaHtml(sm.earnings, psm.earnings, {}),
-      cls: 'tile-revshare'
-    });
-  } else if (payout.known) {
-    /* CPL side: what this window is worth to them. Their own rate card, so
-       not a redaction concern — this is their invoice, not our margin. */
-    tiles.push({
-      label: 'Your earnings', value: A.fmtMoney0(payout.total),
-      sub: A.fmtInt(payout.ratedLeads) + ' accepted leads at your rate card' +
-        (payout.unratedAccepted
-          ? ' · ' + A.fmtInt(payout.unratedAccepted) + ' on campaigns with no rate on file'
-          : ''),
-      delta: A.deltaHtml(payout.total, priorPayout.total, {}),
-      cls: 'tile-revshare'
-    });
-    tiles.push({
-      label: 'Effective cost per lead', value: m.raw ? A.fmtMoney(payout.total / m.raw) : '—',
-      sub: 'Across every lead you sent, accepted or not',
-      delta: A.deltaHtml(m.raw ? payout.total / m.raw : 0,
-                         pm.raw ? priorPayout.total / pm.raw : 0, {})
-    });
-  }
 
   document.getElementById('tiles').innerHTML = tiles.map(function (t) {
     return '<div class="tile ' + (t.cls || '') + '">' +

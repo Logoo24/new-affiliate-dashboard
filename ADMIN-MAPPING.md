@@ -59,6 +59,7 @@ below; this is the summary to work from.
 | A6 | **`lead_cost` = $0 on rev-share** | Any margin metric | **BROKEN.** All 41,627 accepted rows bill $1.00 — the phantom COGS, confirmed live |
 | A7 | **Normalised `assets` band** | Asset-band targeting widget | **PARTIAL.** 29 free-text variants; 81.6% collapse into one band |
 | A8 | **`sold_type` on the 16 Sold rows missing it** | Tier metrics completeness | **PARTIAL** |
+| A9 | **Unfire feed** — unfire date, affiliate-safe reason code, amount credited *(Sagar)* | Clawback report on the Compensation page | **MISSING.** The export carries only the `returned` flag |
 
 ### B. Fields that do not exist anywhere yet
 
@@ -78,6 +79,7 @@ below; this is the summary to work from.
 | B12 | **Per-affiliate agreement URL** | The "Your agreement" card | A Google Doc URL on the affiliate record, different for every partner. An affiliate with none set renders "not linked yet", never a dead button. §7c |
 | B13 | **Per-affiliate lead criteria** | Every criteria line on Targeting, and the age wording in rejection labels | The OptiLabX 45–79 band already proves criteria are negotiated per account. **Any** criteria value may differ, not just age. §1 |
 | B14 | **Comp model as a real campaign column** | The entire column projection | Currently parsed out of the campaign *name*. This is the most load-bearing value in the system and it is being inferred from a string. §2 |
+| B15 | **Monthly lead-statement URL per affiliate** | Lead statements on the Compensation page | A Google Sheet URL per affiliate per month, pasted by the admin after the statement is generated (first business day after month close, give or take). A month with none renders "Not linked yet", never a dead button. §7d |
 
 ### C. Confirmed present — no work needed
 
@@ -588,6 +590,7 @@ Logan's spec), a document library, and the account-manager contact.
 | Affiliate onboarding, Lead criteria, Annuity API, Life API | one global URL each | **NEEDS BUILDING** as rows in that table |
 | **Your agreement** | a **different URL per affiliate** | **NEEDS BUILDING** — a Google Doc URL field on the affiliate record |
 | New / edit campaign flows | — | **NOT SPECIFIED.** Placeholder modals pointing at Logan until he defines the flow |
+| Test lead sandbox | `sandboxCheck()` in `data.js`, reading the account's criteria record (age band off the partner record, so negotiated exceptions hold) | **NEEDS BUILDING** — a sandbox endpoint that runs the **real intake filter chain** against the account's criteria; a re-implemented rule list drifts. Auth, logging and rate limits mirror the duplicate lookup. Rejection reasons must be the same strings the lead table shows. Pairs with the Phase-3 pre-send validation API (IMPROVEMENTS §3) |
 | Contact block | Logan Randall, logan@financialize.com | constant; should join from the CRM like §1's account manager |
 
 Two rules the implementation has to keep:
@@ -597,6 +600,37 @@ Two rules the implementation has to keep:
 2. **A document with no URL renders "not linked yet", never a dead button.** `scope: 'partner'`
    documents are unset for most affiliates on day one, and a button that 404s reads as a broken
    portal rather than an unfinished record.
+
+---
+
+## 7d. Compensation page
+
+Added August 6. Money in one place: what the window earned, the billing terms, the monthly
+statements, and the clawback record. Reached from the sidebar or by clicking the Billing details
+card on the Partnership summary.
+
+| Element | Source | Status |
+|---|---|---|
+| Earned this period | `payoutForWindow()` — rev-share summed on the **sold** date (rejected-but-sold included, per the Aug 5 ruling), CPL on the **received** date × the campaign rate | Computed from the lead table; CPL needs the **rate card on the campaign record** (A4 / B14 adjacent) or it reports "not on file" rather than $0 |
+| "Subject to change" caveat | static copy + hover descriptor | The number is provisional until the statement closes; audits run weekly |
+| Billing details card | same fields as the Partnership summary — `billing_period` / `billing_basis` (B3) + billing contacts | duplicated rendering, single source |
+| Lead statements list | one Google Sheet URL per affiliate per month, admin-pasted | **NEEDS BUILDING** — B15. Generated on the first business day after month close; unlinked months show "Not linked yet" |
+| Clawback report | `queryClawbacks()` — unfire date, affiliate-safe reason, credited amount | **NEEDS BUILDING** — A9, the unfire feed (Sagar). Reason must map to the `RETURN_REASONS` vocabulary; the internal `clawback_reason` stays forbidden |
+
+Rules the implementation must keep:
+
+1. **Membership comes from the unfire record itself, never inferred.** In the export that is
+   the `returned` flag — and unfiring flips the lead's paid flag back off, so an unfired lead
+   renders as *Rejected* in the lead table with no visible trace of ever having been billed.
+   That silent disappearance is the reconciliation gap the report closes. Heritage alone
+   carries 335 returned rows, none sold — the flag is our audit's removal, not a buyer's
+   return. Leak check: a row here says only "removed from billing"; no sold-derived field is
+   projected, so the CPL row rule holds.
+2. **The affiliate-facing reason is a controlled, affiliate-safe vocabulary** (`RETURN_REASONS`
+   in `data.js`): outside criteria, duplicate, invalid contact, consumer request. Never the
+   internal clawback reason, never anything about margin, buyers, or call outcomes.
+3. **Statement months attach to the partner record, not a deploy** — same pattern as the
+   per-affiliate agreement URL (B12).
 
 ---
 

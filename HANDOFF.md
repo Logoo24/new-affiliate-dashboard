@@ -435,6 +435,7 @@ Nothing below is a nice-to-have; each one blocks a specific thing already drawn 
 | **`sold_type`** as distinct labels — Priority / Hot / Auction / Marketplace | The North Star metric, the entire scorecard, the sold-type column. The current lead table cannot separate Priority from Hot. | **Blocking.** Nothing affiliate-facing is worth shipping without it. |
 | **`subid`, `click_id`, `utm_campaign`, `utm_medium`** | Sub-ID drilldown, publisher-level scoring, Madrivo's core requirement | **Blocking** for Module A drilldown |
 | **`speed_to_lead`** (seconds, receipt → first dial) | Operations pillar | Pillar is **parked** in the mock until this lands |
+| **Unfire feed** — lead id, unfire timestamp, affiliate-safe reason code, amount credited *(Sagar to connect)* | The Clawback report on the Compensation page. The export carries only a `returned` flag — no date, reason, or amount, so those columns render as absent rather than invented | **Blocking** for the Clawback report. The reason code must be the affiliate-safe `RETURN_REASONS` vocabulary, never the internal `clawback_reason` |
 | **`call_attempts_to_convert`** | Operations pillar, Courtney's internal view | Parked |
 | `campaign_id` + received/sold timestamps | — | Already on the table |
 

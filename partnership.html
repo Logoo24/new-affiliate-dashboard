@@ -91,7 +91,12 @@
           </div>
         </section>
 
-        <section class="card">
+        <!-- The whole card walks through to the Compensation page. A plain
+             <a> wrapper would nest the mailto links inside it (invalid and
+             misclick-prone), so the click is wired in JS with inner links
+             excluded. -->
+        <section class="card gauge-card" id="billing-card" role="link" tabindex="0"
+                 style="cursor:pointer" aria-label="Billing details — open the Compensation page">
           <div class="card-head">
             <div>
               <h2>Billing details</h2>
@@ -104,6 +109,8 @@
             <div class="tile-sub" id="billing-terms"></div>
             <div class="tile-sub" id="billing-cadence" style="margin-top:8px;line-height:1.5"></div>
             <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)" id="billing-contacts"></div>
+            <div style="font-size:13px;color:var(--brand-coral);font-weight:600;margin-top:10px">
+              Compensation &amp; statements →</div>
           </div>
         </section>
       </div>
@@ -200,6 +207,18 @@
   /* ---- billing ------------------------------------------------------------ */
   (function () {
     document.getElementById('billing-sub').textContent = 'Terms and who to ask.';
+
+    /* Card-level click-through to Compensation. Inner links (the billing
+       mailtos) keep their own behaviour and must not also fire this. */
+    var bc = document.getElementById('billing-card');
+    var compHref = A.linkTo('compensation.html', state);
+    bc.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('a')) return;
+      window.location.href = compHref;
+    });
+    bc.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target === bc) window.location.href = compHref;
+    });
 
     /* The DATE leads; the net terms demote to a sub-line. Derived: third
        business day after the most recent month close, rolling forward once
