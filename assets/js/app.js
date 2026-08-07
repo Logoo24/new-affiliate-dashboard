@@ -79,6 +79,9 @@
     try { sessionStorage.setItem('fz_partner', partnerId); } catch (e) {}
     var rangeKey = q.get('range') || fallback;
     if (!D.RANGES[rangeKey]) rangeKey = fallback;
+    /* Whether the URL actually names a range. Only an explicit choice
+       propagates to other pages — see linkTo(). */
+    var rangeExplicit = !!q.get('range') && !!D.RANGES[q.get('range')];
 
     var from = parseDate(q.get('from'));
     var to = parseDate(q.get('to'));
@@ -92,6 +95,7 @@
       comps: D.compsFor(partnerId),
       rateBasis: D.rateBasisFor(partnerId),
       rangeKey: rangeKey,
+      rangeExplicit: rangeExplicit,
       range: range,
       campaignId: q.get('campaign') || 'all',
       subid: q.get('subid') || 'all',
@@ -114,14 +118,24 @@
       String(d.getDate()).padStart(2, '0');
   }
 
-  /* Carry the current context onto another page. */
+  /* Carry the current context onto another page.
+
+     THE RANGE ONLY TRAVELS WHEN THE USER ACTUALLY CHOSE ONE. Pages have
+     different default windows on purpose — Performance and the lead table
+     open on Last 30 days, Compensation on This month — and an implicit
+     default carried in a nav link used to stomp them: landing on the
+     Partnership summary (7d) and clicking Performance forced range=7d onto
+     a page whose own default is 30d. An explicit pick (the filter form
+     always names one) still follows the user from page to page. */
   function linkTo(href, state, extra) {
     var q = new URLSearchParams();
     q.set('partner', state.partnerId);
-    q.set('range', state.rangeKey);
-    if (state.rangeKey === 'custom') {
-      q.set('from', isoDate(state.range.from));
-      q.set('to', isoDate(state.range.to));
+    if (state.rangeExplicit) {
+      q.set('range', state.rangeKey);
+      if (state.rangeKey === 'custom') {
+        q.set('from', isoDate(state.range.from));
+        q.set('to', isoDate(state.range.to));
+      }
     }
     if (state.campaignId !== 'all') q.set('campaign', state.campaignId);
     if (state.subid !== 'all') q.set('subid', state.subid);
