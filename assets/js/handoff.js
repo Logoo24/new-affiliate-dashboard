@@ -119,21 +119,49 @@
       how: '$1 PHANTOM COGS on all 41,627 accepted rows. Margin computed from it is fiction, so ' +
            'the margin component of the score is currently excluded. Must be $0 on rev-share ' +
            'campaigns before any margin metric means anything.' },
-    { group: 'Internal — never leaves the query', name: 'Margin / profit', source: 'derived', status: 'have',
-      where: 'Health score input only.',
-      how: 'Read inside the scoring engine and converted to a sub-score there. It must never be ' +
-           'attached to any object the view layer touches.' },
+    { group: 'Internal — never leaves the query', name: 'Margin / profit', source: 'derived', status: 'partial',
+      where: 'The INTERNAL OVERLAY beside the health score (Data connections partner table). ' +
+             'REMOVED from the score itself in v2.',
+      how: 'A partner with bad margin is mispriced — fixed with the CPL lever, not their ' +
+           'behaviour — and a visible score moved by an invisible input cannot be explained ' +
+           'to the person being scored. Margin renders internally beside the score, never in ' +
+           'it. Blocked on the $1 phantom COGS (A6) like every margin metric.' },
     { group: 'Internal — never leaves the query', name: 'Buyer name · CSR name · call result · IPQS detail',
       source: 'various', status: 'have',
       where: 'NOWHERE. Absent from the column registry entirely.',
       how: 'These are the July 31 Heritage leak columns. Absence from the registry IS the ' +
            'enforcement — do not add them and gate them.' },
     { group: 'Internal — never leaves the query', name: 'Speed to lead', source: 'Speed to Lead', status: 'partial',
-      where: 'Speed & operations pillar. PILLAR IS IN DEVELOPMENT, excluded from scoring.',
-      how: 'Column is populated but the values are not — negatives and a median of zero. When ' +
-           'it is trustworthy, set the pillar live and the weights rebalance automatically.' },
-    { group: 'Internal — never leaves the query', name: 'Call attempts to convert', source: '—', status: 'missing',
-      where: 'Second input to the operations pillar.', how: 'Does not exist. Needed to unpark that pillar.' },
+      where: 'Internal ops diagnostics ONLY (Courtney\'s Module F, Phase 2). The v1 "Speed & ' +
+             'operations" score pillar is DELETED, permanently — see the health v2 decision.',
+      how: 'This measures OUR call floor, not the affiliate\'s traffic, so it must never feed ' +
+           'the affiliate-facing score. Fix the values (negatives, median zero) for internal ' +
+           'dashboards, not for scoring.' },
+    { group: 'Internal — never leaves the query', name: 'Call-outcome feed (bad-contact rate)', source: '—', status: 'missing',
+      where: 'The parked "Bad-contact rate" component of the Delivered quality pillar — the ' +
+             'strongest leading indicator in the whole score.',
+      how: 'Needs per-lead call outcomes classified to wrong-number / disconnected / ' +
+           'unreachable, aggregated to a rate. The affiliate sees only their rate, never ' +
+           'call-level detail. Unparks automatically once the feed exists.' },
+    { group: 'Compliance system (health v2)', name: 'Consent certificate coverage', source: 'xxTrustedFormCertUrl on the post', status: 'missing',
+      where: 'Compliance & trust pillar (30% of it).',
+      how: 'The API already accepts the field; it needs capturing through to the lead record ' +
+           'and aggregating to a per-affiliate coverage %. LP-path leads carry it from our ' +
+           'own forms.' },
+    { group: 'Compliance system (health v2)', name: 'Complaint incident log', source: '—', status: 'missing',
+      where: 'Compliance pillar (30%) AND the gate — an unresolved critical incident caps the ' +
+             'score at 45.',
+      how: 'incidents (affiliate_id, campaign_id, type, severity critical|minor, date, ' +
+           'resolved, notes). MANUAL ADMIN ENTRY FIRST — enforcement must not wait for ' +
+           'automation. Trailing 90 days feeds the score.' },
+    { group: 'Compliance system (health v2)', name: 'Creative-review currency flag', source: '—', status: 'missing',
+      where: 'Compliance pillar (25%) and the gate.',
+      how: 'Boolean per affiliate: is the running creative set on file with Jefanie? Set false ' +
+           'when they change creatives without re-sending (the setup-flow policy). False = ' +
+           'score capped.' },
+    { group: 'Compliance system (health v2)', name: 'Unsubscribe compliance flag', source: '—', status: 'missing',
+      where: 'Compliance pillar (15%) and the gate. Email-traffic affiliates only.',
+      how: 'Boolean per affiliate: opt-out links live and correct. False = score capped.' },
 
     /* ---- relationship --------------------------------------------------- */
     { group: 'Relationship', name: 'Partner since', source: '—', status: 'missing',
@@ -240,6 +268,28 @@
       risk: 'pixel_url is the ONLY affiliate-writable field in the portal — it needs an audit ' +
             'trail, and a post-go-live change must notify Logan and be re-verified with a test ' +
             'lead before taking effect.' },
+
+    { group: 'Health score', name: 'Compliance system (inputs + gate)', status: 'build',
+      controls: 'The Compliance & trust pillar and the score cap. Four inputs: consent-cert ' +
+                'coverage, complaint incident log, creative-review flag, unsub flag.',
+      today: 'complianceFor() in data.js returns all nulls — pillar parked, gate unarmed. ' +
+             'Deliberately: these are real affiliate names and fabricating an incident against ' +
+             'one in a reviewable mock is not acceptable.',
+      storage: 'incidents table + two boolean flags on the affiliate record + consent-cert ' +
+               'capture on the lead. Spec in ADMIN-MAPPING §6a.',
+      risk: 'The gate is the enforcement: critical failure caps the score at 45 and is not ' +
+            'launderable by good acceptance. Manual admin entry first — do not wait for ' +
+            'automation to start enforcing.' },
+
+    { group: 'Health score', name: 'Score calibration table', status: 'build',
+      controls: 'The percentile pools every metric scores against, per campaign class ' +
+                '(fresh annuity / aged annuity / life).',
+      today: 'Computed live from the dataset on page load (buildPools() in health.js).',
+      storage: 'A stored calibration table, recomputed QUARTERLY by a job — never per request. ' +
+               'A partner\'s score must not move because someone else\'s traffic shifted ' +
+               'mid-week. Store: class, metric, sorted value list (or quantiles), computed_at.',
+      risk: 'Also the shrinkage medians come from here. Getting the recompute cadence wrong ' +
+            'makes scores drift in ways nobody can explain to a partner.' },
 
     { group: 'Content', name: 'Creative links', status: 'build',
       controls: 'The three buttons on Targeting\'s Creatives card: example annuity creatives, ' +

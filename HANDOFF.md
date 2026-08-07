@@ -222,6 +222,50 @@ their own analysis on what converts and retarget against it.
 
 ---
 
+### DECISION — Lead Health Score v2 (Aug 7)
+
+Redesigned with Logan against Michael's five criteria from the May 22 production-strategy email
+(acceptance, downstream sales quality, margins, complaints, compliance). The engine is
+`assets/js/health.js`; the connection list is ADMIN-MAPPING §6/§6a. What changed and why:
+
+1. **The "Speed & operations" pillar is deleted, not parked.** Speed-to-lead and call attempts
+   measure OUR call floor's diligence, not the affiliate's traffic. Scoring a partner down
+   because we dialled slowly is unfair, and displaying it hands every partner a standing
+   argument in quality conversations. Those metrics are internal ops diagnostics — their home
+   is Courtney's Module F. **Do not rebuild them into the affiliate-facing score.**
+2. **Margin is out of the score, into the internal overlay.** A visible number moved by an
+   invisible input cannot be explained to the person being scored, and a partner with bad
+   margin is mispriced — fixed with the CPL lever, not their behaviour. The internal Data
+   connections page shows the score × volume-tier grid (Michael's management instrument:
+   scaling counts, the danger quadrant) with margin joining once the phantom COGS is fixed.
+   **The affiliate-visible number and the internal number are the same number** — the overlay
+   adds columns beside it, never a different score with the same name.
+3. **Four pillars: Conversion & value 40 / Delivered quality 35 / Compliance & trust 15 /
+   Consistency & coverage 10.** Within quality, validity signals (bad-contact, IPQS,
+   duplicates) outweigh raw acceptance — acceptance measures fit-to-filter, the weakest health
+   signal. Acceptance is **banded**, not continuous, so there is no incentive to trim
+   marginal-but-profitable volume for a vanity rate.
+4. **Compliance is a gate, not an average**: any critical failure (unresolved TCPA/DNC
+   incident, creatives running without review, failing unsub) caps the score at 45. Inputs are
+   being built by the tech team (§6a spec); until they exist the pillar is excluded and
+   renormalised — but it displays as "in development" on purpose, so compliance visibly counts
+   before it ever bites. Enforcement starts with manual admin entry, not automation.
+5. **Fairness mechanics**: percentile calibration against our own book, per campaign class
+   (fresh/aged/life — the campaign is the scoring unit, rolled up volume-weighted), shrinkage
+   toward the class median on small samples, provisional under 100 matured, missing data
+   renormalised never zeroed. Calibration comes from a stored table recomputed quarterly —
+   never per request.
+6. **Early-warning flags are separate from the score.** The score is stable by design (matured
+   cohorts, weekly refresh), so it lags ~3 weeks. Flags compare this week's fast signals
+   (duplicates, IPQS, acceptance) against the partner's own baseline and surface as chips on
+   the scorecard. Score = judgment. Flag = detection. Never blend them.
+
+The scorecard shows the account dial, the pillar breakdown, and a **score-by-campaign table**
+(each campaign against its own class, with Focus links) — "your aged campaign is a 48" is a
+fix; "your account is a 46" is an argument.
+
+---
+
 ### DECISION — the campaign setup flow (Aug 7)
 
 Onboarding steps 6–10 became the per-campaign tracker on `campaign-setup.html`. Logan's rulings,

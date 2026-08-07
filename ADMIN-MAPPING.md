@@ -504,36 +504,94 @@ A partner who reads these as gates will send less, not better. The widgets are a
 
 ---
 
-## 6. Health score inputs
+## 6. Health score inputs — v2 (redesigned Aug 7 with Logan, against Michael's criteria)
 
-Defined in `assets/js/health.js`. Weights and thresholds are the deliverable; see HANDOFF.md.
+Defined in `assets/js/health.js`. The design decision and the reasoning are in HANDOFF.md
+("DECISION — Lead Health Score v2"); this section is the connection list.
 
-| Input | Status | Notes |
+**Four pillars, affiliate-visible, built ONLY from what the affiliate controls:**
+Conversion & value 40% · Delivered quality 35% · Compliance & trust 15% (also a **gate** — a
+critical failure caps the score at 45) · Consistency & coverage 10%.
+
+**Deleted from v1, permanently:** the Speed & operations pillar (`speed_to_lead`,
+`call_attempts`) — those measure OUR call floor, not their traffic; they are internal ops
+diagnostics for Module F. And the hidden margin input — margin moved to the **internal overlay**
+(rendered beside the score on the Data connections partner table), never in the score. Do not
+rebuild either into the affiliate-facing number.
+
+| Input | Pillar (weight within) | Status |
 |---|---|---|
-| margin vs 45% floor | **PARTIAL** | See the $1 phantom COGS problem below |
-| Priority/Hot conversion | **NEEDS BUILDING** | Blocked on `sold_type` |
-| sold-type points per paid lead | **NEEDS BUILDING** | Blocked on `sold_type`; point values need Michael's sign-off |
-| median sales cycle | **EXISTS** | |
-| acceptance rate | **EXISTS** | |
-| duplicate rate | **EXISTS** | |
-| contact-validation rejects | **EXISTS** | |
-| bad-contact rate | **PARTIAL** | internal only, never shown to the affiliate |
-| clawback rate | **PARTIAL** | internal only |
-| **`speed_to_lead`** (seconds, receipt → first dial) | **NEEDS BUILDING** | Operations pillar is **parked** until this lands |
-| **`call_attempts_to_convert`** | **NEEDS BUILDING** | Operations pillar, parked |
-| state / window / day coverage | **NEEDS BUILDING** | Feeds off §5 |
+| Priority/Hot conversion, of accepted, matured cohort | Conversion (45%) | **EXISTS** |
+| Share of sales in top tiers | Conversion (20%) | **EXISTS** |
+| Sold rate of accepted | Conversion (20%) | **EXISTS** |
+| Median sales cycle | Conversion (15%) | **EXISTS** |
+| Bad-contact rate | Quality (24%) | **NEEDS BUILDING** — the call-outcome feed (wrong number / disconnected / unreachable per lead → rate). The strongest leading indicator in the score; parked until it lands |
+| Contact-validation (IPQS) reject rate | Quality (22%) | **EXISTS** |
+| Duplicate rate | Quality (20%) | **EXISTS** |
+| Acceptance rate — **banded** | Quality (20%) | **EXISTS.** Banded (≥p50 full credit, steps down), never continuous — a continuous score invites trimming profitable volume for a vanity rate |
+| Acceptance stability (8-week std-dev) | Quality (14%) | **EXISTS** — account-level only; campaign-grain is too noisy to judge anyone on |
+| Consent-cert coverage | Compliance (30%) | **NEEDS BUILDING** — §6a |
+| Complaint incidents (90d) | Compliance (30%) + gate | **NEEDS BUILDING** — §6a |
+| Creative-review currency | Compliance (25%) + gate | **NEEDS BUILDING** — §6a |
+| Unsubscribe compliance | Compliance (15%) + gate | **NEEDS BUILDING** — §6a |
+| Day-to-day pacing (CV) | Consistency (55%) | **EXISTS** |
+| Volume in needed states | Consistency (45%) | **EXISTS** — feeds off §5a |
+| Send-window fit | Consistency (parked) | **BLOCKED on A1** (time of day) |
 
-The parked pillar is **excluded and the remaining three renormalised to 100**, not scored zero.
-Scoring it zero would silently cap every partner at 90. Set `parked: false` in `health.js` when the
-two fields land and the weights snap back on their own.
+### The scoring mechanics the build must copy exactly
+
+1. **Percentile calibration.** Every metric scores as a percentile of our own book, per
+   **campaign class** (fresh annuity / aged annuity / life) — never one global benchmark, or
+   partners get punished for running the aged campaigns we asked for. Pools come from a
+   **stored calibration table recomputed quarterly by a job** — never per request; a partner's
+   score must not move because someone else's traffic shifted mid-week. Small class pools
+   still win over the global pool (a self-referential benchmark is honest; a cross-class one
+   is unfair).
+2. **The campaign is the scoring unit.** Conversion + quality are scored per campaign against
+   its class, the account rolls up volume-weighted. Consistency and compliance are
+   account-level.
+3. **Shrinkage.** Rates are pulled toward the class median — (n·v + K·median)/(n + K), K=100
+   on conversion (matured-accepted denominator), K=50 on quality (raw denominator) — so small
+   partners aren't whipsawed by variance.
+4. **Missing data is excluded and renormalised, never scored zero.**
+5. **Provisional** below 100 matured accepted leads (account and per campaign).
+6. **Early-warning flags are separate from the score**: last-7-days duplicates / IPQS /
+   acceptance vs the partner's own trailing 8-week baseline. Flags detect fast; the score
+   judges slow. Never blend them.
+
+### 6a. Compliance system — spec for the tech team (Logan is handing this off)
+
+The pillar and gate run on four inputs, all null in the mock (deliberately — these are real
+affiliate names; nothing is fabricated against them). `D.complianceFor(partnerId)` is the read
+interface the engine already calls; build the storage behind it:
+
+```
+compliance_incidents
+  id, affiliate_id, campaign_id NULL, type            -- 'tcpa','dnc','platform','other'
+  severity ENUM('critical','minor'), occurred_at, resolved BOOL, notes, entered_by
+
+affiliate record additions
+  creatives_current  BOOL NULL     -- running set on file with Jefanie; set FALSE when they
+                                   -- change creatives without re-sending (setup-flow policy)
+  unsub_ok           BOOL NULL     -- email affiliates: opt-out links live and correct
+
+lead record addition
+  consent_cert_url   VARCHAR NULL  -- capture xxTrustedFormCertUrl through from the post;
+                                   -- LP-path leads carry it from our own forms
+```
+
+Rules: **manual admin entry first** — an incident Logan types in caps the score the same week;
+enforcement does not wait for automation. NULL means *not collected* and parks the component;
+FALSE means *failing* and arms the gate. The gate caps the total score at **45** and is not
+launderable by any other pillar.
 
 ### Two data-integrity problems that corrupt the score if not fixed first
 
 1. **The $1/lead phantom COGS on rev-share campaigns.** Every accepted rev-share lead is billed at
    $1 in Lead Cost though we owe $0 per lead — roughly **$4,013** of fabricated cost on Heritage
-   alone across two weeks, and about **16,000** rev-share leads system-wide. Any margin-based
-   pillar computed on this data is wrong. Must be set to $0 before the Economics pillar means
-   anything.
+   alone across two weeks, and about **16,000** rev-share leads system-wide. Any margin figure
+   computed on this data is wrong. Must be set to $0 before the **internal margin overlay**
+   (margin no longer feeds the score itself — see above) means anything.
 2. **Placeholder birth years on the aged-lead import.** **1,923 of 1,932** accepted leads on the
    Heritage aged-leads campaign carry a YOB of 2000 or 1992 — ages 26 and 34, well outside the
    45–75 criteria, accepted and billed anyway. The age filter is not catching it. Any quality

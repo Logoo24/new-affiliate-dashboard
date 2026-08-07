@@ -59,6 +59,19 @@
         </section>
       </div>
 
+      <section class="card" id="campaign-scores-card">
+        <div class="card-head">
+          <div>
+            <h2>Score by campaign<span id="camp-tip-host"></span></h2>
+            <p class="sub">Each campaign is measured against its own class — aged, fresh and life are never compared to each other.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="campaign-scores"></table>
+        </div>
+        <div class="card-foot" id="campaign-scores-foot"></div>
+      </section>
+
       <details class="card" id="how-built">
         <summary>
           <h2>How the score is built</h2>
@@ -116,7 +129,7 @@
 
     var rows = live.map(function (p) {
       var inputs = (p.parts || [])
-        .filter(function (x) { return x.display !== undefined; })
+        .filter(function (x) { return !x.parked && x.display !== undefined; })
         .map(function (x) { return A.esc(x.label); })
         .join(' · ') || '—';
       return '<tr>' +
@@ -128,13 +141,24 @@
 
     return '' +
       '<p>Your lead health score is a single 0&ndash;100 read on how well your traffic is ' +
-      'performing, refreshed every Monday over a rolling 30-day window. It is anchored on one ' +
-      'question: <strong>of the leads you send, how many reach a qualified sale at the top ' +
-      'tiers &mdash; Priority or Hot &mdash; and how quickly.</strong></p>' +
+      'performing, refreshed every Monday over a rolling 30-day window. It is anchored on two ' +
+      'questions: <strong>does what you send turn into qualified sales at the top tiers, and ' +
+      'are the leads real, reachable people.</strong> Everything else refines those two.</p>' +
 
-      '<p>Leads still inside their sales cycle are excluded, so recent volume is never counted ' +
-      'against you before it has had a chance to convert. Below <strong>100 matured leads</strong> ' +
-      'the score is marked provisional. The score is built from these parts:</p>' +
+      '<p>Four things keep it fair:</p>' +
+      '<ul style="padding-left:18px;margin:8px 0">' +
+      '<li style="margin:4px 0"><strong>You are measured against our whole partner book</strong>, ' +
+        'not an invented target — a 50 means the middle of the pack, an 80 means the top.</li>' +
+      '<li style="margin:4px 0"><strong>Each campaign is compared to its own class.</strong> ' +
+        'Aged, fresh and life traffic convert differently by design, so an aged campaign is ' +
+        'never judged against fresh numbers.</li>' +
+      '<li style="margin:4px 0"><strong>Small samples are read cautiously.</strong> Rates on low ' +
+        'volume are pulled toward the book average until your own data earns the number — a ' +
+        'lucky or unlucky fortnight will not whipsaw your score.</li>' +
+      '<li style="margin:4px 0"><strong>Leads still inside their sales cycle are excluded</strong>, ' +
+        'so recent volume is never counted against you before it has had time to convert. Below ' +
+        '<strong>100 matured leads</strong> the whole score is marked provisional.</li>' +
+      '</ul>' +
 
       '<div class="table-wrap"><table class="data">' +
       '<thead><tr><th>What we measure</th><th class="num">Weight</th><th>What goes into it</th></tr></thead>' +
@@ -143,9 +167,11 @@
       (parked.length
         ? '<p style="margin-top:14px"><strong>' +
           parked.map(function (p) { return A.esc(p.label); }).join(' and ') +
-          '</strong> is in development — we are not reporting call timing back to you yet, so ' +
-          'it is left out of your score entirely rather than counted against you, and the ' +
-          'remaining weights are rebalanced to 100%.</p>'
+          '</strong> is in development. It will cover consent certificates, complaint history, ' +
+          'creative-review currency and unsubscribe compliance — and serious compliance issues ' +
+          'will cap the score regardless of the other pillars. Until those systems land it is ' +
+          'left out entirely rather than counted against you, and the remaining weights are ' +
+          'rebalanced to 100%.</p>'
         : '') +
 
       '<p>If you want to move the number, your rejection reasons and the ' +
@@ -170,8 +196,10 @@
   });
 
   /* ---- compact chips instead of paragraphs -------------------------------
-     Provisional status and penalties appear as short badges with hover
-     descriptors — the explanation is one hover away, not a block of text. */
+     Provisional status, the compliance gate, and early-warning flags render
+     as short badges with hover descriptors. Flags are DETECTION, separate
+     from the score on purpose: the score is stable (matured windows), the
+     flags catch this week's decay before the score can move. */
   (function () {
     var chips = '';
     if (result.provisional) {
@@ -179,13 +207,14 @@
         A.tip('Fewer than 100 of your leads in this window have finished their sales cycle, ' +
               'so read the score as directional rather than final.');
     }
-    if (result.penalties.length) {
-      var total = result.penalties.reduce(function (a, p) { return a + p.points; }, 0);
-      chips += '<span class="badge badge-crit"><span class="dot"></span>Penalty −' + total + '</span>' +
-        A.tip('Point deductions applied on top of the pillar scores when a specific problem ' +
-              'crosses a threshold. Currently: ' +
-              result.penalties.map(function (p) { return p.label + ' (−' + p.points + ')'; }).join(', ') + '.');
+    if (result.gate) {
+      chips += '<span class="badge badge-crit"><span class="dot"></span>Compliance hold</span>' +
+        A.tip(result.gate);
     }
+    result.flags.forEach(function (f) {
+      chips += '<span class="badge badge-warn"><span class="dot"></span>' + A.esc(f.label) +
+        '</span>' + A.tip(f.detail);
+    });
     document.getElementById('score-chips').innerHTML = chips;
   })();
 
@@ -199,12 +228,15 @@
      the descriptor, not on the page. */
   (function () {
     var PILLAR_DESC = {
-      economics: 'How much of what you send reaches a qualified sale at the top tiers, and how fast.',
-      quality: 'How clean your leads are on arrival — acceptance rate, duplicates, and contact validity.',
-      operations: 'How quickly and how often we call your leads. We are not reporting this back ' +
-                  'to you yet, so it is left out of your score rather than counted against you.',
-      volume: 'How much you send, how steadily, and whether it lands in the states and on the ' +
-              'days we need most.'
+      conversion: 'Does your traffic turn into good sales — Priority/Hot conversion, top-tier ' +
+                  'mix, sold rate and sales cycle, each measured against campaigns of the same class.',
+      quality: 'Are your leads real, reachable people — contact validation, duplicates, and ' +
+               'acceptance. Validity signals count more than raw acceptance here.',
+      compliance: 'Consent certificates, complaint history, creative-review currency and ' +
+                  'unsubscribe compliance. The systems feeding this are being built; until ' +
+                  'they land it is left out rather than counted against you. Serious issues ' +
+                  'here will cap the whole score.',
+      consistency: 'Steady day-to-day flow, landing in the states we need most.'
     };
     function pillarTip(p) {
       var weightPart = p.parked ? '' :
@@ -245,6 +277,56 @@
     }).join('');
 
     document.getElementById('pillars').innerHTML = html;
+  })();
+
+  /* ---- score by campaign --------------------------------------------------
+     The campaign is the scoring unit: conversion + quality are computed per
+     campaign against its class benchmark, then the account rolls up volume-
+     weighted. This table is that rollup, opened up — so "your account is a
+     46" becomes "your aged campaign is a 48 and your fresh one is a 44". */
+  (function () {
+    var card = document.getElementById('campaign-scores-card');
+    var camps = result.campaigns.filter(function (c) { return c.campaign; });
+    if (!camps.length) { card.style.display = 'none'; return; }
+
+    document.getElementById('camp-tip-host').innerHTML =
+      A.tip('A campaign score covers the two campaign-level pillars — conversion and lead ' +
+            'quality. Account-level behaviour (consistency, compliance) applies to the whole ' +
+            'account, so it lives in the pillar breakdown above rather than being repeated ' +
+            'per campaign.');
+
+    var head = '<thead><tr><th>Campaign</th><th>Class</th><th class="num">Leads (30d)</th>' +
+      '<th class="num">Score</th><th>Band</th><th class="num">Conversion</th>' +
+      '<th class="num">Quality</th><th></th></tr></thead>';
+
+    var body = camps.map(function (c) {
+      var tierCell = c.tier
+        ? '<span class="badge ' + c.tier.badge + '"><span class="dot"></span>' + c.tier.label + '</span>' +
+          (c.provisional
+            ? ' <span class="badge badge-warn" style="margin-left:4px"><span class="dot"></span>Provisional</span>'
+            : '')
+        : '<span style="color:var(--ink-muted)">—</span>';
+      return '<tr>' +
+        '<td><strong>' + A.esc(c.campaign.name) + '</strong>' +
+          '<div style="font-size:11.5px;color:var(--ink-muted)">CID ' + A.esc(String(c.campaign.id)) + '</div></td>' +
+        '<td style="white-space:nowrap">' + A.esc(c.clsLabel) + '</td>' +
+        '<td class="num">' + A.fmtInt(c.raw) + '</td>' +
+        '<td class="num" style="font-weight:700;font-size:15px">' + (c.score == null ? '—' : c.score) + '</td>' +
+        '<td>' + tierCell + '</td>' +
+        '<td class="num">' + (c.convScore == null ? '—' : c.convScore) + '</td>' +
+        '<td class="num">' + (c.qualScore == null ? '—' : c.qualScore) + '</td>' +
+        '<td style="text-align:right"><a class="btn btn-sm" href="' +
+          A.linkTo('health.html', state, { campaign: c.campaign.id }) + '">Focus →</a></td>' +
+        '</tr>';
+    }).join('');
+
+    document.getElementById('campaign-scores').innerHTML = head + '<tbody>' + body + '</tbody>';
+    document.getElementById('campaign-scores-foot').innerHTML =
+      (state.campaignId !== 'all'
+        ? '<span>Filtered to one campaign — <a href="' + A.linkTo('health.html', state, { campaign: 'all' }) +
+          '">back to all campaigns</a>.</span>'
+        : '<span>The account score above is these campaigns, weighted by volume, plus your ' +
+          'account-level consistency.</span>');
   })();
 
   /* ---- trend ----------------------------------------------------------- */

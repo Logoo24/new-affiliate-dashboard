@@ -1,31 +1,68 @@
 /* ==========================================================================
-   health.js — the Lead Health Score engine
+   health.js — the Lead Health Score engine, v2
    --------------------------------------------------------------------------
-   Renders the framework in Affiliate_Lead_Health_System_Framework.md; it does
-   not redefine it. Four pillars, weighted, normalised 0–100 against targets,
-   with direct penalties for clawback and bad-contact rate.
+   Redesigned Aug 7 2026 with Logan, against Michael's five criteria
+   (acceptance, downstream sales quality, margins, complaints, compliance).
+   Full reasoning: HANDOFF.md "DECISION — Lead Health Score v2".
 
-     Economics              ~50%   (matured margin vs the 45% floor,
-                                    Priority/Hot points, sold %, sales cycle)
-     Delivered quality      ~30%   (acceptance, clawback, bad contact,
-                                    duplicate rate, contact-validation rejects)
-     Speed & operations     ~10%   PARKED — speed-to-lead and call-attempts
-                                   are not on the lead table yet (spec §5)
-     Volume & coverage      ~10%   (sufficiency, consistency, coverage gaps)
+   FOUR PILLARS, affiliate-visible, built ONLY from what the affiliate
+   controls:
 
-   PARKED PILLAR HANDLING: rather than score operations as zero — which would
-   cap every partner at 90 and make the whole score look broken — the pillar is
-   excluded and the remaining three are renormalised to 100. The UI shows it as
-   parked so nobody mistakes the gap for a passing grade. When Zakira lands the
-   two fields, set parked:false and the weights snap back on their own.
+     Conversion & value      40%  does the traffic turn into good sales
+     Delivered quality       35%  is the lead a real, reachable person
+     Compliance & trust      15%  is it clean  — ALSO A GATE (see below)
+     Consistency & coverage  10%  steady flow, in the places we need
 
-   ON THE MARGIN INPUT (open question §9.4): the affiliate sees the SAME number
-   we do, and the Economics pillar does include margin. What they do not get is
-   the margin figure itself or the weight on it, so the score cannot be
-   reverse-engineered into our economics. Michael, Jul 7: "all you're doing is
-   you're giving them a number." The internal margin value is read here and
-   converted to a sub-score in this file — it is never attached to any object
-   the view layer touches.
+   WHAT IS DELIBERATELY NOT HERE:
+   - The v1 "Speed & operations" pillar (speed-to-lead, call attempts) is
+     DELETED, not parked. Those measure OUR call floor's diligence, not the
+     affiliate's traffic. Scoring a partner down because we dialled slowly is
+     unfair, and even displaying it hands every partner a standing argument
+     ("my score is low because you didn't call"). They remain internal ops
+     diagnostics — their home is Courtney's Module F. Do not reintroduce.
+   - The v1 hidden margin input is REMOVED from the score. A partner with bad
+     margin is mispriced — fixed with the CPL lever, not by their behaviour —
+     and a visible number moved by an invisible input cannot be explained to
+     the person being scored. Margin lives in the INTERNAL OVERLAY (rendered
+     on the internal Data connections page), beside the score, never in it.
+
+   HOW EVERY NUMBER IS SCORED — the fairness mechanics:
+
+   1. PERCENTILE CALIBRATION. Each metric scores as the partner's standing
+      among our own book (p25 ≈ 25, median ≈ 50, p75 ≈ 75), not against an
+      invented target. Pools are computed from the live dataset per CAMPAIGN
+      CLASS and recalibrated quarterly in production.
+   2. CAMPAIGN-CLASS BENCHMARKS. Fresh annuity, aged annuity and life convert
+      differently BY DESIGN — partners run aged campaigns because we asked
+      them to. Each campaign is scored against its own class, then the account
+      rolls up volume-weighted. One account-level benchmark would quietly mark
+      down every partner whose mix we shaped.
+   3. SHRINKAGE. Small-sample rates are pulled toward the class median
+      (n·v + K·median)/(n + K), so a 150-lead partner reads as "slightly
+      below average, low confidence" — not a crisis, not a triumph. Rates
+      earn their own value as volume grows.
+   4. BANDED ACCEPTANCE. Acceptance scores in steps (≥p50 full credit, then
+      down), never continuously — a continuous score invites trimming
+      marginal-but-profitable volume to polish a vanity rate. Above the bar
+      is above the bar.
+   5. GATE, NOT AVERAGE, for compliance. A TCPA complaint or unreviewed
+      creatives running is not launderable by a good acceptance rate: any
+      critical compliance failure CAPS the total score at 45.
+   6. MISSING DATA IS EXCLUDED AND RENORMALISED, never scored zero. Same v1
+      rule: a gap on our side must not cost the partner points.
+
+   EARLY-WARNING FLAGS (separate from the score, on purpose): the score is
+   stable — matured cohorts, weekly refresh — which makes it a lagging
+   detector. flags[] compares the last 7 days of fast signals (duplicates,
+   IPQS, acceptance) against the partner's own trailing baseline and raises
+   a chip + internal alert. Score = judgment, stable. Flag = detection,
+   fast. Never blend them.
+
+   Attribution rules are unchanged from v1: every rate on the trailing
+   30-day matured cohort (10-day buffer), volume on received date, accepted
+   basis for conversion rates on every comp model (thresholds are calibrated
+   that way; the labels say "of accepted" so the Performance page reads as a
+   different question, not a contradiction).
    ========================================================================== */
 
 (function (global) {
@@ -33,42 +70,9 @@
 
   var D = global.FZData;
 
-  /* Linear normalisation to 0–100 with clamping. */
-  function norm(value, worst, best) {
-    if (value == null || isNaN(value)) return 0;
-    var t = (value - worst) / (best - worst);
-    return Math.max(0, Math.min(100, t * 100));
-  }
-
-  /* Parked parts are EXCLUDED and the rest renormalised — never scored zero.
-     A component whose input the data cannot supply is not a failing grade,
-     and treating it as one silently penalises every partner for a gap on our
-     side. Same rule as the parked operations pillar, one level down. */
-  function weightedAvg(parts) {
-    var sum = 0, w = 0;
-    for (var i = 0; i < parts.length; i++) {
-      if (parts[i].parked) continue;
-      sum += parts[i].score * parts[i].weight;
-      w += parts[i].weight;
-    }
-    return w ? sum / w : 0;
-  }
-
-  /* THIS REPORT IS READ BY THE AFFILIATE, NOT BY US.
-     ----------------------------------------------------------------------
-     These labels and actions were originally the internal Scale / No-Scale
-     vocabulary — "Intervene", "push more budget", "move CPL to the level that
-     restores a 45%+ margin". That is what WE decide about a partner, and none
-     of it belongs in front of one: it exposes our margin floor, our pricing
-     lever, and reads as a threat rather than as feedback.
-
-     Every tier is now named for what is true of THEIR TRAFFIC, and every
-     action is something THEY can act on. The internal thresholds are
-     unchanged, so this still reconciles with the Scale/No-Scale scorecard —
-     only the words a partner sees are different. `internal` is kept so our
-     own tooling can still speak its own language.
-
-     Cross-check before editing: HANDOFF.md, "affiliate-facing framing". */
+  /* ---------------------------------------------------------------------- */
+  /* Tiers — affiliate-facing labels, internal vocabulary preserved          */
+  /* ---------------------------------------------------------------------- */
   var TIERS = [
     { key: 'scale', label: 'Excellent', internal: 'Scale',
       min: 80, badge: 'badge-good', tone: 'good',
@@ -97,345 +101,532 @@
     return TIERS[TIERS.length - 1];
   }
 
-  /* Coefficient of variation on daily volume — the consistency component. */
+  /* The score a critical compliance failure caps at — the top of the
+     "Lead quality issue" band, so a gated partner can never read Healthy. */
+  var GATE_CAP = 45;
+
+  /* ---------------------------------------------------------------------- */
+  /* Small math helpers                                                      */
+  /* ---------------------------------------------------------------------- */
+  function norm(value, worst, best) {
+    if (value == null || isNaN(value)) return null;
+    var t = (value - worst) / (best - worst);
+    return Math.max(0, Math.min(100, t * 100));
+  }
+  function mean(a) {
+    return a.length ? a.reduce(function (x, y) { return x + y; }, 0) / a.length : 0;
+  }
+  function stdev(a) {
+    if (a.length < 2) return null;
+    var m = mean(a);
+    return Math.sqrt(mean(a.map(function (v) { return (v - m) * (v - m); })));
+  }
   function coefficientOfVariation(values) {
     if (values.length < 2) return 1;
-    var mean = values.reduce(function (a, b) { return a + b; }, 0) / values.length;
-    if (!mean) return 1;
-    var variance = values.reduce(function (a, b) { return a + Math.pow(b - mean, 2); }, 0) / values.length;
-    return Math.sqrt(variance) / mean;
+    var m = mean(values);
+    if (!m) return 1;
+    return stdev(values) / m;
+  }
+  function median(sorted) {
+    if (!sorted.length) return null;
+    var mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+  function pct(v) {
+    if (v == null || isNaN(v)) return '—';
+    return (v * 100).toFixed(1) + '%';
   }
 
+  /* Parked parts are EXCLUDED and the rest renormalised — never scored zero. */
+  function weightedAvg(parts) {
+    var sum = 0, w = 0;
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].parked || parts[i].score == null) continue;
+      sum += parts[i].score * parts[i].weight;
+      w += parts[i].weight;
+    }
+    return w ? sum / w : null;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Campaign classes — benchmark within like-for-like                       */
+  /* ---------------------------------------------------------------------- */
+  function classOf(c) {
+    if (!c) return 'fresh';
+    if (/life/i.test(c.product)) return 'life';
+    return c.kind === 'aged' ? 'aged' : 'fresh';
+  }
+  var CLASS_LABEL = { fresh: 'Fresh annuity', aged: 'Aged annuity', life: 'Life' };
+
+  /* ---------------------------------------------------------------------- */
+  /* Metric definitions                                                      */
+  /* ---------------------------------------------------------------------- */
+  /* higherBetter, shrinkage constant K (null = no shrinkage), and fallback
+     linear bounds for when a percentile pool is too small to rank against.
+     K is in units of the metric's own denominator (matured accepted for
+     conversion, raw submitted for quality). */
+  var METRIC_DEFS = {
+    ph:        { higherBetter: true,  K: 100, fallback: [0.04, 0.18] },
+    topTier:   { higherBetter: true,  K: null, fallback: [0.30, 0.90] },
+    sold:      { higherBetter: true,  K: 100, fallback: [0.05, 0.35] },
+    cycle:     { higherBetter: false, K: null, fallback: null /* custom */ },
+    accept:    { higherBetter: true,  K: 50,  fallback: [0.40, 0.85] },
+    dupe:      { higherBetter: false, K: 50,  fallback: null /* custom */ },
+    ipqs:      { higherBetter: false, K: 50,  fallback: null /* custom */ },
+    stability: { higherBetter: false, K: null, fallback: null /* custom */ },
+    pacing:    { higherBetter: false, K: null, fallback: null /* custom */ },
+    stateFit:  { higherBetter: true,  K: null, fallback: [0.05, 0.28] }
+  };
+
+  /* Fallback scores for inverse metrics when no pool exists (v1 formulas). */
+  function fallbackScore(key, v) {
+    if (v == null || isNaN(v)) return null;
+    switch (key) {
+      case 'cycle':     return norm(20 - v, 0, 12);
+      case 'dupe':      return norm(0.20 - v, 0, 0.18);
+      case 'ipqs':      return norm(0.15 - v, 0, 0.13);
+      case 'stability': return norm(0.12 - v, 0, 0.10);
+      case 'pacing':    return norm(1 - v, 0.30, 0.85);
+      default:
+        var fb = METRIC_DEFS[key].fallback;
+        return fb ? norm(v, fb[0], fb[1]) : null;
+    }
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Calibration pools                                                       */
+  /* ---------------------------------------------------------------------- */
+  /* Built once per session from the trailing 30 days of the whole book:
+     every campaign with ≥ MIN_POOL_ROWS submitted contributes one value per
+     metric to its class pool. Scores are then percentile ranks within the
+     class pool (falling back to the global pool, then to linear bounds).
+     In production this is a stored calibration table, recomputed quarterly
+     — NOT on every request — so a partner's score cannot move because
+     someone else's traffic shifted mid-week. See ADMIN-MAPPING §6. */
+  var MIN_POOL_ROWS = 40;
+  var MIN_POOL_SIZE = 4;
+  var _pools = null;
+
+  function campaignMetricValues(m) {
+    var raw = m.raw || 0;
+    return {
+      ph: m.priorityHotRate,
+      topTier: m.soldAny ? (m.soldPriorityHot + m.soldNewTiers) / m.soldAny : null,
+      sold: m.sellThrough,
+      cycle: m.medianCycle,
+      accept: m.acceptanceRate,
+      dupe: raw ? (m.rejects.duplicate || 0) / raw : null,
+      ipqs: raw ? (m.rejects.ipqs || 0) / raw : null
+    };
+  }
+
+  function buildPools() {
+    if (_pools) return _pools;
+    _pools = { fresh: {}, aged: {}, life: {}, _all: {} };
+    var from = D.addDays(D.TODAY, -29);
+    Object.keys(D.PARTNERS).forEach(function (pid) {
+      D.campaignsFor(pid).forEach(function (c) {
+        var rows = D.queryLeads({ partnerId: pid, campaignId: c.id, from: from, to: D.TODAY });
+        if (rows.length < MIN_POOL_ROWS) return;
+        var m = D.computeMetrics(rows, D.TODAY);
+        var vals = campaignMetricValues(m);
+        var cls = classOf(c);
+        Object.keys(vals).forEach(function (k) {
+          if (vals[k] == null || isNaN(vals[k])) return;
+          (_pools[cls][k] = _pools[cls][k] || []).push(vals[k]);
+          (_pools._all[k] = _pools._all[k] || []).push(vals[k]);
+        });
+      });
+    });
+    Object.keys(_pools).forEach(function (cls) {
+      Object.keys(_pools[cls]).forEach(function (k) {
+        _pools[cls][k].sort(function (a, b) { return a - b; });
+      });
+    });
+    return _pools;
+  }
+
+  function poolFor(cls, key) {
+    var pools = buildPools();
+    var p = (pools[cls] && pools[cls][key]) || [];
+    /* The CLASS pool wins even when it is small. A two-entry aged pool is a
+       coarse benchmark, but falling back to the global pool would score aged
+       campaigns against fresh ones — punishing partners for running the
+       campaigns we asked for, which is the exact unfairness class pools
+       exist to prevent. When a partner IS the whole class, the benchmark is
+       self-referential; that is honest for a book this size, and the pools
+       deepen as campaigns are added. Production recalibrates quarterly. */
+    if (p.length >= 1) return p;
+    var g = pools._all[key] || [];
+    return g.length >= MIN_POOL_SIZE ? g : null;
+  }
+
+  function poolMedian(cls, key) {
+    var p = poolFor(cls, key);
+    return p ? median(p) : null;
+  }
+
+  /* Percentile rank 0–100 within the pool (ties count half). */
+  function percentileScore(cls, key, v) {
+    if (v == null || isNaN(v)) return null;
+    var p = poolFor(cls, key);
+    if (!p) return fallbackScore(key, v);
+    var below = 0, equal = 0;
+    for (var i = 0; i < p.length; i++) {
+      if (p[i] < v) below++;
+      else if (p[i] === v) equal++;
+    }
+    var rank = ((below + equal / 2) / p.length) * 100;
+    return METRIC_DEFS[key].higherBetter ? rank : 100 - rank;
+  }
+
+  /* Shrink a small-sample rate toward the class median. */
+  function shrink(key, cls, v, n) {
+    var K = METRIC_DEFS[key].K;
+    if (K == null || v == null || n == null) return v;
+    var med = poolMedian(cls, key);
+    if (med == null) return v;
+    return (n * v + K * med) / (n + K);
+  }
+
+  /* Banded, not continuous — see mechanics note #4 in the header. */
+  function bandedAcceptScore(p) {
+    if (p == null) return null;
+    if (p >= 50) return 95;
+    if (p >= 25) return 75;
+    if (p >= 10) return 45;
+    return 20;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Per-campaign scoring — conversion + quality parts                       */
+  /* ---------------------------------------------------------------------- */
+  function scoreUnit(m, cls) {
+    var raw = m.raw || 0;
+    var vals = campaignMetricValues(m);
+
+    var conv = [
+      { key: 'ph', label: 'Priority/Hot conversion (of accepted)', weight: 0.45,
+        score: percentileScore(cls, 'ph', shrink('ph', cls, vals.ph, m.maturePaid)),
+        display: pct(vals.ph) },
+      { key: 'topTier', label: 'Share of sales in the top tiers', weight: 0.20,
+        score: vals.topTier == null ? null : percentileScore(cls, 'topTier', vals.topTier),
+        parked: vals.topTier == null,
+        display: vals.topTier == null ? '—' : pct(vals.topTier) },
+      { key: 'sold', label: 'Sold rate (of accepted)', weight: 0.20,
+        score: percentileScore(cls, 'sold', shrink('sold', cls, vals.sold, m.maturePaid)),
+        display: pct(vals.sold) },
+      { key: 'cycle', label: 'Median sales cycle', weight: 0.15,
+        score: vals.cycle == null ? null : percentileScore(cls, 'cycle', vals.cycle),
+        parked: vals.cycle == null,
+        display: vals.cycle == null ? '—' : vals.cycle + 'd' }
+    ];
+
+    /* Quality: validity signals weigh MORE than raw acceptance — acceptance
+       measures fit-to-filter, which is the weakest health signal here. */
+    var acceptPct = percentileScore(cls, 'accept', shrink('accept', cls, vals.accept, raw));
+    var qual = [
+      { key: 'badcontact', label: 'Bad-contact rate', weight: 0.24, internal: true,
+        parked: true, score: null,
+        parkNote: 'needs the call-outcome feed' },
+      { key: 'ipqs', label: 'Contact-validation rejects', weight: 0.22,
+        score: percentileScore(cls, 'ipqs', shrink('ipqs', cls, vals.ipqs, raw)),
+        display: pct(vals.ipqs) },
+      { key: 'dupe', label: 'Duplicate rate', weight: 0.20,
+        score: percentileScore(cls, 'dupe', shrink('dupe', cls, vals.dupe, raw)),
+        display: pct(vals.dupe) },
+      { key: 'accept', label: 'Acceptance rate (banded)', weight: 0.20,
+        score: bandedAcceptScore(acceptPct),
+        display: pct(vals.accept) },
+      /* Stability is account-level by design — weekly acceptance at single-
+         campaign grain is too noisy to judge anyone on. Filled in by the
+         caller at scope level; parked here. */
+      { key: 'stability', label: 'Acceptance stability', weight: 0.14, parked: true, score: null }
+    ];
+
+    return { conv: conv, qual: qual, vals: vals };
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* The score                                                               */
+  /* ---------------------------------------------------------------------- */
   /**
-   * Score a window.
-   *
-   * @param {object} opts
-   *   partnerId, campaignId, subid
-   *   range       {from, to}   — rolling 30 days by default
-   *   demandTarget {number}    — paid leads we want from this partner per window
+   * @param {object} opts — partnerId, campaignId, subid, range, asOf,
+   *                        _light (skip flags + campaign detail, for trend)
    */
   function score(opts) {
     opts = opts || {};
-    var range = opts.range || {
-      from: D.addDays(D.TODAY, -29),
-      to: D.TODAY
-    };
-    /* Volume reference for the "Volume vs target" score component.
-       CPL targets are weekly and account for ACCEPTED leads (see
-       cplWeeklyProgress in data.js) — not the right shape for a 30-day RAW
-       submission count. Revenue-share partners have no target at all by
-       design: "more is generally better," governed only by this score, not
-       by a number they're expected to hit.
-
-       So the reference here is always SELF-referential — this partner's own
-       trailing 4-week average, scaled to 30 days — for both comp models.
-       That is also just a better question for a health score to ask than "did
-       you hit an admin's number": "are you sending more or less than your own
-       recent normal," which rewards real growth without requiring a target to
-       exist at all. Falls back to a flat 900 only when there is no history
-       yet to be self-referential against. */
-    var demandTarget = opts.demandTarget;
-    if (!demandTarget) {
-      var selfBaseline = D.avgWeeklyVolume(opts.partnerId) * (30 / 7);
-      demandTarget = selfBaseline > 0 ? Math.round(selfBaseline) : 900;
-    }
+    var asOf = opts.asOf || D.TODAY;
+    var range = opts.range || { from: D.addDays(asOf, -29), to: asOf };
+    var pid = opts.partnerId;
+    var scoped = opts.campaignId && opts.campaignId !== 'all';
 
     var rows = D.queryLeads({
-      partnerId: opts.partnerId || 'ahg',
-      from: range.from,
-      to: range.to,
-      campaignId: opts.campaignId,
-      subid: opts.subid
+      partnerId: pid, from: range.from, to: range.to,
+      campaignId: opts.campaignId, subid: opts.subid
     });
+    var m = D.computeMetrics(rows, asOf);
 
-    var m = D.computeMetrics(rows, opts.asOf || D.TODAY);
-
-    /* Internal-only inputs. Read here, converted to sub-scores here, and
-       never returned on the result object. */
-    var internal = D._internalAggregates({
-      range: range,
-      partnerId: opts.partnerId,
-      campaignId: opts.campaignId,
-      subid: opts.subid
+    /* ---- units: one per campaign, benchmarked against its class --------- */
+    var campaigns = D.campaignsFor(pid).filter(function (c) {
+      return !scoped || c.id === opts.campaignId;
     });
-
-    /* ---- Rates the quality pillar needs ------------------------------- */
-    var dupeCount = m.rejects.duplicate || 0;
-    var ipqsCount = m.rejects.ipqs || 0;
-    var duplicateRate = m.raw ? dupeCount / m.raw : 0;
-    var ipqsRate = m.raw ? ipqsCount / m.raw : 0;
-
-    /* ---- Pillar 1 — Economics (~50%) ---------------------------------- */
-    var econParts = [
-      /* Parked whenever margin is not computable from the source. With the
-         real export it never is: Lead Cost is the $1 phantom COGS, so any
-         margin derived from it is fiction. Parked, not zero. */
-      { key: 'margin',  label: 'Margin', weight: 0.35, internal: true,
-        parked: !internal.marginUsable,
-        score: internal.marginUsable ? norm(internal.marginPct, 0.25, 0.60) : 0 },
-      /* Deliberately always the ACCEPTED-lead basis, for every partner type.
-         The RevShare overview reports conversion against all submitted leads
-         because that is how they are paid — but the tier thresholds below are
-         calibrated on the accepted basis, and scoring RevShare partners on
-         the lower all-leads rate would push them a tier down for no reason
-         other than a change of denominator. Labelled so the two pages read as
-         two different questions rather than a contradiction. */
-      { key: 'phrate',  label: 'Priority/Hot conversion (of accepted)', weight: 0.30,
-        score: norm(m.priorityHotRate, 0.04, 0.18),
-        display: pct(m.priorityHotRate) },
-      /* The point system (Priority 10 / Hot 8 / Auction & Marketplace
-         negative) is OUR scoring shorthand. A partner reading "0.02 points
-         per paid lead" learns nothing, so this shows the thing the points
-         actually measure: how much of what sold landed in the top two tiers. */
-      { key: 'points',  label: 'Share of sales in the top tiers', weight: 0.20,
-        score: norm(m.pointsPerPaid, -0.5, 1.6),
-        display: m.soldAny
-          ? pct((m.soldPriorityHot + m.soldNewTiers) / m.soldAny)
-          : '—' },
-      { key: 'cycle',   label: 'Median sales cycle', weight: 0.15,
-        score: m.medianCycle == null ? 0 : norm(20 - m.medianCycle, 0, 12),
-        display: m.medianCycle == null ? '—' : m.medianCycle + 'd' }
-    ];
-
-    /* ---- Pillar 2 — Delivered quality & stability (~30%) --------------- */
-    var qualParts = [
-      { key: 'accept',  label: 'Acceptance rate', weight: 0.30,
-        score: norm(m.acceptanceRate, 0.40, 0.85),
-        display: pct(m.acceptanceRate) },
-      { key: 'dupe',    label: 'Duplicate rate', weight: 0.22,
-        score: norm(0.20 - duplicateRate, 0, 0.18),
-        display: pct(duplicateRate) },
-      { key: 'ipqs',    label: 'Contact-validation rejects', weight: 0.18,
-        score: norm(0.15 - ipqsRate, 0, 0.13),
-        display: pct(ipqsRate) },
-      { key: 'badcontact', label: 'Bad-contact rate', weight: 0.16, internal: true,
-        parked: !internal.badContactUsable,
-        score: internal.badContactUsable ? norm(0.22 - internal.badContactRate, 0, 0.18) : 0 },
-      { key: 'clawback', label: 'Clawback / over-unfire rate', weight: 0.14, internal: true,
-        score: norm(0.14 - internal.clawbackRate, 0, 0.12) }
-    ];
-
-    /* ---- Pillar 3 — Speed & operations (~10%) — PARKED ----------------- */
-    var opsParts = [
-      { key: 'speed',    label: 'How fast we call your leads', weight: 0.60, parked: true, display: 'not yet reported' },
-      { key: 'attempts', label: 'How many times we call them', weight: 0.40, parked: true, display: 'not yet reported' }
-    ];
-
-    /* ---- Pillar 4 — Volume & coverage (~10%) --------------------------- */
-    var daily = D.dailySeries(rows, range);
-    var dailyCounts = daily.map(function (d) { return d.raw; });
-    var cv = coefficientOfVariation(dailyCounts);
-
-    /* Three coverage gaps, and they are different kinds of gap:
-         GEOGRAPHY — states carrying unfilled budget. Pacific and Mountain are
-           the standing shortfall, so they dominate.
-         TIME OF DAY — the two ideal reception windows, 9–11a and 3–7p
-           consumer local time. These are the hours the floor is busiest and
-           where leads convert best.
-         DAY OF WEEK — how close their weekly split runs to the ideal split.
-           Sunday volume is the usual culprit: nothing sent Sunday is worked
-           until Monday morning.
-
-       NOTE: an earlier version of this scored a 6–9a "early arrival" window.
-       That window was invented and contradicted the call-centre hours (the
-       floor opens at 9a), so it is gone. Do not reintroduce it. */
-    var coverageStateCount = 0, idealWindowCount = 0, haveClock = 0;
-    for (var i = 0; i < rows.length; i++) {
-      if (D.isCoverageState(rows[i].state)) coverageStateCount++;
-      if (rows[i].hourSegment) haveClock++;
-      if (D.isIdealSegment(rows[i].hourSegment)) idealWindowCount++;
+    var units = [];
+    campaigns.forEach(function (c) {
+      var urows = rows.filter(function (r) { return r.campaignId === c.id; });
+      if (!urows.length) return;
+      var um = D.computeMetrics(urows, asOf);
+      var cls = classOf(c);
+      var u = scoreUnit(um, cls);
+      units.push({
+        campaign: c, cls: cls, m: um,
+        weight: um.raw,
+        convScore: weightedAvg(u.conv), qualScore: weightedAvg(u.qual),
+        conv: u.conv, qual: u.qual
+      });
+    });
+    /* Sub-ID scope (or rows with no campaign match): score as one unit
+       against the global pool via the dominant class. */
+    if (!units.length && rows.length) {
+      var u1 = scoreUnit(m, 'fresh');
+      units.push({ campaign: null, cls: 'fresh', m: m, weight: m.raw,
+        convScore: weightedAvg(u1.conv), qualScore: weightedAvg(u1.qual),
+        conv: u1.conv, qual: u1.qual });
     }
-    var coverageStateShare = rows.length ? coverageStateCount / rows.length : 0;
-    /* If the source carries no clock, the window component is unknowable.
-       Measure it over the rows that DO have one, and drop it from the score
-       entirely when none do — scoring an absent field as zero would penalise
-       a partner for a gap in our export. */
-    var idealWindowShare = haveClock ? idealWindowCount / haveClock : 0;
 
-    /* Day-of-week alignment as total variation distance from the ideal split:
-       half the sum of absolute deltas, so 0 = identical and 1 = disjoint. */
-    var split = D.dowSplit(rows);
-    var tvd = split.reduce(function (a, d) { return a + Math.abs(d.delta); }, 0) / 2;
-    var dowAlignment = 1 - tvd;
+    var totalW = units.reduce(function (a, u) { return a + u.weight; }, 0) || 1;
+    function rollup(field) {
+      var s = 0, w = 0;
+      units.forEach(function (u) {
+        if (u[field] == null) return;
+        s += u[field] * u.weight; w += u.weight;
+      });
+      return w ? s / w : null;
+    }
+    function rollupPart(pillar, key) {
+      var s = 0, w = 0;
+      units.forEach(function (u) {
+        var part = u[pillar].filter(function (x) { return x.key === key; })[0];
+        if (!part || part.parked || part.score == null) return;
+        s += part.score * u.weight; w += u.weight;
+      });
+      return w ? s / w : null;
+    }
 
-    var TARGET_STATES = 0.28;
-    var TARGET_IDEAL_WINDOW = 0.50;
-    var TARGET_DOW_ALIGNMENT = 0.90;
+    /* ---- scope-level metrics: stability, pacing, coverage --------------- */
+    /* Acceptance stability: std-dev of weekly acceptance over 8 weeks. */
+    var stabRows = opts._light ? null : D.queryLeads({
+      partnerId: pid, from: D.addDays(asOf, -55), to: asOf,
+      campaignId: opts.campaignId, subid: opts.subid
+    });
+    var stabilityStd = null;
+    if (stabRows && stabRows.length) {
+      var weeks = {};
+      stabRows.forEach(function (r) {
+        var wk = Math.floor((asOf - r.receivedAt) / (7 * 864e5));
+        (weeks[wk] = weeks[wk] || { raw: 0, paid: 0 });
+        weeks[wk].raw++;
+        if (r.status === 'paid') weeks[wk].paid++;
+      });
+      var weekly = Object.keys(weeks).map(function (k) { return weeks[k]; })
+        .filter(function (w) { return w.raw >= 20; })
+        .map(function (w) { return w.paid / w.raw; });
+      if (weekly.length >= 4) stabilityStd = stdev(weekly);
+    }
 
-    var coverageParts = [
-      norm(coverageStateShare, 0.05, TARGET_STATES),
-      norm(dowAlignment, 0.60, TARGET_DOW_ALIGNMENT)
+    var daily = D.dailySeries(rows, range);
+    var cv = coefficientOfVariation(daily.map(function (d) { return d.raw; }));
+    var coverageStateCount = 0;
+    rows.forEach(function (r) { if (D.isCoverageState(r.state)) coverageStateCount++; });
+    var stateShare = rows.length ? coverageStateCount / rows.length : 0;
+
+    /* ---- compliance — inputs are admin/systems the tech team is building.
+       All null today → every part parked, pillar renormalised away, gate
+       inactive. The moment any input lands it starts counting. ------------ */
+    var comp = D.complianceFor(pid);
+    var compParts = [
+      { key: 'consent', label: 'Consent certificate coverage', weight: 0.30,
+        parked: comp.consentPct == null,
+        score: comp.consentPct == null ? null : norm(comp.consentPct, 0.85, 1.0),
+        display: comp.consentPct == null ? 'not yet collected' : pct(comp.consentPct) },
+      { key: 'complaints', label: 'Complaint incidents (90d)', weight: 0.30,
+        parked: comp.incidents == null,
+        score: comp.incidents == null ? null : norm(2 - comp.incidents.length, 0, 2),
+        display: comp.incidents == null ? 'not yet collected' : String(comp.incidents.length) },
+      { key: 'creatives', label: 'Creative review current', weight: 0.25,
+        parked: comp.creativesCurrent == null,
+        score: comp.creativesCurrent == null ? null : (comp.creativesCurrent ? 100 : 0),
+        display: comp.creativesCurrent == null ? 'not yet collected'
+          : (comp.creativesCurrent ? 'Yes' : 'No') },
+      { key: 'unsub', label: 'Unsubscribe compliance (email)', weight: 0.15,
+        parked: comp.unsubOk == null,
+        score: comp.unsubOk == null ? null : (comp.unsubOk ? 100 : 0),
+        display: comp.unsubOk == null ? 'not yet collected' : (comp.unsubOk ? 'OK' : 'Failing') }
     ];
-    if (haveClock) coverageParts.push(norm(idealWindowShare, 0.20, TARGET_IDEAL_WINDOW));
-    var coverageScore = coverageParts.reduce(function (a, b) { return a + b; }, 0) / coverageParts.length;
+    var gate = null;
+    if (comp.incidents && comp.incidents.some(function (i) { return i.severity === 'critical' && !i.resolved; })) {
+      gate = 'An unresolved critical compliance incident caps this score at ' + GATE_CAP + '.';
+    } else if (comp.creativesCurrent === false) {
+      gate = 'Creatives are running without a current compliance review — score capped at ' + GATE_CAP + '.';
+    } else if (comp.unsubOk === false) {
+      gate = 'Unsubscribe compliance is failing — score capped at ' + GATE_CAP + '.';
+    }
 
-    var volParts = [
-      /* Compare LIKE WITH LIKE. `TARGETS.volume` is a submitted-lead target —
-         it drives the targets card and the dashed line on Leads by day, both
-         of which count raw volume. Scoring accepted leads against it silently
-         penalised every partner by their rejection rate on top of the volume
-         they actually sent. */
-      { key: 'sufficiency', label: 'Volume vs target', weight: 0.40,
-        score: norm(m.raw / demandTarget, 0.30, 1.0),
-        display: m.raw.toLocaleString('en-US') + ' of ' + demandTarget.toLocaleString('en-US') + ' leads' },
-      { key: 'consistency', label: 'Day-to-day consistency', weight: 0.25,
-        score: norm(1 - cv, 0.30, 0.85),
+    /* ---- assemble pillars ---------------------------------------------- */
+    var domCls = units.length
+      ? units.slice().sort(function (a, b) { return b.weight - a.weight; })[0].cls
+      : 'fresh';
+
+    var convParts = ['ph', 'topTier', 'sold', 'cycle'].map(function (k) {
+      var proto = units.length ? units[0].conv.filter(function (x) { return x.key === k; })[0] : null;
+      var s = rollupPart('conv', k);
+      var av = campaignMetricValues(m);
+      var disp = { ph: pct(av.ph), topTier: av.topTier == null ? '—' : pct(av.topTier),
+                   sold: pct(av.sold), cycle: av.cycle == null ? '—' : av.cycle + 'd' }[k];
+      return { key: k, label: proto ? proto.label : k,
+        weight: { ph: 0.45, topTier: 0.20, sold: 0.20, cycle: 0.15 }[k],
+        score: s, parked: s == null, display: disp };
+    });
+
+    var av2 = campaignMetricValues(m);
+    var stabilityScore = stabilityStd == null ? null
+      : percentileScore(domCls, 'stability', stabilityStd);
+    var qualParts = [
+      { key: 'badcontact', label: 'Bad-contact rate', weight: 0.24, parked: true, score: null,
+        display: 'needs the call-outcome feed' },
+      { key: 'ipqs', label: 'Contact-validation rejects', weight: 0.22,
+        score: rollupPart('qual', 'ipqs'), display: pct(av2.ipqs) },
+      { key: 'dupe', label: 'Duplicate rate', weight: 0.20,
+        score: rollupPart('qual', 'dupe'), display: pct(av2.dupe) },
+      { key: 'accept', label: 'Acceptance rate (banded)', weight: 0.20,
+        score: rollupPart('qual', 'accept'), display: pct(av2.accept) },
+      { key: 'stability', label: 'Acceptance stability', weight: 0.14,
+        parked: stabilityScore == null, score: stabilityScore,
+        display: stabilityStd == null ? '—' : '±' + (stabilityStd * 100).toFixed(1) + 'pp weekly' }
+    ];
+    qualParts.forEach(function (p) { if (p.score == null) p.parked = true; });
+    convParts.forEach(function (p) { if (p.score == null) p.parked = true; });
+
+    var consParts = [
+      { key: 'pacing', label: 'Day-to-day pacing', weight: 0.55,
+        score: percentileScore(domCls, 'pacing', cv),
         display: 'CV ' + cv.toFixed(2) },
-      { key: 'coverage', label: 'State, window & day coverage', weight: 0.35,
-        score: coverageScore,
-        display: pct(coverageStateShare) + ' short states · ' +
-                 (haveClock ? pct(idealWindowShare) + ' in ideal windows · ' : '') +
-                 pct(dowAlignment) + ' day-split match' }
+      { key: 'stateFit', label: 'Volume in needed states', weight: 0.45,
+        score: percentileScore(domCls, 'stateFit', stateShare),
+        display: pct(stateShare) },
+      /* Blocked on time-of-day landing in the export — ADMIN-MAPPING A1. */
+      { key: 'windowFit', label: 'Send-window fit', weight: 0.0, parked: true, score: null,
+        display: 'needs time of day on the export' }
     ];
 
-    /* ---- Pillars ------------------------------------------------------- */
+    var compScore = weightedAvg(compParts);
     var pillars = [
-      /* Pillar names are what the affiliate is being measured ON, not our
-         internal category names. "Economics" in particular read as OUR
-         economics, which is precisely what they must not be scored against
-         in public. The note about a hidden margin input is gone for the same
-         reason — telling a partner they are graded on a number we will not
-         show them invites exactly one question, and it is not a good one. */
-      { key: 'economics', label: 'Conversion & value', weight: 0.50, parts: econParts,
-        score: weightedAvg(econParts) },
-      { key: 'quality', label: 'Lead quality & consistency', weight: 0.30, parts: qualParts,
-        score: weightedAvg(qualParts) },
-      { key: 'operations', label: 'How we work your leads', weight: 0.10, parts: opsParts,
-        score: null, parked: true,
-        note: 'Not scored yet — we are not reporting call timing back to you, so it is left ' +
+      { key: 'conversion', label: 'Conversion & value', weight: 0.40,
+        parts: convParts, score: weightedAvg(convParts) },
+      { key: 'quality', label: 'Delivered quality', weight: 0.35,
+        parts: qualParts, score: weightedAvg(qualParts) },
+      { key: 'compliance', label: 'Compliance & trust', weight: 0.15,
+        parts: compParts, score: compScore, parked: compScore == null,
+        note: 'The systems that feed this pillar are being built. Until they land it is left ' +
               'out of your score entirely rather than counted against you.' },
-      { key: 'volume', label: 'Volume & coverage', weight: 0.10, parts: volParts,
-        score: weightedAvg(volParts) }
+      { key: 'consistency', label: 'Consistency & coverage', weight: 0.10,
+        parts: consParts, score: weightedAvg(consParts) }
     ];
 
-    /* Renormalise across the live pillars only. */
-    var live = pillars.filter(function (p) { return !p.parked; });
+    var live = pillars.filter(function (p) { return !p.parked && p.score != null; });
     var liveWeight = live.reduce(function (a, p) { return a + p.weight; }, 0);
     live.forEach(function (p) { p.effectiveWeight = p.weight / liveWeight; });
 
     var base = live.reduce(function (a, p) { return a + p.score * p.effectiveWeight; }, 0);
-
-    /* ---- Direct penalties ---------------------------------------------- */
-    var penalties = [];
-    if (internal.clawbackRate > 0.10) {
-      penalties.push({ label: 'Elevated clawback rate', points: 5 });
-    }
-    if (internal.badContactRate > 0.20) {
-      penalties.push({ label: 'Elevated bad-contact rate', points: 5 });
-    }
-    var penaltyTotal = penalties.reduce(function (a, p) { return a + p.points; }, 0);
-
-    var final = Math.max(0, Math.min(100, base - penaltyTotal));
+    var final = Math.max(0, Math.min(100, base));
+    if (gate) final = Math.min(final, GATE_CAP);
     var rounded = Math.round(final);
 
-    /* ---- Sample gate ---------------------------------------------------- */
-    var provisional = m.maturePaid < 100;
+    /* ---- early-warning flags (fast signals vs own baseline) ------------- */
+    var flags = [];
+    if (!opts._light && stabRows) {
+      var wkAgo = D.addDays(asOf, -6);
+      var recent = { raw: 0, paid: 0, dupe: 0, ipqs: 0 };
+      var basePeriod = { raw: 0, paid: 0, dupe: 0, ipqs: 0 };
+      stabRows.forEach(function (r) {
+        var b = r.receivedAt >= wkAgo ? recent : basePeriod;
+        b.raw++;
+        if (r.status === 'paid') b.paid++;
+        if (r.rejectReason === 'duplicate') b.dupe++;
+        if (r.rejectReason === 'ipqs') b.ipqs++;
+      });
+      if (recent.raw >= 30 && basePeriod.raw >= 100) {
+        var rAcc = recent.paid / recent.raw, bAcc = basePeriod.paid / basePeriod.raw;
+        var rDup = recent.dupe / recent.raw, bDup = basePeriod.dupe / basePeriod.raw;
+        var rIpq = recent.ipqs / recent.raw, bIpq = basePeriod.ipqs / basePeriod.raw;
+        if (bAcc - rAcc >= 0.10) flags.push({
+          key: 'accept-drop', label: 'Acceptance falling',
+          detail: 'Acceptance this week is ' + pct(rAcc) + ' against your recent ' + pct(bAcc) +
+            '. The score has not moved yet — matured windows lag — but this is worth a look now.' });
+        if (rDup >= bDup * 2 && rDup - bDup >= 0.03) flags.push({
+          key: 'dupe-spike', label: 'Duplicate spike',
+          detail: 'Duplicates this week are ' + pct(rDup) + ' against your recent ' + pct(bDup) +
+            '. Check your suppression-file screening before sending more.' });
+        if (rIpq >= bIpq * 2 && rIpq - bIpq >= 0.03) flags.push({
+          key: 'ipqs-spike', label: 'Contact-validation spike',
+          detail: 'Validation rejects this week are ' + pct(rIpq) + ' against your recent ' +
+            pct(bIpq) + '. A new source or form change is the usual cause.' });
+      }
+    }
+
+    /* ---- per-campaign summary for the campaign view --------------------- */
+    var campaignScores = opts._light ? [] : units.map(function (u) {
+      /* Campaign score = the two campaign-grain pillars, renormalised. */
+      var cs = null;
+      if (u.convScore != null && u.qualScore != null) {
+        cs = (u.convScore * 0.40 + u.qualScore * 0.35) / 0.75;
+      } else if (u.convScore != null) cs = u.convScore;
+      else if (u.qualScore != null) cs = u.qualScore;
+      var r = cs == null ? null : Math.round(gate ? Math.min(cs, GATE_CAP) : cs);
+      return {
+        campaign: u.campaign, cls: u.cls, clsLabel: CLASS_LABEL[u.cls],
+        raw: u.m.raw, paid: u.m.paid, maturePaid: u.m.maturePaid,
+        provisional: u.m.maturePaid < 100,
+        score: r, tier: r == null ? null : tierFor(r),
+        conv: u.conv, qual: u.qual,
+        convScore: u.convScore == null ? null : Math.round(u.convScore),
+        qualScore: u.qualScore == null ? null : Math.round(u.qualScore)
+      };
+    }).sort(function (a, b) { return b.raw - a.raw; });
 
     return {
       score: rounded,
       tier: tierFor(rounded),
       pillars: pillars,
-      penalties: penalties,
-      provisional: provisional,
+      gate: gate,
+      flags: flags,
+      provisional: m.maturePaid < 100,
       maturePaid: m.maturePaid,
       metrics: m,
       range: range,
       rows: rows,
-      coverage: {
-        stateShare: coverageStateShare,
-        stateTarget: TARGET_STATES,
-        idealWindowShare: idealWindowShare,
-        idealWindowTarget: TARGET_IDEAL_WINDOW,
-        dowAlignment: dowAlignment,
-        dowAlignmentTarget: TARGET_DOW_ALIGNMENT,
-        dowSplit: split
-      }
+      campaigns: campaignScores,
+      classLabel: CLASS_LABEL[domCls]
     };
   }
 
-  /**
-   * 13 weekly readings, each scored over the 30 days ending that week — the
-   * 90-day trend line. This is genuinely how the weekly refresh behaves, so
-   * the shape of the line is the shape production will draw.
-   */
+  /* 13 weekly readings — the 90-day trend, exactly how the weekly refresh
+     behaves. _light skips flags and the campaign table for speed. */
   function trend(opts) {
     var points = [];
     for (var w = 12; w >= 0; w--) {
       var end = D.addDays(D.TODAY, -w * 7);
-      var start = D.addDays(end, -29);
       var s = score({
         partnerId: opts.partnerId,
         campaignId: opts.campaignId,
         subid: opts.subid,
-        range: { from: start, to: end },
+        range: { from: D.addDays(end, -29), to: end },
         asOf: end,
-        demandTarget: opts.demandTarget
+        _light: true
       });
       points.push({ date: end, score: s.score });
     }
     return points;
-  }
-
-  /**
-   * The three coverage widgets, as data.
-   *
-   * These are ASKS, not rules. We accept leads any day and any hour — see
-   * D.COVERAGE_NOTE, which every rendering of these must carry. Weighting a
-   * partner's sends this way gets faster contact and a cleaner read on their
-   * traffic; it does not gate anything.
-   */
-  function coverage(result, opts) {
-    opts = opts || {};
-    var c = result.coverage;
-
-    /* 1. States carrying unfilled budget, richest first. */
-    var states = D.stateDemand({ limit: opts.stateLimit || 6 });
-    var runsWestern = states.some(function (s) { return s.western; });
-
-    /* 2. Arrival windows — their actual split, with the two ideal ones
-          flagged. Rendered from the same rows the score was built on. */
-    var windows = D.windowSplit(result.rows || []);
-
-    /* 3. Day-of-week split against the ideal. */
-    var days = c.dowSplit;
-
-    return {
-      note: D.COVERAGE_NOTE,
-      operatingHours: D.OPERATING_HOURS,
-      states: {
-        rows: states,
-        totalUnused: states.reduce(function (a, s) { return a + s.unusedBudget; }, 0),
-        totalLeads: states.reduce(function (a, s) { return a + s.leadsNeeded; }, 0),
-        share: c.stateShare,
-        target: c.stateTarget,
-        onTarget: c.stateShare >= c.stateTarget
-      },
-      windows: {
-        rows: windows,
-        ideal: D.IDEAL_WINDOWS,
-        share: c.idealWindowShare,
-        target: c.idealWindowTarget,
-        onTarget: c.idealWindowShare >= c.idealWindowTarget,
-        /* Only surfaced when the partner actually runs western states —
-           Saturday closes at 8p ET, which is 5p Pacific. */
-        westernCaveat: runsWestern ? D.OPERATING_HOURS.saturdayWestCaveat : null
-      },
-      days: {
-        rows: days,
-        alignment: c.dowAlignment,
-        target: c.dowAlignmentTarget,
-        onTarget: c.dowAlignment >= c.dowAlignmentTarget,
-        /* The single biggest deviation, so the card can lead with it. */
-        worst: days.slice().sort(function (a, b) {
-          return Math.abs(b.delta) - Math.abs(a.delta);
-        })[0] || null
-      }
-    };
-  }
-
-  function pct(v) {
-    if (v == null || isNaN(v)) return '—';
-    return (v * 100).toFixed(1) + '%';
   }
 
   /* Severity class for a meter fill, from the same tier thresholds. */
@@ -450,9 +641,11 @@
   global.FZHealth = {
     score: score,
     trend: trend,
-    coverage: coverage,
     tierFor: tierFor,
     meterClass: meterClass,
+    classOf: classOf,
+    CLASS_LABEL: CLASS_LABEL,
+    GATE_CAP: GATE_CAP,
     TIERS: TIERS
   };
 

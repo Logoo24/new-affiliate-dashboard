@@ -2065,6 +2065,34 @@
     role: 'Compliance review'
   };
 
+  /* ---------------------------------------------------------------------- */
+  /* Compliance inputs for the health score                                  */
+  /* ---------------------------------------------------------------------- */
+  /* STANDS IN FOR THE COMPLIANCE SYSTEM THE TECH TEAM IS BUILDING — see
+     ADMIN-MAPPING §6a for the spec. Four inputs, all per affiliate:
+
+       consentPct       — % of posts carrying a TrustedForm/Jornaya cert
+       incidents        — complaint log entries, trailing 90 days:
+                          { type, severity: 'critical'|'minor', date,
+                            campaignId, resolved }
+       creativesCurrent — is the running creative set on file with Jefanie?
+       unsubOk          — email traffic: opt-out links live and correct?
+
+     null means NOT YET COLLECTED. The engine parks a null input and
+     renormalises — it never scores a gap as zero — and the gate (score cap
+     at 45) only arms once real values exist. Everything here is null in the
+     mock ON PURPOSE: these are real affiliate names, and fabricating a TCPA
+     incident against one in a reviewable prototype is not acceptable. The
+     gate code path is exercised by unit inspection instead. */
+  function complianceFor(partnerId) {
+    return {
+      consentPct: null,
+      incidents: null,
+      creativesCurrent: null,
+      unsubOk: null
+    };
+  }
+
   /* Test-lead conventions — system values, not suggestions. The test ZIP
      routes the lead down the test path, and dev_test as the first name is
      how the team spots test rows in the lead table. */
@@ -2786,6 +2814,7 @@
     API_SPECS: API_SPECS,
     TEST_LEAD: TEST_LEAD,
     TRACKING_PARAMS: TRACKING_PARAMS,
+    complianceFor: complianceFor,
     setupCampaignsFor: setupCampaignsFor,
     campaignSetup: campaignSetup,
     saveSetupState: saveSetupState,

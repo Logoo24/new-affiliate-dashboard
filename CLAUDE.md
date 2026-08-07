@@ -183,20 +183,32 @@ wrongly flagged on a July unfire list. Every criteria label renders through
 `rejectLabel(reason, partnerId)`. **A hardcoded 45–75 anywhere will misreport our largest
 partner.**
 
-## The scoring engine (`health.js`)
+## The scoring engine (`health.js`) — v2, redesigned Aug 7 2026
 
-Four pillars, weighted, normalised 0–100: Economics ~50%, Delivered quality ~30%, Speed &
-operations ~10% (**parked**), Volume & coverage ~10%. Tiers: Scale 80+, Healthy 60+, Watch 45+,
-Intervene below. Below 100 matured paid leads it renders as **Provisional**.
+Four pillars, affiliate-visible, built **only from what the affiliate controls**: Conversion &
+value 40%, Delivered quality 35%, Compliance & trust 15% (**also a gate** — a critical failure
+caps the score at 45), Consistency & coverage 10%. Tiers: Scale 80+, Healthy 60+, Watch 45+,
+Intervene below (affiliate-facing labels differ; `TIERS[].internal` keeps ours). Below 100
+matured paid leads it renders as **Provisional**.
 
-- The **parked pillar is excluded and the remaining three renormalised to 100**, not scored zero —
-  scoring it zero would silently cap every partner at 90 and make the model look broken. When
-  `speed_to_lead` and `call_attempts_to_convert` land, set `parked: false` and the weights snap
-  back on their own.
-- The **margin input is read here and converted to a sub-score here**. It is never attached to any
-  object the view layer touches, so the affiliate sees the same number we do without being able to
-  reverse-engineer our economics. `D._internalAggregates()` exists for this and is deliberately not
-  part of `queryLeads()`.
+Two deliberate deletions — **do not rebuild either**:
+
+- The v1 **Speed & operations pillar is deleted, not parked.** Speed-to-lead and call attempts
+  measure OUR call floor, not their traffic. They are internal ops diagnostics (Module F).
+- The v1 **hidden margin input is out of the score.** Margin lives in the internal overlay on
+  the Data connections partner table (score × volume-tier grid), beside the score, never in it.
+  The affiliate-visible number and the internal number are the same number.
+
+Mechanics the build must copy: **percentile calibration** against our own book per **campaign
+class** (fresh annuity / aged annuity / life — the campaign is the scoring unit, rolled up
+volume-weighted; class pools win over the global pool even when tiny), **shrinkage** of
+small-sample rates toward the class median, **banded** acceptance (never continuous),
+missing data **excluded and renormalised** (never scored zero), and **early-warning flags**
+computed separately from the score (fast signals vs the partner's own baseline — detection,
+not judgment). Calibration is a stored table recomputed quarterly in production, never
+per-request. Compliance inputs come through `D.complianceFor()` — all null in the mock on
+purpose (real affiliate names; nothing is fabricated against them), which parks the pillar
+and disarms the gate.
 
 ## Things flagged as open, not done
 

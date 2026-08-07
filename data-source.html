@@ -93,9 +93,11 @@
       </div>
 
       <section class="card">
-        <div class="card-head"><div><h2>Partner views built from the data</h2>
-          <p class="sub">Every affiliate in the export becomes a selectable view.</p></div></div>
+        <div class="card-head"><div><h2>Partner views built from the data — with the internal overlay</h2>
+          <p class="sub">Every affiliate in the export becomes a selectable view. Health score × volume tier
+          is Michael's management grid; margin joins it once the phantom-COGS fix lands.</p></div></div>
         <div class="table-wrap"><table class="data" id="partner-table"></table></div>
+        <div class="card-foot" id="partner-foot"></div>
       </section>
 
     </div>
@@ -249,23 +251,42 @@
     ['Billing terms, contacts, users', '<strong>Not in the export.</strong> Placeholders.']
   ]);
 
-  /* ---- partners ---------------------------------------------------------- */
+  /* ---- partners + the internal overlay -----------------------------------
+     Score × volume tier is the management grid from Michael's May 22 email:
+     the score answers "is the traffic good", the volume tier answers "at
+     what scale", and the quadrants drive scale / support / pause decisions.
+     The score shown here is EXACTLY the affiliate-visible number — the
+     overlay adds columns beside it, never a different number with the same
+     name. Margin joins as a column once lead_cost is fixed (A6). */
   (function () {
+    var H = window.FZHealth;
+    function volTier(perDay) {
+      if (perDay >= 100) return '100+/day';
+      if (perDay >= 50) return '50+/day';
+      if (perDay >= 25) return '25+/day';
+      return '<25/day';
+    }
     var rows = Object.keys(D.PARTNERS).map(function (id) {
       var lc = D.queryLeads({ partnerId: id, from: D.addDays(D.TODAY, -400), to: D.TODAY });
+      var win = D.queryLeads({ partnerId: id, from: D.addDays(D.TODAY, -29), to: D.TODAY });
+      var hs = H.score({ partnerId: id, _light: true });
       return {
         id: id, p: D.PARTNERS[id],
         camps: D.campaignsFor(id).length,
         comps: D.compsFor(id).map(function (c) { return c.label; }).join(', ') || '—',
         act: D.isPartnerActive(id),
-        m: D.computeMetrics(lc, null, { rateBasis: D.rateBasisFor(id) })
+        m: D.computeMetrics(lc, null, { rateBasis: D.rateBasisFor(id) }),
+        hs: hs,
+        perDay: win.length / 30
       };
     }).sort(function (a, b) { return b.m.raw - a.m.raw; });
 
     document.getElementById('partner-table').innerHTML =
       '<thead><tr><th>Affiliate</th><th>Aff ID</th><th class="num">Leads</th>' +
       '<th class="num">Accepted</th><th class="num">Sold</th><th class="num">Campaigns</th>' +
-      '<th>Comp model</th><th>Status</th><th></th></tr></thead><tbody>' +
+      '<th>Comp model</th><th>Status</th>' +
+      '<th class="num">Health</th><th>Band (internal)</th><th class="num">Leads/day (30d)</th><th>Vol tier</th>' +
+      '<th></th></tr></thead><tbody>' +
       rows.map(function (r) {
         return '<tr>' +
           '<td><strong>' + A.esc(r.p.name) + '</strong></td>' +
@@ -277,10 +298,29 @@
           '<td>' + A.esc(r.comps) + '</td>' +
           '<td><span class="badge ' + (r.act.active ? 'badge-good' : 'badge-warn') + '">' +
             '<span class="dot"></span>' + (r.act.active ? 'Active' : 'Inactive') + '</span></td>' +
+          '<td class="num" style="font-weight:700">' + r.hs.score +
+            (r.hs.provisional ? '<span style="color:var(--ink-muted);font-weight:400">*</span>' : '') + '</td>' +
+          '<td><span class="badge ' + r.hs.tier.badge + '"><span class="dot"></span>' +
+            A.esc(r.hs.tier.internal) + '</span></td>' +
+          '<td class="num">' + r.perDay.toFixed(1) + '</td>' +
+          '<td style="white-space:nowrap">' + volTier(r.perDay) + '</td>' +
           '<td style="text-align:right"><a class="btn btn-sm" href="' +
             A.linkTo('partnership.html', state, { partner: r.id }) + '">View →</a></td>' +
         '</tr>';
       }).join('') + '</tbody>';
+
+    /* Michael's KPI counts, straight off the grid. */
+    var over25 = rows.filter(function (r) { return r.perDay >= 25; }).length;
+    var over50 = rows.filter(function (r) { return r.perDay >= 50; }).length;
+    var over100 = rows.filter(function (r) { return r.perDay >= 100; }).length;
+    var scaling = rows.filter(function (r) { return r.perDay >= 25 && r.hs.score >= 60; }).length;
+    var danger = rows.filter(function (r) { return r.perDay >= 25 && r.hs.score < 45; }).length;
+    document.getElementById('partner-foot').innerHTML =
+      '<span>* provisional (&lt;100 matured). Grid counts: <strong>' + over25 + '</strong> affiliates ≥25/day · ' +
+      '<strong>' + over50 + '</strong> ≥50/day · <strong>' + over100 + '</strong> ≥100/day · ' +
+      '<strong>' + scaling + '</strong> scaling (≥25/day and Healthy+) · ' +
+      '<strong style="color:var(--critical-text)">' + danger + '</strong> in the danger quadrant ' +
+      '(≥25/day, score &lt;45).</span>';
   })();
 
   if (window.FZTable) FZTable.enhanceAll();
