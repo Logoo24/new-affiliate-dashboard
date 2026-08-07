@@ -71,11 +71,23 @@
           <div class="spacer"></div>
           <div style="display:flex;gap:8px;align-items:center">
             <div id="product-toggle"></div>
-            <button class="btn btn-sm" id="full-criteria">View full criteria</button>
+            <a class="btn btn-sm" id="full-criteria" target="_blank" rel="noopener">View full criteria ↗</a>
           </div>
         </div>
         <div class="card-body">
           <div id="criteria-chips" class="user-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Creatives</h2>
+            <p class="sub">Example ads that convert on each product, and the rules yours need to follow.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="creative-btns" style="display:flex;gap:10px;flex-wrap:wrap"></div>
         </div>
       </section>
 
@@ -185,6 +197,12 @@
       if (products.indexOf(p) === -1 && crit[p]) products.push(p);
     });
     if (!products.length) products = ['annuity'];
+    /* Annuity is the primary product and always leads the toggle,
+       regardless of which campaign happens to be listed first. */
+    products.sort(function (a, b) {
+      var ORDER = ['annuity', 'life'];
+      return ORDER.indexOf(a) - ORDER.indexOf(b);
+    });
     var current = products[0];
 
     document.getElementById('criteria-tip-host').innerHTML =
@@ -222,19 +240,42 @@
     }
     renderChips();
 
-    /* Full detail lives behind the button, not on the page. */
-    document.getElementById('full-criteria').addEventListener('click', function () {
-      var rows = crit[current].map(function (r) {
-        return '<tr' + (r.highlight ? ' style="background:var(--surface-2)"' : '') + '>' +
-          '<th style="width:28%;text-align:left;font-weight:600">' + A.esc(r.label) + '</th>' +
-          '<td>' + A.esc(r.value) + '</td></tr>';
-      }).join('');
-      A.openModal({
-        title: 'Full lead criteria — ' + current.charAt(0).toUpperCase() + current.slice(1),
-        html: '<div class="table-wrap"><table class="data"><tbody>' + rows + '</tbody></table></div>' +
-          '<p style="margin-top:14px;color:var(--ink-muted);font-size:13px">These are your ' +
-          'account\'s terms. If something looks wrong, contact your account manager.</p>',
-        returnFocusTo: document.getElementById('full-criteria')
+    /* Full detail is the criteria Google Doc, opened in a new tab. The doc
+       is the STANDARD criteria — negotiated per-account terms (like the
+       OptiLabX age band) live in the chips above, which is why the chips
+       stay even though the doc exists. */
+    document.getElementById('full-criteria').href = D.CRITERIA_DOC_URL;
+  })();
+
+  /* ---- creatives ----------------------------------------------------------
+     Example creatives and the guidelines doc. URLs are admin-set, same rule
+     as the document library: an unset link says so instead of dead-ending.
+     See ADMIN-MAPPING §7c. */
+  (function () {
+    document.getElementById('creative-btns').innerHTML = D.CREATIVE_LINKS.map(function (c, i) {
+      if (c.url) {
+        return '<a class="btn' + (i === 0 ? ' btn-primary' : '') + '" href="' + A.esc(c.url) +
+          '" target="_blank" rel="noopener">' + A.esc(c.label) + ' ↗</a>';
+      }
+      return '<button type="button" class="btn" data-creative="' + c.key + '">' +
+        A.esc(c.label) + '</button>';
+    }).join('');
+
+    document.querySelectorAll('[data-creative]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var c = D.CREATIVE_LINKS.filter(function (x) { return x.key === b.dataset.creative; })[0];
+        A.openModal({
+          title: c.label,
+          html: '<div class="notice notice-mock"><span class="ico">✎</span><div>' +
+            '<strong>Not linked yet.</strong> This will open the ' +
+            (c.key === 'guidelines' ? 'creative guidelines document'
+                                    : 'example creatives folder') +
+            ' once it is connected on the admin side. For now, ask your account manager.' +
+            '</div></div>' +
+            '<p style="color:var(--ink-2);font-size:14px">' +
+            '<a href="mailto:logan@financialize.com">logan@financialize.com</a></p>',
+          returnFocusTo: b
+        });
       });
     });
   })();

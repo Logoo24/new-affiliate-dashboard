@@ -587,7 +587,9 @@ Logan's spec), a document library, and the account-manager contact.
 | Element | Source | Status |
 |---|---|---|
 | Document list | `DOCUMENTS` in `data.js` | **NEEDS BUILDING** — `documents (key, label, description, url, scope, sort_order, featured)` |
-| Affiliate onboarding, Lead criteria, Annuity API, Life API | one global URL each | **NEEDS BUILDING** as rows in that table |
+| Affiliate onboarding, Lead criteria, Annuity API, Life API | one global URL each | **NEEDS BUILDING** as rows in that table. Lead criteria already has its real URL — see below |
+| **Full-criteria doc URL** | `CRITERIA_DOC_URL` in `data.js` — **one constant read by both** the Targeting page's "View full criteria" link and the document library's Lead criteria card, so the two cannot point at different versions | **LIVE URL in the mock** (Logan's Google Doc). Note the doc is the **standard** criteria — negotiated per-account terms (the OptiLabX 45–79 band) render in the Targeting chips, which is why the chips stay even though the doc exists |
+| **Creatives (Targeting page)** | `CREATIVE_LINKS` in `data.js` — three admin-set URLs: example annuity creatives, example life creatives, creative guidelines | **NEEDS BUILDING** — three URL settings (or rows in the `documents` table with a `creatives` scope). All three are **null in the mock** and render a "not linked yet" modal, never a dead button |
 | **Your agreement** | a **different URL per affiliate** | **NEEDS BUILDING** — a Google Doc URL field on the affiliate record |
 | New / edit campaign flows | — | **NOT SPECIFIED.** Placeholder modals pointing at Logan until he defines the flow |
 | Test lead sandbox | `sandboxCheck()` in `data.js`, reading the account's criteria record (age band off the partner record, so negotiated exceptions hold) | **NEEDS BUILDING** — a sandbox endpoint that runs the **real intake filter chain** against the account's criteria; a re-implemented rule list drifts. Auth, logging and rate limits mirror the duplicate lookup. Rejection reasons must be the same strings the lead table shows. Pairs with the Phase-3 pre-send validation API (IMPROVEMENTS §3) |

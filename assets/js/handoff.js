@@ -228,6 +228,12 @@
       storage: 'documents (key, label, description, url, scope, sort_order, featured). Must ' +
                'support ADDING documents without a deploy.' },
 
+    { group: 'Content', name: 'Creative links', status: 'build',
+      controls: 'The three buttons on Targeting\'s Creatives card: example annuity creatives, ' +
+                'example life creatives, creative guidelines.',
+      today: 'CREATIVE_LINKS constant in data.js, all three null — clicks show "not linked yet".',
+      storage: 'Three URL settings, or documents-table rows with a creatives scope.' },
+
     { group: 'Content', name: 'Per-affiliate agreement URL', status: 'build',
       controls: 'The "Your agreement" card, which links to that partner\'s own Google Doc.',
       today: 'sessionStorage stub.',

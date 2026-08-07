@@ -2165,13 +2165,19 @@
                          affiliate's record and it renders only for them.
 
      See ADMIN-MAPPING §7. */
+  /* The real full-criteria document (Logan's). One constant, read by the
+     Targeting page's "View full criteria" link and the document library, so
+     the two can never point at different versions. */
+  var CRITERIA_DOC_URL =
+    'https://docs.google.com/document/d/1c5HDngeA34yM-7yh9zvah6Dl-sWuHOxP0hksgDhTfwA/edit?usp=sharing';
+
   var DOCUMENTS = [
     { key: 'onboarding', label: 'Affiliate onboarding', scope: 'global', featured: true,
       desc: 'Start here. How to get set up, post leads and get paid.',
       url: 'https://docs.google.com/document/d/FZ-onboarding' },
     { key: 'criteria', label: 'Lead criteria', scope: 'global',
       desc: 'The full accepted-lead criteria for every product.',
-      url: 'https://docs.google.com/document/d/FZ-lead-criteria' },
+      url: CRITERIA_DOC_URL },
     { key: 'agreement', label: 'Your agreement', scope: 'partner',
       desc: 'Your signed partnership agreement and commercial terms.' },
     { key: 'api_annuity', label: 'Annuity API documentation', scope: 'global',
@@ -2180,6 +2186,15 @@
     { key: 'api_life', label: 'Life API documentation', scope: 'global',
       desc: 'Endpoint, field spec and response codes for life posts.',
       url: 'https://docs.google.com/document/d/FZ-api-life' }
+  ];
+
+  /* Creative resources for the Targeting page. Admin-set URLs under the same
+     rule as the document library: null means NOT LINKED YET and must render
+     as such, never as a dead button. See ADMIN-MAPPING §7c. */
+  var CREATIVE_LINKS = [
+    { key: 'annuity_examples', label: 'See example annuity creatives', url: null },
+    { key: 'life_examples', label: 'See example life creatives', url: null },
+    { key: 'guidelines', label: 'Creative guidelines', url: null }
   ];
 
   /* Per-partner document URLs. sessionStorage stands in for the admin field;
@@ -2624,6 +2639,8 @@
     DOCUMENTS: DOCUMENTS,
     documentsFor: documentsFor,
     savePartnerDocUrl: savePartnerDocUrl,
+    CRITERIA_DOC_URL: CRITERIA_DOC_URL,
+    CREATIVE_LINKS: CREATIVE_LINKS,
     rejectFix: rejectFix,
     SOLD_TYPES: SOLD_TYPES,
     NORTH_STAR_TYPES: NORTH_STAR_TYPES,
