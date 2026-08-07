@@ -14,7 +14,8 @@ data — no framework, no build step, nothing that implies a stack change. **The
 stays PHP.** Every interaction here is a form GET and a query-string state change, which is the
 shape a PHP build takes anyway.
 
-Open `index.html` in a browser. No server needed.
+Open `index.html` in a browser — it forwards to `partnership.html`, the landing screen. No
+server needed.
 
 ---
 
@@ -35,8 +36,8 @@ These are the minimum bar. Everything else is upside.
 
 | File | Module | What it covers |
 |---|---|---|
-| `partnership.html` | 0 | Partnership summary — who they are, active campaigns with CID and comp model, account terms, our operating hours |
-| `index.html` | A | Performance overview — date range, headline tiles, daily charts, campaign and sub-ID breakdown, rejection reasons |
+| `partnership.html` | 0 | Partnership summary — who they are, active campaigns with CID and comp model, account terms, our operating hours. **The landing screen: the base URL routes here** (`index.html` is only a forwarding stub in the mock) |
+| `performance.html` | A | Performance overview — date range, headline tiles, daily charts, campaign and sub-ID breakdown, rejection reasons |
 | `leads.html` | B | Lead table — every column available to that affiliate, exact system values, CSV export |
 | `duplicate-check.html` | C | **Duplicates & suppression** — the suppression file leads the page, then the 365-day Priority/Hot lookup, single and bulk |
 | `health.html` | D | Health scorecard — the score dial as the hero, pillar breakdown, 90-day trend, and a collapsible "how the score is built" |

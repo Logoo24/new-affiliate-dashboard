@@ -23,13 +23,15 @@ valuable to the affiliate beyond what is built, phased by value per unit of effo
 
 ## Running it
 
-Open `index.html` in any browser. No server, no build step, no dependencies.
+Open `index.html` in any browser — it lands on the Partnership summary. No server, no build
+step, no dependencies.
 
 ## Repo layout
 
 ```
-partnership.html        Partnership summary       (landing screen)
-index.html              Performance overview      (Module A)
+index.html              Redirect stub — forwards / to partnership.html
+partnership.html        Partnership summary       (landing screen, default page)
+performance.html        Performance overview      (Module A)
 leads.html              Lead table + CSV export   (Module B)
 duplicate-check.html    365-day phone lookup      (Module C)
 health.html             Lead health scorecard     (Module D)

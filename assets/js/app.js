@@ -29,7 +29,7 @@
      on purpose — they inherit the rail's ink like the labels do. */
   var NAV = [
     { href: 'partnership.html',    label: 'Partnership summary', ico: '⌂' },
-    { href: 'index.html',          label: 'Performance',      ico: '↗' },
+    { href: 'performance.html',    label: 'Performance',      ico: '↗' },
     { href: 'leads.html',          label: 'Lead table',       ico: '☰' },
     { href: 'health.html',         label: 'Lead health',      ico: '♥' },
     { href: 'targeting.html',      label: 'Targeting',        ico: '◎' },

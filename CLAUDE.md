@@ -23,7 +23,8 @@ populate in production.
 
 ## Running it
 
-No build step, no dependencies, no server. Open `index.html` in a browser.
+No build step, no dependencies, no server. Open `index.html` in a browser — it forwards to
+`partnership.html`, the landing screen. The Performance overview lives at `performance.html`.
 
 If you do serve it over HTTP, **use a server that does not rewrite URLs.** All state in this
 prototype lives in the query string, and `npx serve` 301-redirects `/index.html` → `/index` while
@@ -46,9 +47,10 @@ at the bottom of each HTML file.
 
 | File | Module | Screen |
 |---|---|---|
-| `partnership.html` | 0 | Partnership summary — landing screen |
+| `index.html` | — | Redirect stub only — forwards `/` to `partnership.html`, preserving the query string |
+| `partnership.html` | 0 | Partnership summary — landing screen and the default page |
 | `compensation.html` | — | Compensation — earnings for the window, billing terms, monthly statements, clawback report |
-| `index.html` | A | Performance overview |
+| `performance.html` | A | Performance overview |
 | `leads.html` | B | Lead table + CSV export |
 | `duplicate-check.html` | C | 365-day phone lookup |
 | `health.html` | D | Health scorecard |
