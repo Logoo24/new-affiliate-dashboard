@@ -76,7 +76,7 @@ below; this is the summary to work from.
 | B9 | **Google Chat deep link** | Chat button on Partnership summary | Currently a generic chat.google.com link |
 | B10 | **Per-user table preferences** | Which columns a user shows/hides, column widths, and their chosen sort | Every table is sortable, resizable and column-configurable. The mock persists this to `sessionStorage`, so it survives paging but dies with the tab. In production it should be a **stored user preference** on `affiliate_users` (see §1a) — a media buyer who hides six columns expects them to stay hidden next login |
 | B11 | **`documents` table** | The Helpful documents section on Setup & docs | Must support adding and re-linking documents **without a deploy**. §7c |
-| B12 | **Per-affiliate agreement URL** | The "Your agreement" card | A Google Doc URL on the affiliate record, different for every partner. An affiliate with none set renders "not linked yet", never a dead button. §7c |
+| B12 | **Per-affiliate agreement URL** | The "Your agreement" card | A Google Drive URL on the affiliate record, different for every partner, pasted by the admin when the agreement is signed. An affiliate with none set renders "not linked yet", never a dead button. **Restricted sharing — the Drive share list, not the link, is the access control.** Workflow and rules in §7c |
 | B13 | **Per-affiliate lead criteria** | Every criteria line on Targeting, and the age wording in rejection labels | The OptiLabX 45–79 band already proves criteria are negotiated per account. **Any** criteria value may differ, not just age. §1 |
 | B14 | **Comp model as a real campaign column** | The entire column projection | Currently parsed out of the campaign *name*. This is the most load-bearing value in the system and it is being inferred from a string. §2 |
 | B15 | **Monthly lead-statement URL per affiliate** | Lead statements on the Compensation page | A Google Sheet URL per affiliate per month, pasted by the admin after the statement is generated (first business day after month close, give or take). A month with none renders "Not linked yet", never a dead button. §7e |
@@ -657,7 +657,7 @@ Logan's spec), a document library, and the account-manager contact.
 | Affiliate onboarding, Lead criteria, Annuity API, Life API | one global URL each | **NEEDS BUILDING** as rows in that table. Lead criteria already has its real URL — see below |
 | **Full-criteria doc URL** | `CRITERIA_DOC_URL` in `data.js` — **one constant read by both** the Targeting page's "View full criteria" link and the document library's Lead criteria card, so the two cannot point at different versions | **LIVE URL in the mock** (Logan's Google Doc). Note the doc is the **standard** criteria — negotiated per-account terms (the OptiLabX 45–79 band) render in the Targeting chips, which is why the chips stay even though the doc exists |
 | **Creatives (Targeting page)** | `CREATIVE_LINKS` in `data.js` — three admin-set URLs: example annuity creatives, example life creatives, creative guidelines | **NEEDS BUILDING** — three URL settings (or rows in the `documents` table with a `creatives` scope). All three are **null in the mock** and render a "not linked yet" modal, never a dead button |
-| **Your agreement** | a **different URL per affiliate** | **NEEDS BUILDING** — a Google Doc URL field on the affiliate record |
+| **Your agreement** | a **different URL per affiliate** — a URL field on the affiliate record, pasted by the admin. **Working in the mock:** the Admin settings page has a live per-affiliate paste field (sessionStorage standing in for the record field) so the flow is reviewable end to end | **NEEDS BUILDING** — the record field plus the admin edit box. Full workflow and sharing rules below |
 | New / edit campaign flows | — | **NOT SPECIFIED.** Placeholder modals pointing at Logan until he defines the flow |
 | ~~Test lead sandbox~~ — **REMOVED Aug 7** | was `sandboxCheck()` in `data.js` | Built Aug 6, removed on Logan's call the next day: checking a hand-typed lead against acceptance criteria is not something affiliates need. **What Logan actually wants in this slot is a PIXEL TEST** — a tool that verifies the tracking pixel fires correctly on the affiliate's landing page. Not built; when it is scoped it should be the affiliate-facing front end to Marc Heberling's pixel-validation work (see §8), not a second implementation |
 | Contact block | Logan Randall, logan@financialize.com | constant; should join from the CRM like §1's account manager |
@@ -669,6 +669,30 @@ Two rules the implementation has to keep:
 2. **A document with no URL renders "not linked yet", never a dead button.** `scope: 'partner'`
    documents are unset for most affiliates on day one, and a button that 404s reads as a broken
    portal rather than an unfinished record.
+
+### The agreement — workflow and sharing rules (differs from every other document)
+
+**The workflow (Logan's):** an agreement is signed → Logan logs into the admin and pastes the
+Google Drive link on that affiliate's record → the "Your agreement" card on their Setup & docs
+page links to it. Until then the card shows "Not linked yet". Re-signing or amending = paste the
+new link over the old one; nothing else changes.
+
+**The sharing model is the access control, and it is deliberately different from the public
+docs.** Onboarding, criteria, the API docs and the landing-page doc are all *anyone with the
+link can view*. The agreement is **shared directly with the email address of each user on that
+account** — a stranger with the URL hits Google's request-access wall. Three obligations follow:
+
+1. **The Drive share list must follow the account's user list.** Adding a portal user includes
+   sharing the agreement with their email; deactivating a user includes removing their Drive
+   access the same day — otherwise the agreement outlives their portal access. Manual for Logan
+   at first; scriptable later via the Drive API. The rule matters more than the automation.
+2. **The link stays inside the portal.** It renders only on the authenticated account's own
+   page, and never goes out in notification emails (link to the portal page instead), CSV
+   exports, or query strings.
+3. **Expect the request-access wall.** A user signed into the wrong Google account will hit it —
+   the card's hover tip already tells them to check which address they're signed in with or ask
+   their account manager. That one sentence is the difference between a self-serve fix and a
+   support email.
 
 ---
 

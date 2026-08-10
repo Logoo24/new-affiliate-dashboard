@@ -298,10 +298,19 @@
       storage: 'Three URL settings, or documents-table rows with a creatives scope.' },
 
     { group: 'Content', name: 'Per-affiliate agreement URL', status: 'build',
-      controls: 'The "Your agreement" card, which links to that partner\'s own Google Doc.',
-      today: 'sessionStorage stub.',
-      storage: 'A URL field on the affiliate record. An affiliate with no URL set must render ' +
-               '"not linked yet" rather than a dead button.' },
+      controls: 'The "Your agreement" card on Setup & docs, which links to that partner\'s own ' +
+                'Google Drive doc. Logan\'s workflow: agreement signed → paste the Drive link ' +
+                'on the affiliate\'s record → the card renders it.',
+      today: 'WORKING in the mock: the Admin settings page has a live per-affiliate paste ' +
+             'field (sessionStorage standing in for the record field).',
+      storage: 'A URL field on the affiliate record, editable in the admin. No URL set must ' +
+               'render "not linked yet" rather than a dead button.',
+      risk: 'Sharing model differs from every other document: the Drive doc is shared ' +
+            'DIRECTLY with each account user\'s email, never "anyone with the link" — the ' +
+            'share list is the access control, and it must follow the user list (add a user → ' +
+            'share; deactivate → unshare same day). The link renders only inside the portal ' +
+            'for that account\'s session and must never appear in emails, exports, or query ' +
+            'strings.' },
 
     { group: 'Account', name: 'Affiliate users & contacts', status: 'build',
       controls: 'Who can log in, and the contact block on the Account page.',

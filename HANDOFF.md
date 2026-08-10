@@ -333,6 +333,22 @@ on the API path), confirmed from both sides before go-live.
 
 ---
 
+### DECISION — the agreement link is admin-pasted, restricted-shared (Aug 8)
+
+The "Your agreement" card links to **whatever Google Drive URL the admin sets on that
+affiliate's record**. Logan's workflow: agreement signed → log into the admin → paste the link
+→ it renders on that partner's Setup & docs page. The Admin settings preview carries a working
+version of the paste field so the flow is reviewable.
+
+The part that differs from every other document: the public docs (onboarding, criteria, API,
+landing pages) are *anyone-with-the-link*; the agreement's Drive doc is **shared directly with
+the email of each user on the account**, so the share list — not the link — is the access
+control. Two obligations ride with that: the share list must follow the account's user list
+(add a user → share; deactivate → unshare same day), and the link never leaves the portal — not
+in emails, not in exports, not in query strings. Full rules in ADMIN-MAPPING §7c.
+
+---
+
 ### DECISION — rejected-but-sold leads ARE visible to RevShare partners
 
 **This overrides the affiliate context document.** That doc (§16) lists "rejected-but-sold rows"

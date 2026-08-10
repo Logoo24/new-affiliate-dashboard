@@ -133,7 +133,7 @@
       var inner =
         '<div style="font-size:' + (big ? '17' : '15') + 'px;font-weight:600">' + A.esc(d.label) +
           (d.scope === 'partner'
-            ? A.tip('This document is specific to your account and is linked by your account manager.')
+            ? A.tip('Private to your account — shared directly with the users on this account, not by public link. If Google asks you to request access, check you are signed into the email address on your portal account, or ask your account manager.')
             : '') + '</div>' +
         '<div style="font-size:13px;color:var(--ink-2);margin-top:4px">' + A.esc(d.desc) + '</div>' +
         (linked ? '' : '<div style="margin-top:8px"><span class="badge badge-warn">' +

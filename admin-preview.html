@@ -37,7 +37,34 @@
         toggles below are inert on purpose. The data side of the handoff is on
         <strong>Data connections</strong>; the reasoning is in <strong>ADMIN-MAPPING.md</strong>.
         Delete this page before anything goes in front of a partner.
+        <strong>One exception:</strong> the agreement-links section below is live (browser
+        session only) so the sign → paste → renders flow can be tried end to end.
       </div></div>
+
+      <!-- THE ONE LIVE CONTROL ON THIS PAGE. Logan's workflow: an agreement
+           is signed → he opens this screen → pastes the Google Drive link on
+           that affiliate's row → the "Your agreement" card on their Setup &
+           docs page links to it. Persistence here is sessionStorage standing
+           in for a URL field on the affiliate record — see ADMIN-MAPPING §7c. -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Per-affiliate agreement links</h2>
+            <p class="sub">Paste the signed agreement’s Google Drive link on the affiliate’s row. It renders on their Setup &amp; docs page; no link renders as “Not linked yet”.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="agreement-config"></table>
+        </div>
+        <div class="card-foot">
+          <strong>Sharing rules, which are the real access control:</strong> the Drive doc is
+          shared <em>directly with the email of every user on that account</em> — never
+          “anyone with the link”, unlike the public documents. Adding a portal user includes
+          sharing the doc with them; deactivating one includes removing their Drive access the
+          same day. The link renders only inside the portal for that account’s session — never
+          in emails, exports, or query strings.
+        </div>
+      </section>
 
       <section class="card">
         <div class="card-head">
@@ -224,6 +251,66 @@
         render();
       });
     });
+    render();
+  })();
+
+  /* ---- per-affiliate agreement links -------------------------------------
+     LIVE, unlike everything else here: saves through savePartnerDocUrl()
+     (sessionStorage standing in for a URL field on the affiliate record),
+     which is the same store the Setup & docs "Your agreement" card reads —
+     so a paste here is immediately visible on that partner's dashboard. */
+  (function () {
+    var host = document.getElementById('agreement-config');
+
+    function agreementUrl(pid) {
+      var doc = D.documentsFor(pid).filter(function (d) { return d.key === 'agreement'; })[0];
+      return (doc && doc.url) || '';
+    }
+
+    function render() {
+      var head = '<thead><tr><th style="width:22%">Affiliate</th><th>Agreement link</th>' +
+        '<th style="width:14%">Status</th><th style="width:16%"></th></tr></thead>';
+      var body = Object.keys(D.PARTNERS).map(function (pid) {
+        var p = D.PARTNERS[pid];
+        var url = agreementUrl(pid);
+        return '<tr data-pid="' + A.esc(pid) + '">' +
+          '<td><strong>' + A.esc(p.shortName) + '</strong>' +
+            '<div class="quota" style="font-size:11.5px">' + A.esc(p.name) + '</div></td>' +
+          '<td><input type="url" data-agr-url placeholder="https://drive.google.com/…" ' +
+            'value="' + A.esc(url) + '" style="width:100%;min-width:220px;font-size:12.5px;' +
+            'font-family:ui-monospace,monospace;padding:6px 8px;' +
+            'border:1px solid var(--border-strong);border-radius:6px;' +
+            'background:var(--surface-1);color:var(--ink)"></td>' +
+          '<td>' + (url
+            ? '<span class="badge badge-good"><span class="dot"></span>Linked</span>'
+            : '<span class="badge badge-warn"><span class="dot"></span>Not linked</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap">' +
+            '<button type="button" class="btn btn-sm btn-primary" data-agr-save>Save</button> ' +
+            '<button type="button" class="btn btn-sm" data-agr-clear' +
+              (url ? '' : ' disabled') + '>Clear</button></td>' +
+          '</tr>';
+      }).join('');
+      host.innerHTML = head + '<tbody>' + body + '</tbody>';
+
+      host.querySelectorAll('tr[data-pid]').forEach(function (tr) {
+        var pid = tr.getAttribute('data-pid');
+        var input = tr.querySelector('[data-agr-url]');
+        tr.querySelector('[data-agr-save]').addEventListener('click', function () {
+          var v = input.value.trim();
+          if (v && !/^https:\/\//i.test(v)) {
+            input.style.borderColor = 'var(--critical-text)';
+            input.title = 'Needs a full https:// link.';
+            return;
+          }
+          D.savePartnerDocUrl(pid, 'agreement', v || null);
+          render();
+        });
+        tr.querySelector('[data-agr-clear]').addEventListener('click', function () {
+          D.savePartnerDocUrl(pid, 'agreement', null);
+          render();
+        });
+      });
+    }
     render();
   })();
 

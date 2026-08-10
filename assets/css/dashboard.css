@@ -436,6 +436,11 @@ h3 { font-size: 15px; }
   background: var(--surface-1);
   color: var(--ink);
   cursor: pointer;
+  /* A button never wraps internally — link-buttons ("View details →") are
+     inline <a>s and would otherwise split mid-label inside narrow table
+     cells. The table scrolls in its .table-wrap instead. */
+  white-space: nowrap;
+  display: inline-block;
 }
 .btn:hover { background: var(--surface-2); }
 /* For the one action a screen exists to make obvious. */
