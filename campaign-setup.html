@@ -195,6 +195,14 @@
         '<p style="margin:10px 0 4px"><a class="btn btn-sm" ' +
         (doc && doc.url ? 'href="' + A.esc(doc.url) + '" target="_blank" rel="noopener"' : '') +
         '>' + A.esc(c.product) + ' API documentation ↗</a></p>';
+    } else {
+      /* The LP path's spec doc, mirroring the API path's link above. Pulled
+         from the registry by key, so the URL lives in one place. */
+      var lpDoc = D.documentsFor(state.partnerId).filter(function (d) { return d.key === 'landing_pages'; })[0];
+      if (lpDoc && lpDoc.url) {
+        h += '<p style="margin:10px 0 4px"><a class="btn btn-sm" href="' + A.esc(lpDoc.url) +
+          '" target="_blank" rel="noopener">Landing page instructions ↗</a></p>';
+      }
     }
     if (su.trafficSource === 'email') {
       var unsub = D.UNSUB_LINKS[c.product === 'Life' ? 'life' : 'annuity'].replace('{cid}', c.id);

@@ -2391,10 +2391,13 @@
   var CRITERIA_DOC_URL =
     'https://docs.google.com/document/d/1c5HDngeA34yM-7yh9zvah6Dl-sWuHOxP0hksgDhTfwA/edit?usp=sharing';
 
+  /* Real document URLs (Logan's, Aug 2026). The campaign-setup tracker links
+     the API docs by key and Targeting reads CRITERIA_DOC_URL, so this
+     registry is the ONLY place a URL lives. */
   var DOCUMENTS = [
     { key: 'onboarding', label: 'Affiliate onboarding', scope: 'global', featured: true,
       desc: 'Start here. How to get set up, post leads and get paid.',
-      url: 'https://docs.google.com/document/d/FZ-onboarding' },
+      url: 'https://docs.google.com/document/d/1hMyhV_2Lc6LSYFCw9MYrdK8yRqb0OUBrVjNLl3Ygt-Q/edit?usp=sharing' },
     { key: 'criteria', label: 'Lead criteria', scope: 'global',
       desc: 'The full accepted-lead criteria for every product.',
       url: CRITERIA_DOC_URL },
@@ -2402,10 +2405,15 @@
       desc: 'Your signed partnership agreement and commercial terms.' },
     { key: 'api_annuity', label: 'Annuity API documentation', scope: 'global',
       desc: 'Endpoint, field spec and response codes for annuity posts.',
-      url: 'https://docs.google.com/document/d/FZ-api-annuity' },
+      url: 'https://docs.google.com/document/d/1-xFC8IwZYXUBlnvGixTatCNGB2-RPxxrizSxudu7ZnU/edit?usp=sharing' },
     { key: 'api_life', label: 'Life API documentation', scope: 'global',
       desc: 'Endpoint, field spec and response codes for life posts.',
-      url: 'https://docs.google.com/document/d/FZ-api-life' }
+      url: 'https://docs.google.com/document/d/1C7MgZ9FRjTHE6aU_Zw8F6YlI8npXEymu5JO6EqkNDsU/edit?usp=sharing' },
+    /* Belongs to the LP integration path the way the API docs belong to the
+       API path. */
+    { key: 'landing_pages', label: 'Landing page instructions', scope: 'global',
+      desc: 'Running traffic to our hosted landing pages: tracking links, pixels and sub-ID passthrough.',
+      url: 'https://docs.google.com/document/d/1siIheEkgwsMGiMDW6x80QkVs-Dkpn9cFvojP2Q9teQ4/edit?usp=sharing' }
   ];
 
   /* Creative resources for the Targeting page. Admin-set URLs under the same
