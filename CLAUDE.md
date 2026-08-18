@@ -49,7 +49,7 @@ at the bottom of each HTML file.
 |---|---|---|
 | `index.html` | — | Redirect stub only — forwards `/` to `partnership.html`, preserving the query string |
 | `partnership.html` | 0 | Partnership summary — landing screen and the default page |
-| `compensation.html` | — | Compensation — earnings for the window, billing terms, monthly statements, clawback report |
+| `compensation.html` | — | Compensation — earnings for the window, billing terms, monthly statements, pixel unfire report |
 | `performance.html` | A | Performance overview |
 | `leads.html` | B | Lead table + CSV export |
 | `duplicate-check.html` | C | 365-day phone lookup |
@@ -187,6 +187,88 @@ wrongly flagged on a July unfire list. Every criteria label renders through
 `rejectLabel(reason, partnerId)`. **A hardcoded 45–75 anywhere will misreport our largest
 partner.**
 
+### 4b. Nothing affiliate-facing may mention the lead export
+
+**The dashboard is built against a backend, not against a file.** While it is in testing it happens
+to read a lead export, but that is a temporary source and it must not appear anywhere a partner can
+see. A partner reading *"the lead export does not carry this"* learns our plumbing and hears a
+permanent limitation; the same gap phrased as **"not connected yet"** reads as a field that will
+fill in — which is what it is.
+
+So a field with no source renders **blank plus a not-connected note** — never a zero, never an
+invented value, never an explanation of where our data currently comes from. When the field is
+wired on the backend it simply populates and the note disappears, with no copy change anywhere.
+
+- Use **`FZApp.notConnected(what)`** for the cell treatment (muted em dash + hover note) and
+  `FZApp.NOT_CONNECTED_TEXT` where markup is not possible. One helper, so the wording is
+  consistent and there is a single place to change it.
+- **Do not branch partner copy on `usingRealData()`.** Production is neither the mock nor the
+  export; ask whether the *data* is present (e.g. "did any row come back with an unfire date"),
+  not which source is loaded.
+- Data with no connection is **`null` in `data.js`**, not a placeholder string. `sinceISO`,
+  `integrationNote` and the placeholder contact's `title` are all null for this reason.
+- **Exempt, and deliberately so:** `admin-preview.html`, `data-source.html` (Data connections),
+  `HANDOFF.md`, `ADMIN-MAPPING.md`, and any card carrying the `.is-internal` treatment. Naming the
+  export is exactly their job.
+- Build state — who is connecting what, and by when — belongs in ADMIN-MAPPING and HANDOFF, never
+  in a card a partner reads. "Build note", "HANDOFF.md", and individual dev names had all leaked
+  onto partner screens and were removed on Aug 18.
+
+### 5a. Which page a card belongs on — the date filter decides
+
+Reorganised Aug 18. **If a card responds to a date range it belongs on Performance; if it is
+scored on the fixed trailing 30-day matured cohort it belongs on Targeting.**
+
+Performance keeps counts, by-day charts, rejections, lead tier mix, campaigns and sub-ID, and
+filters on `range · campaign · subid`. Targeting carries top conversion windows, investable assets
+and states, and filters on `campaign · subid` **with no range** — same set, same reason, as the
+Health scorecard: a rate needs a finished cohort, so a range picker there is a control that
+changes nothing.
+
+Investable assets and Geography moved off Performance for exactly this reason — the range picker
+never reached them. **Arrival window was deleted, not moved**: it had become a duplicate of the Top
+conversion windows hour-of-day grain. Its analysis now lives in that card's **Detail** view, which
+draws two series per bucket — share of volume sent, and conversion rate — because the mismatch
+between them is the actionable fact and neither series alone carries it. That view is a **table
+sorted best-converting first, with a headline sentence** naming the mismatch ("Most of your volume
+— 59% — goes to Thursday, which converts at 0.1%") — the sentence is the feature; the table is the
+working. It was first built as a two-series bar chart and that failed: each series was scaled to
+its own unshown maximum, so the bars carried nothing, and the numbers sat 800px from their labels
+in 12px type. Don't rebuild it as a chart.
+
+### 5b. Conversion cells say the comparison in words, not with a bar
+
+The **Converted to Priority/Hot** column on the States and Investable assets cards renders the
+number plus one sentence against that affiliate's own average — *★ your best · above your average ·
+about your average · below your average*, or *too few to tell* under the `CW_MIN_BUCKET` /
+`CW_MIN_SALES` guards. **Do not put the bar back.** It was drawn with two different meanings on the
+two cards (scaled-to-best on States, true-proportion on Investable assets), and neither was
+readable without a legend the card did not have.
+
+The **States** card is one table with three sorts behind a toggle — budget room (default), your
+volume, best converting — and rows are the **union** of states we want and states they send from,
+so "you send nothing here and we have room" stays visible. Budget renders as a band (`budgetRoom()`:
+High / Moderate / Some / Fully covered), never as a figure — the dollars are internal (§5a).
+
+### 6. Rejection reasons are one vocabulary, ours and theirs
+
+`REJECT_REASONS` in `data.js` is the affiliate-facing catalogue **and** the proposed internal
+vocabulary — deliberately the same list, so a reason added internally needs no mapping layer here.
+It is a proposal pending the tech team; ADMIN-MAPPING §3a is the spec.
+
+- The *Why leads were rejected* card lists only reasons with leads in the window, flat and
+  biggest-first. The full catalogue is the spec for the tech team and lives in ADMIN-MAPPING §3a,
+  not on a partner's screen.
+- **`ipqs` is a temporary aggregate.** It carries 52% of rejections as one unactionable label.
+  `ipqs_phone` / `ipqs_email` / `ipqs_other` are in the registry at zero; when the split lands,
+  `ipqs` is **removed**, not renamed.
+- **`filter_error` is not a rejection.** It is a manual pixel unfire after acceptance. It is pinned
+  last, excluded from the rejected total and every share (`n/a`, never a percentage), and left out
+  of the chart. Do not let it sort into the list by volume.
+- `missing_fields` (blank/null) is distinct from `contact` (present but unusable) — different fix.
+- Adding a reason is one registry entry: the table, the chart and the lead-table filter all read
+  `REJECT_ORDER`.
+
 ## The scoring engine (`health.js`) — v2, redesigned Aug 7 2026
 
 Four pillars, affiliate-visible, built **only from what the affiliate controls**: Conversion &
@@ -194,6 +276,33 @@ value 40%, Delivered quality 35%, Compliance & trust 15% (**also a gate** — a 
 caps the score at 45), Consistency & coverage 10%. Tiers: Scale 80+, Healthy 60+, Watch 45+,
 Intervene below (affiliate-facing labels differ; `TIERS[].internal` keeps ours). Below 100
 matured paid leads it renders as **Provisional**.
+
+**Naming follows scope, and the label is never hardcoded** — every surface reads
+`FZApp.healthScoreLabel(state)`. Unfiltered it is the **Affiliate health score**; filtered to a
+campaign it is the **Campaign health score**. A sub-ID filter alone does not rename it, because a
+sub-ID cuts across campaigns. Per-campaign scores are itemised in the Health score column of the
+Active campaigns table (Partnership summary) and in the Health scorecard's own per-campaign table;
+both read `FZHealth.score().campaigns[]` from the same engine run that draws that page's dial, so
+they cannot drift. A **campaign score is the two campaign-grain pillars only**, renormalised — it
+does not average up to the affiliate score, which adds the account-level pillars on top.
+
+**Delivery timing** lives in Delivered quality (0.15 of the pillar): hour of day 0.060 (**parked**
+on A1 — no timestamp on the export), day of week 0.050 against `IDEAL_DOW_SPLIT`, week of month
+0.040. **Same-day conversion** lives in Conversion & value at 0.10. Within-pillar weights are
+defined once, in `CONV_PARTS` / `QUAL_W`, because the per-campaign path and the account rollup both
+build these lists and used to carry separate copies.
+
+**There is no ideal week of the month and we do not invent one** — in the SCORE, week-of-month is
+evenness across the four weeks, never a preferred week. Same trap as the 6–9a "golden window"; see
+§4a. The **Targeting card is the opposite case**: `conversionWindows()` derives each affiliate's
+best hours, days and weeks from their own trailing 30-day matured cohort, which is an observation
+about their traffic rather than a preference of ours. Precedence is **override → derived →
+default**, the override (`ADMIN_CONVERSION_WINDOWS`) is a required failsafe, and a window is only
+called a standout at 25+ matured leads, 3+ Priority/Hot sales, and 20% above that affiliate's own
+average. ADMIN-MAPPING §5b-i.
+
+The two are **different measurements and must not be conflated**: the card says when *your* leads
+convert best; the pillar says how much of your volume lands while *our floor* is staffed.
 
 Two deliberate deletions — **do not rebuild either**:
 
@@ -227,8 +336,13 @@ and disarms the gate.
 - **Google Drive export is mocked** — nothing leaves the browser. The CSV path is real.
 - **Blocking data dependencies** (Zakira): `sold_type` as distinct Priority/Hot/Auction/Marketplace
   labels, and `subid` / `click_id` / `utm_campaign` / `utm_medium`.
-- **Two data-integrity problems that corrupt the score if not fixed first:** the $1/lead phantom
-  COGS on rev-share campaigns, and placeholder birth years on the aged-lead import.
+- **Three data-integrity problems that corrupt the score if not fixed first:** the $1/lead phantom
+  COGS on rev-share campaigns, placeholder birth years on the aged-lead import, and (A12) the
+  **import date standing in for the consumer's submission timestamp on bulk-loaded aged leads** —
+  Heritage's aged campaign is 55,481 of 56,309 cohort leads and lands on three weekdays, 100% in
+  the last third of the month, so the new Delivery timing components score our load schedule
+  rather than their delivery. Fresh drip traffic reads normally, which is how we know the metric
+  itself is sound.
 - **The admin side does not exist at all.** `ADMIN_COLUMN_CONFIG`, `TARGETS`, `STATE_DEMAND`,
   `OPERATING_HOURS` and `IDEAL_DOW_SPLIT` are all hardcoded constants standing in for settings.
   `ADMIN-MAPPING.md` specifies the storage each one needs.

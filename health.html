@@ -24,7 +24,7 @@
       <section class="card">
         <div class="card-body" style="padding-top:20px">
           <div style="display:flex;flex-direction:column;align-items:center">
-            <div class="hero-label" id="score-label" style="display:flex;align-items:center">Lead health score</div>
+            <div class="hero-label" id="score-label" style="display:flex;align-items:center"></div>
             <div id="gauge" style="margin-top:6px"></div>
             <div id="score-chips" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;justify-content:center"></div>
           </div>
@@ -119,6 +119,14 @@
     subid: state.subid
   });
 
+  /* The score is named for the scope it covers: filtered to a campaign it is
+     a CAMPAIGN health score, unfiltered it is the AFFILIATE health score.
+     Same helper the Partnership summary and Performance overview use, so a
+     partner never sees one page's number wearing another page's name. */
+  var scoreName = A.healthScoreLabel(state);
+  var scoreNameLower = A.healthScoreLabel(state, { lower: true });
+  document.getElementById('score-label').textContent = scoreName;
+
   /* One builder for the full explanation, used by BOTH the info-button modal
      and the collapsible section below, so the two can never disagree. The
      pillar list and weights are read from the live engine rather than written
@@ -140,7 +148,7 @@
     }).join('');
 
     return '' +
-      '<p>Your lead health score is a single 0&ndash;100 read on how well your traffic is ' +
+      '<p>Your ' + scoreNameLower + ' is a single 0&ndash;100 read on how well your traffic is ' +
       'performing, refreshed every Monday over a rolling 30-day window. It is anchored on two ' +
       'questions: <strong>does what you send turn into qualified sales at the top tiers, and ' +
       'are the leads real, reachable people.</strong> Everything else refines those two.</p>' +
@@ -180,8 +188,8 @@
   }
 
   A.infoButton(document.getElementById('score-label'), {
-    title: 'How your lead health score works',
-    ariaLabel: 'How your lead health score works',
+    title: 'How your ' + scoreNameLower + ' works',
+    ariaLabel: 'How your ' + scoreNameLower + ' works',
     html: explainHtml
   });
 
@@ -332,18 +340,18 @@
       (state.campaignId !== 'all'
         ? '<span>Filtered to one campaign — <a href="' + A.linkTo('health.html', state, { campaign: 'all' }) +
           '">back to all campaigns</a>.</span>'
-        : '<span>The account score above is these campaigns, weighted by volume, plus your ' +
-          'account-level consistency.</span>');
+        : '<span>The affiliate health score above is these campaigns, weighted by volume, ' +
+          'plus your account-level consistency.</span>');
   })();
 
   /* ---- trend ----------------------------------------------------------- */
   var trendHost = document.getElementById('chart-trend');
   C.mount(trendHost, 'line', {
     points: H.trend({ partnerId: state.partnerId, campaignId: state.campaignId, subid: state.subid }),
-    seriesLabel: 'Health score',
+    seriesLabel: scoreName,
     colorVar: '--series-1',
     yMin: 0, yMax: 100,
-    ariaLabel: 'Health score over the trailing 90 days',
+    ariaLabel: scoreName + ' over the trailing 90 days',
     bands: [
       { from: 80, to: 100, varName: '--good' },
       { from: 60, to: 80,  varName: '--series-1' },

@@ -55,11 +55,14 @@ below; this is the summary to work from.
 | A2 | **`sub_id` on the lead post** | Per-publisher scoring, sub-ID drilldown, per-source pricing | **0.4% fill.** Madrivo 99%, Heritage and OptiLabX **0%** |
 | A3 | **`speed_to_lead`** — valid seconds | Operations pillar (60% of it) | **BROKEN.** Populated but values run −113,426,741 to 4,109,200, median 0 |
 | A4 | **Rev-share % per campaign** | Correct comp-model inference and Your-share maths | **PARTIAL.** Column holds 40 / 0 / 4 / 1.75%. annuity.org's **85% is absent**, so they wrongly read as CPL |
-| A5 | **Controlled `reject_reason` vocabulary** | Clean rejection reporting | **BROKEN.** 2,917 distinct values; the tail is raw XML filter responses |
+| A5 | **Controlled `reject_reason` vocabulary** | The whole rejection breakdown, the reason filter on the lead table, every drill-down link | **BROKEN — and now specified.** 2,917 distinct values; the tail is raw XML filter responses. `REJECT_REASONS` in `data.js` is the proposed target vocabulary — see §3a. **The affiliate-facing list must become the internal list, exactly**, so a reason added or renamed internally needs no translation layer here |
+| A10 | **Split `IPQS` into the check that actually failed** — phone / email / other | The largest single reason on the book being actionable at all | **MISSING.** IPQS is one undifferentiated bucket carrying **12,178 of 23,430 rejections (52%)**. IPQS returns the specific failing check and we discard it on ingest. Three keys are already in the registry (`ipqs_phone`, `ipqs_email`, `ipqs_other`) rendering at zero until this lands |
+| A12 | **A true consumer-submission timestamp, distinct from the import/`Created On` date** | The three Delivery timing components in Delivered quality, and the Top conversion windows card | **BROKEN — and it currently scores US.** On bulk-imported aged leads `Created On` is the date WE loaded the file, not when the consumer submitted. Heritage campaign 600 is **55,481 of that account's 56,309 leads in the trailing cohort and lands 0/0/0/30/59/12/0 across Sun–Sat, 100% in the last third of the month.** That is our import schedule, not their delivery behaviour. Fresh drip traffic reads normally by comparison — OptiLabX 0/17/17/23/21/15/6, phases 39/31/30 — which is how we know the metric itself is sound. **Two fixes needed:** carry the real submission timestamp, and flag bulk-imported rows so timing scoring can exclude them |
+| A11 | **A distinct reason for blank / null required fields** | Telling "nothing was posted" apart from "a value was posted and failed a check" | **MISSING.** `missing_fields` is in the registry at zero. The two have different fixes — one is a required-field rule at the form, the other is validation — so collapsing them makes the fix column wrong |
 | A6 | **`lead_cost` = $0 on rev-share** | Any margin metric | **BROKEN.** All 41,627 accepted rows bill $1.00 — the phantom COGS, confirmed live |
 | A7 | **Normalised `assets` band** | Asset-band targeting widget | **PARTIAL.** 29 free-text variants; 81.6% collapse into one band |
 | A8 | **`sold_type` on the 16 Sold rows missing it** | Tier metrics completeness | **PARTIAL** |
-| A9 | **Unfire feed** — unfire date, affiliate-safe reason code, amount credited *(Sagar)* | Clawback report on the Compensation page | **MISSING.** The export carries only the `returned` flag |
+| A9 | **Unfire feed** — unfire date, affiliate-safe reason code, amount credited *(Sagar)* | Pixel unfire report on the Compensation page | **MISSING.** The export carries only the `returned` flag. Related: the `filter_error` rows in A5 are manual pixel unfires and belong on this feed, not in the rejection list |
 
 ### B. Fields that do not exist anywhere yet
 
@@ -208,6 +211,104 @@ side by side, and the lead table renders them in one view with different columns
 | `active` | Partnership summary listing + inactive count | **PARTIAL — rule change requested** | Today this is a **manual flip** in the admin system. **Logan wants it derived:** a campaign is automatically marked active while leads arrive through its landing page or API, and automatically marked **inactive after 6 months without a single lead**. The Partnership summary shows "this account has X campaigns marked as inactive" from this field. Keep a manual override for hard pauses, but the default lifecycle should be automatic |
 | `launched_on` | Partnership summary | **PARTIAL** | Derivable from first lead; better stored |
 | `product` | Partnership summary, lead table | **EXISTS** | |
+| **Geography (state) performance** | The **States** card on the Targeting page (merged with per-state demand, §5a) | **EXISTS** | Built from `state` on the lead, scored on the matured cohort like every other rate on that page. Ranked by **volume, not rate** — a 100% rate on three leads is noise and must not head the list. *Room for more* is `isCoverageState()`, an ask and never a gate, so `COVERAGE_NOTE` rides with it |
+| **Campaign health score** | Health score column in the Active campaigns table (Partnership summary) | **COMPUTED — no storage** | Not a stored field. Read from `FZHealth.score().campaigns[]`, the same engine run that draws the account dial on that page, so the itemised column and the dial can never disagree. Needs the score-calibration table (§6) like every other score surface; nothing extra. A campaign in setup, or one with no matured leads, renders `—` and must **never** render `0`. **Rendering:** the number alone, coloured from the **meter ramp** (`--meter-fill*`, picked with `FZHealth.meterClass()` — the same function that colours the dial), with the band name in a hover bubble beside it. No band badge in the cell. Two constraints on any change: the number stays **≥18.66px bold** so WCAG's large-text 3:1 floor applies (`--meter-fill-warning` is 4.10:1 on white and fails the 4.5:1 body-text floor), and the bubble stays a real focusable control so the band is reachable without colour or hover |
+
+---
+
+## 2b. "Not connected yet" — how the UI says it has no data
+
+Added Aug 18. **Every field in this dashboard is a backend connection.** The prototype currently
+reads a lead export because that is what exists during testing, but production connects to the
+system directly, and **no partner-facing surface may mention the export.**
+
+The rule for the build: a field with no source **renders blank with a not-connected note**, and
+populates on its own once the field is wired. No copy change is needed at connection time, and
+nothing renders a zero or an invented value in the meantime.
+
+| Surface | Before | Now |
+|---|---|---|
+| Partnership summary — Partner since | "not in the export" | blank + *"not connected yet…"* |
+| Compensation — unfire date / reason / amount | "The lead export carries only a returned flag" | blank columns + one note saying the feed is not connected |
+| Compensation — CPL rate not on file | "No rate card is on file for this campaign in the mock" | *"not connected yet… ask your account manager"* |
+| Targeting — hour of day | "Our lead export records the date but not the time" | *"Not connected yet… fills in on its own"* |
+| Setup — document list | "Build note. This list is admin-managed…" | what a partner does about a missing document |
+| Account | "Mock-up — edits persist in this browser tab" | *"Changes here are not saved yet"* |
+
+Implementation notes for the dev team:
+
+- `FZApp.notConnected(what)` is the shared cell treatment; `FZApp.NOT_CONNECTED_TEXT` is the plain
+  string. Use them rather than writing new wording.
+- **Do not branch partner copy on `usingRealData()`** — production is neither source. Test whether
+  the *data* is present. The unfire columns now do this: `feedLive` checks whether any row came
+  back with a date or reason.
+- Unconnected values are **`null` in `data.js`**, not placeholder strings.
+- Exempt: this document, HANDOFF, `admin-preview.html`, `data-source.html`, and any `.is-internal`
+  card. Those exist to name the source.
+
+---
+
+## 3a. Rejection reasons — the vocabulary, and who owns it
+
+Added Aug 18. Source of truth in the prototype: **`REJECT_REASONS` in `assets/js/data.js`**,
+rendered by the *Why leads were rejected* card on the Performance overview.
+
+**The rule: the affiliate-facing list IS the internal list.** One code, one meaning, both sides.
+No mapping table, no display-name layer — those drift, and a drifted reason is one an affiliate
+argues with an invoice about. If a reason is added, renamed or retired internally, it changes here
+and nowhere else. The registry in `data.js` is a **proposal for that internal vocabulary**, not a
+mirror of one; it needs the tech team's sign-off before it is real.
+
+**The catalogue is the spec, not the screen.** The table on the Performance overview lists only
+reasons with leads in the selected window, biggest first, flat — a partner reading it wants to know
+what went wrong with the traffic they actually sent, not a tour of checks that did not fire. This
+table below is the full target vocabulary and is what the tech team builds against.
+
+| Key | Affiliate label | Group | Populated today? |
+|---|---|---|---|
+| `ipqs_phone` | Phone did not validate | Contact validation | **No — A10** |
+| `ipqs_email` | Email did not validate | Contact validation | **No — A10** |
+| `ipqs_other` | Other validation failure | Contact validation | **No — A10** |
+| `ipqs` | Contact validation (unsplit) | Contact validation | Yes — **retire once A10 lands**, do not rename |
+| `missing_fields` | Required field blank | Lead data | **No — A11** |
+| `contact` | Lead data not valid | Lead data | Yes |
+| `age` | Age | Campaign criteria | Yes |
+| `assets` | Investable assets | Campaign criteria | Yes |
+| `income` | Household income | Campaign criteria | Yes |
+| `state` | State | Campaign criteria | Yes |
+| `advisor` | Financial advisor | Campaign criteria | No |
+| `interest` | Not interested | Campaign criteria | No |
+| `consent` | Consent missing | Compliance | No |
+| `duplicate` | Duplicate | Exclusivity | Yes |
+| `filter_error` | Pixel manually unfired | **Not a rejection** | Yes — see below |
+
+### Three things the implementation must not get wrong
+
+1. **`IPQS` must be split (A10).** It is 52% of all rejections and, as one label, tells an
+   affiliate nothing about whether to fix phone capture, email capture, or their traffic source.
+   IPQS already returns the failing check; we collapse it on ingest. The aggregate `ipqs` bucket
+   exists only as the landing pad until the split is wired — when it is, `ipqs` **disappears from
+   the list**, it is not renamed into one of the children.
+
+2. **`filter_error` IS NOT A REJECTION.** 2,713 rows on the current export carry an unmappable
+   value in the reason column. It is us manually unfiring the pixel on a lead we had already
+   accepted, after the fact. On screen it renders as *"Pixel manually unfired"*, in its own
+   row pinned to the bottom of the list, **excluded from the rejected total and from every share** —
+   the share cell reads `n/a`, not a percentage, and it is left out of the chart entirely. Logan expects it to vanish once the reason column is
+   controlled; if it survives into the new database it belongs on the **unfire feed (A9)** and the
+   Pixel unfire report, not here. Never present it as a lead-quality failure.
+
+3. **Blank is not invalid (A11).** A field that arrived empty and a field that arrived with an
+   unusable value are different reasons with different fixes. `missing_fields` vs `contact`.
+
+### Where the reasons are used
+
+| Surface | Behaviour |
+|---|---|
+| *Why leads were rejected* table | Non-zero reasons only, flat, biggest first. `filter_error` is pinned last with an `n/a` share. Every row links into the lead table filtered to it |
+| *Why leads were rejected* chart | Ranked horizontal bars, real rejections only, name + count + share drawn on each row. Clicking a bar drills through the same way |
+| Lead table **Rejection reason filter** | `?reason=<key>`, built from `REJECT_ORDER` — a reason added to the registry appears in the filter with no other change. Implies rejected rows; CSV export honours it |
+| Lead table **cell** | Still renders the **exact system string** verbatim (§3 fidelity rule), with the bucket's explanation on hover |
 
 ---
 
@@ -453,6 +554,155 @@ computed from them; only the ranked names are projected.
 change means it will go stale, and a stale list is worse than none because partners will chase
 states we no longer need.
 
+### 5a-ii. Page split — where a card lives, and why
+
+Reorganised Aug 18. The rule is **does the card respond to a date range**:
+
+| | Page | Filters |
+|---|---|---|
+| "How did I do in this window?" — counts, by-day charts, rejections, tier mix, campaigns, sub-ID | **Performance overview** | range · campaign · sub-ID |
+| "Which slice of my traffic converts best?" — conversion windows, investable assets, states | **Targeting** | campaign · sub-ID (**no range**) |
+
+Every card in the second group is scored on the **fixed trailing 30-day matured cohort**, because
+a rate needs a finished cohort (§ attribution). They used to sit on the Performance overview,
+where the range picker did not reach them — switching that page to "Last 7 days" left three cards
+sitting still. Same filter set and same reasoning as the Health scorecard.
+
+**Three moves in that change:**
+
+1. **Investable assets** → Targeting, beside Lead criteria. Criteria carries the $25K floor (our
+   rule); this is how the affiliate's own volume performs against it.
+2. **Geography** → merged into the demand list as one **States** card (§5a-iii). The decision is
+   the intersection — a state where they convert well *and* we have unspent budget — and it used
+   to require reading two cards on two pages. States we want that the affiliate sends nothing from
+   are appended to the table: "you send nothing here and we have room" is the most actionable row
+   on the card and is invisible if the table is built only from their own volume.
+3. **Arrival window** → **deleted, not moved.** It had become a straight duplicate of the Top
+   conversion windows hour-of-day grain — same `bySegment`, same ph/mature rate, both blocked on
+   A1. Its job is done better by the detail view below.
+
+### 5a-iii. The States card — three orderings, and no bar
+
+Revised Aug 18. One table, three sorts, chosen by a toggle, because a partner arrives with one of
+three questions and each wants a different order:
+
+| View | Question | Sort |
+|---|---|---|
+| **Budget room** *(default)* | "Where do you need volume?" | our unspent budget, high→low |
+| **Your volume** | "Where am I already sending?" | their leads, high→low |
+| **Best converting** | "Where does my traffic actually work?" | their P/H rate, thin samples last |
+
+Columns never change between views — only the row order and which header is marked — so switching
+does not require re-reading what a column means.
+
+**Budget is a BAND, never a figure.** `budgetRoom()` cuts on each state's share of all unspent
+budget: **High** ≥10%, **Moderate** ≥5%, **Some** below that, **Fully covered** for states not on
+the demand list. The dollar amounts stay internal (§5a) — a band leaks nothing the ranked list does
+not already imply, and it answers the question the old binary "Room for more" could not: *how
+badly* is this state wanted. Cut on share rather than fixed dollars so the bands do not go stale
+as the demand table moves.
+
+**Rows are the UNION of "states we want" and "states they send from."** Either list alone hides a
+row that matters: a state we want with no volume is the most actionable row on the card, and a
+state they flood that we do not want is the most expensive one.
+
+### The conversion column — why the bar is gone
+
+The **Converted to Priority/Hot** column on this card and on Investable assets used to carry a blue
+bar, and the two cards drew it with **different meanings**:
+
+- **States** scaled the bar to the best row in the table. A state at 16.3% against a best of 23.5%
+  drew a bar at 69% of the track — and 69% of a track with no axis means nothing.
+- **Investable assets** drew a true proportion of the band's own leads. Honest, but conversion runs
+  0.1%–20%, so a genuinely strong band rendered as a stub and every band looked equally empty.
+
+Both now render **the number, then one sentence comparing it to that affiliate's own average**:
+*★ your best · above your average · about your average · below your average*, or **too few to
+tell** when the bucket is under the `CW_MIN_BUCKET` / `CW_MIN_SALES` guards, or **no leads yet**.
+That is the comparison a partner actually wants, it needs no legend, and it reads the same on both
+tables. The ★ and the wording carry the meaning; colour only reinforces it, so the
+no-status-by-colour-alone rule holds.
+
+### 5b-i. Top conversion windows — derived per affiliate, admin-overridable
+
+Added Aug 18. `conversionWindows()` in `data.js`, rendered by the **Top conversion windows** card
+on the Targeting page and previewed in `admin-preview.html`.
+
+The card used to show every affiliate the same two hours and the same weekly split. It now answers
+*when does **my** traffic convert* from that affiliate's own **trailing 30-day matured cohort**,
+across three grains: hour of day, day of week, week of the month.
+
+**Precedence — override → derived → default.**
+
+| Source | When | Storage |
+|---|---|---|
+| **Override** | An admin has pinned this affiliate's windows | `ADMIN_CONVERSION_WINDOWS[partnerId] = { hours: [], dow: [], week: [] }` — **NEEDS BUILDING**. Each grain independent; empty or absent means derive |
+| **Derived** | Default path. Enough matured volume in scope | computed, nothing stored |
+| **Default** | Too little matured volume, or the data cannot answer | falls back to §5b operating hours |
+
+**The override is the failsafe and it is not optional.** Derived numbers on a thin or unusual
+month can be wrong, and an account manager who knows better needs a way to say so without a
+deploy. It must be settable per grain — the common case is pinning hours while letting days derive.
+
+**Four thresholds, all in `data.js`, all needing an admin home:**
+
+| Constant | Value | Why it exists |
+|---|---|---|
+| `CW_MIN_SCOPE` | 150 matured leads | Below this we do not derive at all, and say we are showing our staffing instead |
+| `CW_MIN_BUCKET` | 25 matured leads | Three leads and one sale is not a 33% hour |
+| `CW_MIN_SALES` | 3 Priority/Hot sales | **The one that matters on a low-converting account.** With a 0.2% baseline, one sale in a 25-lead bucket reads as a 20× lift |
+| `CW_LIFT` | 1.20 | A window is a standout only 20%+ above that affiliate's **own** average. Without a margin a 0.24% day "beats" a 0.20% average and gets recommended, which is worse than recommending nothing |
+
+**"Best" is measured against the affiliate's own average, never a fixed bar** — so a strong account
+is not told everything is bad because it fails somebody else's threshold, and the claim on screen
+("these convert better than your average") is either true or it is not.
+
+**Hour of day reads Default for every affiliate today** — the export carries no time (A1). It turns
+on by itself when that field lands; no code change.
+
+**The Detail view is where the arrival-window analysis went.** Summary answers the question;
+Detail shows the working, for all three grains: **share of what you sent** against **how it
+converted**, per bucket.
+
+**The mismatch between them is the entire point.** A window converting at 0.4% means nothing until
+you know whether it carries 2% or 40% of the send; a window carrying 40% means nothing until you
+know whether it converts.
+
+**THE HEADLINE SENTENCE IS THE FEATURE, NOT THE TABLE.** Two columns of numbers still leave the
+reader to spot the mismatch themselves, so each grain states it outright above its table:
+
+> Most of your volume — 59% — goes to Thursday, which converts at 0.1%, below your average.
+> Your best is Monday at 38.7%, taking under 1%.
+
+It has three forms: the mismatch above; *"Your biggest slot is also your best… nothing to move"*
+when they agree; and *"Not enough matured volume here yet to compare these"* when every bucket is
+under the guards.
+
+Four rendering rules, all of them things an earlier version got wrong:
+
+1. **Sorted best-converting first**, never by clock or calendar order. Read top to bottom it
+   answers "where should more of this go", and a long volume bar sitting at the bottom *is* the
+   problem, visible without reading a number.
+2. **The volume bar is a true share of the whole (0–100%)**, so its length means one thing. The
+   first version drew two bars per row, each scaled to its own series maximum — a number that was
+   never shown — which is why they read as decoration.
+3. **Numbers sit next to their label**, at body size. The first version pinned them right-aligned
+   at the far edge of a 945px SVG in 12px type, ~800px from the row label.
+4. **Buckets under `CW_MIN_BUCKET` / `CW_MIN_SALES` say "too few to tell"** and sort last rather
+   than being dropped — a thin bucket still tells you that you send there.
+
+Shares under 0.5% render as **"under 1%"**, never "0%": Heritage's 41 Monday leads against 56,309
+are a true 0.07% and a real row, and a printed zero beside a lead count reads as a bug.
+
+**Two different timing ideas live in this product and they must not be conflated:**
+
+- **This card** — when *your* leads convert best. Your own results, derived.
+- **Delivery timing** in the health score (§6) — how much of your volume lands while *our floor* is
+  staffed. Measured against `IDEAL_DOW_SPLIT`.
+
+An affiliate can top this card and still score mid on that pillar. The card foot says so in one
+sentence; do not remove it.
+
 ### 5b. Ideal reception windows
 
 **These are real operating facts and must not be invented in code.** They belong in configuration
@@ -522,6 +772,55 @@ Defined in `assets/js/health.js`. The design decision and the reasoning are in H
 Conversion & value 40% · Delivered quality 35% · Compliance & trust 15% (also a **gate** — a
 critical failure caps the score at 45) · Consistency & coverage 10%.
 
+**What the score is called depends on what it covers**, and the label is never hardcoded — every
+surface reads `FZApp.healthScoreLabel(state)`:
+
+| Scope | Label | Where |
+|---|---|---|
+| No campaign filter | **Affiliate health score** | Partnership summary card, Health scorecard hero, Performance tile, 90-day trend |
+| Filtered to a campaign | **Campaign health score** | The same surfaces, once `campaign` is in the query string |
+| One row of the Active campaigns table, or the Health scorecard's per-campaign table | **campaign score** | Always campaign-grain, so it needs no scope qualifier |
+
+An affiliate score is the volume-weighted rollup of the campaign scores **plus** the account-level
+pillars (consistency, and compliance once it lands), so the two are not interchangeable and a
+filtered page must never wear the account's name. Sub-ID alone does **not** rename it — a sub-ID
+cuts across campaigns, so the scope is still the account.
+
+A **campaign score covers the two campaign-grain pillars only** — conversion & value and delivered
+quality, renormalised to 100%. That is why the itemised column does not average to the affiliate
+score, and the hover descriptor on both tables says so.
+
+**Delivery timing (added Aug 18)** sits inside **Delivered quality**, worth **0.15** of that
+pillar across three parts. The five parts that were already there keep their relative weights
+exactly — each scaled by 0.85 — so nothing was re-argued, only diluted.
+
+| Part | Weight (of pillar) | Measured against | Status |
+|---|---|---|---|
+| Delivery timing — hour of day | 0.060 | `IDEAL_WINDOWS` | **PARKED** on A1 (no time of day on the export). Excluded and renormalised, never scored zero |
+| Delivery timing — day of week | 0.050 | `IDEAL_DOW_SPLIT` — overlap with our staffed days | Live, but see **A12** |
+| Delivery timing — week of month | 0.040 | **Evenness only** — see below | Live, but see **A12** |
+
+**Same-day conversion (added Aug 18)** sits inside **Conversion & value** at **0.10**, on the same
+rate denominator as Priority/Hot conversion and Sold rate. The other four parts were scaled by 0.90.
+It is not a restatement of median sales cycle: the cycle answers *how long do sales take*, this
+answers *how often is it immediate*, and a partner can move one without the other.
+
+Three rules the implementation must keep:
+
+1. **There is no ideal week of the month, and we do not invent one.** Hours and weekdays are backed
+   by a real, stated fact — when the call floor is staffed. Nothing about our operation prefers the
+   3rd to the 23rd. So week-of-month is scored on **evenness across the four weeks**, never on
+   conformance to a shape we made up. (The Targeting card is different: there it is derived from
+   the affiliate's own results, which is an observation about their traffic, not a preference of
+   ours — §5b-i.) The 6–9a "golden window" that had to be unwound across this
+   whole prototype is the same mistake; do not repeat it here.
+2. **These measure the affiliate's delivery, never our response.** Speed-to-lead and call attempts
+   stay deleted (see below) — they measure our floor. Timing measures when a partner sends, which
+   is theirs to control. Do not let ops metrics back in through this door.
+3. **They are asks, not gates, and every rendering says so.** `COVERAGE_NOTE` rides with the
+   Targeting page and the coverage widgets. A partner who reads a window as a requirement sends
+   less, not better.
+
 **Deleted from v1, permanently:** the Speed & operations pillar (`speed_to_lead`,
 `call_attempts`) — those measure OUR call floor, not their traffic; they are internal ops
 diagnostics for Module F. And the hidden margin input — margin moved to the **internal overlay**
@@ -545,7 +844,10 @@ rebuild either into the affiliate-facing number.
 | Unsubscribe compliance | Compliance (15%) + gate | **NEEDS BUILDING** — §6a |
 | Day-to-day pacing (CV) | Consistency (55%) | **EXISTS** |
 | Volume in needed states | Consistency (45%) | **EXISTS** — feeds off §5a |
-| Send-window fit | Consistency (parked) | **BLOCKED on A1** (time of day) |
+| Delivery timing — hour of day | Delivered quality (parked) | **BLOCKED on A1** (time of day). Was *Send-window fit* under Consistency; moved Aug 18 so all three timing grains sit together |
+| Delivery timing — day of week | Delivered quality | Live. Overlap with `IDEAL_DOW_SPLIT`. **See A12** |
+| Delivery timing — week of month | Delivered quality | Live. **Evenness across the four weeks only — there is no ideal week and none is to be invented.** See A12 |
+| Same-day conversion | Conversion & value | Live. `sameDayRate`, same denominator as the other conversion rates |
 
 ### The scoring mechanics the build must copy exactly
 
@@ -742,7 +1044,7 @@ Steps per path (sources: Onboarding packet V7.16.26, LP & Pixel Guide V7.14.26, 
 ## 7e. Compensation page
 
 Added August 6. Money in one place: what the window earned, the billing terms, the monthly
-statements, and the clawback record. Reached from the sidebar or by clicking the Billing details
+statements, and the pixel unfire record. Reached from the sidebar or by clicking the Billing details
 card on the Partnership summary.
 
 | Element | Source | Status |
@@ -751,7 +1053,7 @@ card on the Partnership summary.
 | "Subject to change" caveat | static copy + hover descriptor | The number is provisional until the statement closes; audits run weekly |
 | Billing details card | same fields as the Partnership summary — `billing_period` / `billing_basis` (B3) + billing contacts | duplicated rendering, single source |
 | Lead statements list | one Google Sheet URL per affiliate per month, admin-pasted | **NEEDS BUILDING** — B15. Generated on the first business day after month close; unlinked months show "Not linked yet" |
-| Clawback report | `queryClawbacks()` — unfire date, affiliate-safe reason, credited amount | **NEEDS BUILDING** — A9, the unfire feed (Sagar). Reason must map to the `RETURN_REASONS` vocabulary; the internal `clawback_reason` stays forbidden |
+| Pixel unfire report | `queryUnfires()` — unfire date, affiliate-safe reason, credited amount | **NEEDS BUILDING** — A9, the unfire feed (Sagar). Reason must map to the `RETURN_REASONS` vocabulary; the internal `clawback_reason` stays forbidden |
 
 Rules the implementation must keep:
 
@@ -764,7 +1066,7 @@ Rules the implementation must keep:
    projected, so the CPL row rule holds.
 2. **The affiliate-facing reason is a controlled, affiliate-safe vocabulary** (`RETURN_REASONS`
    in `data.js`): outside criteria, duplicate, invalid contact, consumer request. Never the
-   internal clawback reason, never anything about margin, buyers, or call outcomes.
+   internal `clawback_reason`, never anything about margin, buyers, or call outcomes.
 3. **Statement months attach to the partner record, not a deploy** — same pattern as the
    per-affiliate agreement URL (B12).
 
@@ -778,7 +1080,7 @@ They are rendered in-app on the Data source page.
 | Finding | Evidence | Consequence |
 |---|---|---|
 | **$1 phantom COGS — confirmed live** | All **41,627** accepted rows carry a non-zero Lead Cost with a median of exactly **$1.00** | Margin is fabricated. The health score's margin input is **excluded** rather than computed on it |
-| **Reject Reason is not a controlled field** | **2,917 distinct values**, of which only **21 are clean labels**. The tail is raw XML filter responses written into the reason column — **2,713 rows** | Two fields are now emitted: the **exact system string** (rendered verbatim in the lead table and CSV so an affiliate's export reconciles 1:1 against ours) and a **bucket** for grouping. The XML rows have no usable exact value and fall back to the bucket's plain-language label — they are surfaced as *"Filter error — our side"* so the affiliate is not blamed for our fault. Needs a controlled vocabulary at source |
+| **Reject Reason is not a controlled field** | **2,917 distinct values**, of which only **21 are clean labels**. The tail is raw XML filter responses written into the reason column — **2,713 rows** | Two fields are now emitted: the **exact system string** (rendered verbatim in the lead table and CSV so an affiliate's export reconciles 1:1 against ours) and a **bucket** for grouping. The XML rows have no usable exact value and fall back to the bucket's plain-language label — they are surfaced as *"Pixel manually unfired"*, in their own **Not a rejection** section and excluded from the rejected total — that is what those rows actually are (see §3a), and the affiliate is not blamed for our fault. Needs a controlled vocabulary at source |
 | **Affiliate name mismatch** | Export says `ObtilabX`; the tracker says OptiLabX | Mapped on ingest. Ungrouped it splits one partner into two |
 | **Assets1 is free text** | 29 spelling variants, mojibake dashes, duplicate ranges. **81.6% of all rows sit in the single band `$50 000 - $100 000`** | Parsed to bands on ingest. The concentration is worth investigating — it looks like a default rather than a distribution |
 | **Sold but no sold type** | 16 rows marked Sold with an empty Sold Type | Invisible to any tier-based metric |

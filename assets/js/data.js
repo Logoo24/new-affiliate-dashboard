@@ -117,90 +117,182 @@
   var NORTH_STAR_TYPES = ['priority', 'hot'];
   var NEW_TIER_TYPES = ['livetransfer', 'appointment'];
 
-  /* Rejection reasons. Three pieces per bucket, used in different places:
+  /* ======================================================================
+     REJECTION REASONS — the affiliate-facing catalogue
+     ----------------------------------------------------------------------
+     THIS REGISTRY IS A PROPOSAL FOR THE INTERNAL VOCABULARY, NOT A MIRROR OF
+     ONE. It is the most important thing on this page for the dev team to act
+     on, so read this header before changing a key.
 
-       label — the SHORT name shown in tables and legends. Kept close to the
-               system's own vocabulary; the explanation is NOT crammed in
-               here any more — it lives in `desc` behind a hover info button.
-       desc  — one or two plain sentences shown in the hover box.
-       fix   — what the affiliate can do about it (the "What fixes it" column).
+     Today the reject-reason column is free text: 2,917 distinct values across
+     the export, and the tail is raw XML filter responses (A5 in
+     ADMIN-MAPPING). This registry is what we want it collapsed TO. The
+     affiliate-facing list must then be EXACTLY the internal list — one code,
+     one meaning, both sides — so that adding or renaming a reason internally
+     shows up here without a translation layer that can silently drift.
+
+     Fields per entry:
+
+       key      — our code. MUST become the internal code. Until the tech
+                  team confirms them, these are proposals.
+       label    — the SHORT affiliate-facing name shown in tables and legends.
+       desc     — one or two plain sentences, shown in the hover box.
+       fix      — what the affiliate can do about it.
+       group    — how the list is organised on screen.
+       live     — true when the current export can actually populate it.
+                  Everything else renders with a zero count on purpose: the
+                  catalogue is the spec, and a reason nobody can see is a
+                  reason nobody knows to ask for.
+       notReject— true when the bucket is NOT a lead-quality rejection at all
+                  and must never be read as one.
 
      `age` is rendered through rejectDesc() because the accepted band is a
-     negotiated commercial term that differs by partner. */
+     negotiated commercial term that differs by partner.
+     ====================================================================== */
+
+  /* Display order of the groups, and their headings. */
+  var REJECT_GROUPS = [
+    { key: 'validation', label: 'Contact validation' },
+    { key: 'data',       label: 'Lead data' },
+    { key: 'criteria',   label: 'Campaign criteria' },
+    { key: 'compliance', label: 'Compliance' },
+    { key: 'duplicate',  label: 'Exclusivity' },
+    { key: 'notreject',  label: 'Not a rejection' }
+  ];
+
   var REJECT_REASONS = {
-    duplicate: {
-      label: 'Duplicate',
-      desc: 'This phone number already sold as a Priority or Hot lead within the last 365 days, ' +
-            'so it is inside the exclusivity window and cannot be paid again.',
-      fix: 'Screen the number in Duplicate Check before you pay to acquire it.'
+    /* ---- contact validation -------------------------------------------
+       IPQS ARRIVES AS ONE BUCKET AND MUST NOT STAY THAT WAY. It is the
+       single largest reason on the book — 12,178 of 23,430 rejections, 52% —
+       and as one undifferentiated label it is unactionable: "IPQS" tells an
+       affiliate nothing about whether to fix their phone capture, their email
+       capture, or their traffic source. IPQS returns the specific check that
+       failed; we collapse it on ingest and throw that away. Split it. The
+       three below are the split. */
+    ipqs_phone: {
+      label: 'Phone did not validate', group: 'validation',
+      desc: 'Automated contact validation could not confirm the phone number as a live, ' +
+            'reachable line belonging to this consumer.',
+      fix: 'Add real-time phone validation at the form before the lead posts.'
+    },
+    ipqs_email: {
+      label: 'Email did not validate', group: 'validation',
+      desc: 'Automated contact validation rejected the email address — disposable domain, ' +
+            'undeliverable mailbox, or a syntax that cannot exist.',
+      fix: 'Validate the email inline and block disposable domains at the form.'
+    },
+    ipqs_other: {
+      label: 'Other validation failure', group: 'validation',
+      desc: 'Automated contact validation failed on a signal other than the phone or email ' +
+            'itself — IP reputation, proxy or VPN, or a device signal that did not look like ' +
+            'a real consumer session.',
+      fix: 'Usually a traffic-source problem rather than a form problem. Check where the ' +
+           'session originated.'
+    },
+    /* The aggregate the export can populate today. It exists ONLY as the
+       landing bucket until the three above are wired; it is not a reason in
+       its own right and should disappear from this list, not be renamed. */
+    ipqs: {
+      label: 'Contact validation (unsplit)', group: 'validation', live: true,
+      desc: 'The phone or email failed automated contact validation. Our system does not yet ' +
+            'record which check failed, so this bucket is broader than it should be.',
+      fix: 'We are splitting this into phone, email and other so it tells you what to fix. ' +
+           'Until then, read it as general traffic quality.'
+    },
+
+    /* ---- lead data ------------------------------------------------------ */
+    missing_fields: {
+      label: 'Required field blank', group: 'data',
+      desc: 'A field the campaign requires arrived empty or null — nothing was posted at all, ' +
+            'as distinct from a value that was posted and failed a check.',
+      fix: 'Make the field required at the form and block the post when it is empty.'
+    },
+    contact: {
+      label: 'Lead data not valid', group: 'data', live: true,
+      desc: 'A posted value was present but not usable — a phone that is not a phone number, ' +
+            'a name in the wrong field, placeholder text.',
+      fix: 'Tighten field validation at the source.'
+    },
+
+    /* ---- campaign criteria --------------------------------------------- */
+    age: {
+      label: 'Age', group: 'criteria', live: true,
+      desc: 'The consumer\'s age is outside the band this account accepts.',
+      fix: 'Add an age gate to the funnel before the lead posts.'
     },
     assets: {
-      label: 'Investable assets',
+      label: 'Investable assets', group: 'criteria', live: true,
       desc: 'Reported investable assets were under $25,000. Leads under that threshold never ' +
             'pay, on any comp model.',
       fix: 'Under $25K never pays under any model. Add an assets question to the funnel.'
     },
+    income: {
+      label: 'Household income', group: 'criteria', live: true,
+      desc: 'Reported household income was under the $40,000 minimum for life leads.',
+      fix: 'Life leads need $40,000+ household income.'
+    },
+    state: {
+      label: 'State', group: 'criteria', live: true,
+      desc: 'The lead came from a state we do not accept. New York is never accepted.',
+      fix: 'New York is never accepted. See Coverage for the states we want most.'
+    },
     advisor: {
-      label: 'Financial advisor',
+      label: 'Financial advisor', group: 'criteria',
       desc: 'The consumer is a financial advisor or industry professional rather than a ' +
             'prospective client.',
       fix: 'Add an occupation exclusion or suppress advisor lists.'
     },
-    consent: {
-      label: 'Consent missing',
-      desc: 'No prior-express-written-consent certificate (TrustedForm or Jornaya) arrived with ' +
-            'the lead, so it cannot legally be worked.',
-      fix: 'Confirm the TCPA disclosure is on the page and the certificate is posting.'
-    },
-    ipqs: {
-      label: 'IPQS',
-      desc: 'The phone number or email failed automated contact validation — it did not look ' +
-            'like a reachable, real contact.',
-      fix: 'Phone or email did not validate. Check traffic source quality.'
-    },
-    age: {
-      label: 'Age',
-      desc: 'The consumer\'s age is outside the band this account accepts.',
-      fix: 'Add an age gate to the funnel before the lead posts.'
-    },
-    state: {
-      label: 'State',
-      desc: 'The lead came from a state we do not accept. New York is never accepted.',
-      fix: 'New York is never accepted. See Coverage for the states we want most.'
-    },
-    contact: {
-      label: 'Bad contact',
-      desc: 'The phone number was wrong, disconnected, or otherwise not a way to reach the ' +
-            'consumer.',
-      fix: 'Tighten phone verification at the source.'
-    },
-    income: {
-      label: 'Household income',
-      desc: 'Reported household income was under the $40,000 minimum for life leads.',
-      fix: 'Life leads need $40,000+ household income.'
-    },
     interest: {
-      label: 'Not interested',
+      label: 'Not interested', group: 'criteria',
       desc: 'The consumer said they were not interested when reached.',
       fix: 'Usually a creative or expectation-setting issue upstream of the form.'
     },
-    /* Buckets that only appear with a real export. `filter_error` is OUR
-       problem, not the affiliate's — the reject-reason column contains raw
-       XML filter responses on ~2,400 Heritage rows. Named plainly rather
-       than dressed up as a lead-quality reason. */
-    filter_error: {
-      label: 'Filter error — our side',
-      desc: 'Our filter wrote a raw error payload into the reason field instead of a reason. ' +
-            'This is a fault on our side, not a problem with your lead.',
-      fix: 'Not a lead-quality problem. The filter wrote a raw error into the reason field; ' +
-           'flagged for the dev team.'
+
+    /* ---- compliance ----------------------------------------------------- */
+    consent: {
+      label: 'Consent missing', group: 'compliance',
+      desc: 'No prior-express-written-consent certificate (TrustedForm or Jornaya) arrived ' +
+            'with the lead, so it cannot legally be worked.',
+      fix: 'Confirm the TCPA disclosure is on the page and the certificate is posting.'
     },
-    other: {
-      label: 'Other',
-      desc: 'A reason outside the standard categories.',
-      fix: 'Uncategorised reason text. Ask your account manager for specifics.'
+
+    /* ---- exclusivity ---------------------------------------------------- */
+    duplicate: {
+      label: 'Duplicate', group: 'duplicate', live: true,
+      desc: 'This phone number already sold as a Priority or Hot lead within the last 365 ' +
+            'days, so it is inside the exclusivity window and cannot be paid again.',
+      fix: 'Screen the number in Duplicate Check before you pay to acquire it.'
+    },
+
+    /* ---- NOT A REJECTION ------------------------------------------------
+       2,713 rows on this export carry an unmappable value in the reason
+       column. It is not a rejection reason and must never be presented as
+       one: it is US, after the fact, manually unfiring the pixel on a lead we
+       had already accepted. Logan expects it to disappear once the reason
+       column is a controlled vocabulary; if it survives into the new
+       database, that is what it means, and it belongs on the Pixel unfire
+       report rather than in this list. */
+    filter_error: {
+      label: 'Pixel manually unfired', group: 'notreject', live: true, notReject: true,
+      desc: 'Not a rejection. We accepted this lead and then unfired the pixel by hand ' +
+            'afterwards — the reason column carries our internal marker rather than anything ' +
+            'about your lead. You are not billed for it.',
+      fix: 'Nothing for you to fix. Removals are itemised on the Pixel unfire report on the ' +
+           'Compensation page.'
     }
   };
+
+  /* Every key, in group order then registry order — the affiliate-facing
+     catalogue. Zero-count reasons render too: the list IS the spec. */
+  var REJECT_ORDER = (function () {
+    var out = [], keys = Object.keys(REJECT_REASONS);
+    REJECT_GROUPS.forEach(function (g) {
+      keys.forEach(function (k) { if (REJECT_REASONS[k].group === g.key) out.push(k); });
+    });
+    /* Anything without a recognised group still has to appear. */
+    keys.forEach(function (k) { if (out.indexOf(k) === -1) out.push(k); });
+    return out;
+  })();
 
   /* Investable-asset bands. Under $25K never pays, under any comp model.
      The $100K–$250K band converts materially better than anything else and
@@ -492,6 +584,50 @@
   function rejectFix(key) {
     return REJECT_REASONS[key] ? REJECT_REASONS[key].fix : '';
   }
+  /** Is this bucket a lead-quality rejection at all? `filter_error` is not. */
+  function rejectIsReal(key) {
+    return !(REJECT_REASONS[key] && REJECT_REASONS[key].notReject);
+  }
+  /** Can the current data source populate this bucket? */
+  function rejectIsLive(key) {
+    return !!(REJECT_REASONS[key] && REJECT_REASONS[key].live);
+  }
+  function rejectGroup(key) {
+    return REJECT_REASONS[key] ? REJECT_REASONS[key].group : null;
+  }
+
+  /**
+   * The full affiliate-facing catalogue, counts merged in.
+   *
+   * Returns EVERY reason in the registry, not only the ones with volume in
+   * the window — a reason at zero is the whole point of publishing a
+   * catalogue, and a partner who has never seen "Consent missing" should
+   * still be able to read what it would mean. Anything in `counts` that is
+   * not in the registry lands in an `unknown` bucket rather than being
+   * dropped, so a new internal code shows up as a visible gap instead of
+   * silently vanishing from the totals.
+   *
+   * @param counts  {key: n} from computeMetrics().rejects
+   */
+  function rejectCatalogue(counts) {
+    counts = counts || {};
+    var out = REJECT_ORDER.map(function (k) {
+      var r = REJECT_REASONS[k];
+      return {
+        key: k, label: r.label, group: r.group, fix: r.fix,
+        live: !!r.live, notReject: !!r.notReject,
+        count: counts[k] || 0
+      };
+    });
+    Object.keys(counts).forEach(function (k) {
+      if (REJECT_REASONS[k]) return;
+      out.push({
+        key: k, label: k, group: 'notreject', fix: '',
+        live: true, notReject: false, unknown: true, count: counts[k]
+      });
+    });
+    return out;
+  }
 
   /* ---------------------------------------------------------------------- */
   /* Campaigns                                                              */
@@ -767,6 +903,41 @@
     return opts.limit ? rows.slice(0, opts.limit) : rows;
   }
 
+  /**
+   * How much room a state has, as a BAND rather than a number.
+   *
+   * The dollar figures stay internal (§5a) — an affiliate seeing "$26,040
+   * unspent in California" is reading our negotiating position. A band leaks
+   * nothing the ranked list does not already imply, and "High" is readable at
+   * a glance in a way that "Room for more" was not: the old binary flag told a
+   * partner a state was wanted but not whether it was wanted a little or a
+   * lot, which is exactly the decision they are trying to make.
+   *
+   * Cut on the state's own share of ALL unspent budget, so the bands stay
+   * stable as the demand table changes rather than being fixed dollar cuts
+   * that go stale.
+   */
+  var BUDGET_BANDS = [
+    { key: 'high', label: 'High',     min: 0.10 },
+    { key: 'mid',  label: 'Moderate', min: 0.05 },
+    { key: 'low',  label: 'Some',     min: 0.00 }
+  ];
+
+  function budgetRoom() {
+    var rows = stateDemand();
+    var total = rows.reduce(function (a, r) { return a + r.unusedBudget; }, 0) || 1;
+    var out = {};
+    rows.forEach(function (r) {
+      var share = r.unusedBudget / total;
+      var band = BUDGET_BANDS.filter(function (b) { return share >= b.min; })[0] ||
+                 BUDGET_BANDS[BUDGET_BANDS.length - 1];
+      out[r.st] = { st: r.st, name: r.name, band: band.key, bandLabel: band.label,
+                    share: share, rank: 0 };
+    });
+    rows.forEach(function (r, i) { out[r.st].rank = i + 1; });
+    return out;
+  }
+
   /* Kept for the health pillar and the rejection copy: the states we most want
      volume from. Derived from demand rather than hand-maintained twice. */
   var COVERAGE_STATES = {};
@@ -805,12 +976,23 @@
     { label: '3:00 – 7:00 PM',  segs: ['primepm'] }
   ];
 
+  /* THE FRAMING IS THE POINT. Everything on the Targeting page is an
+     observation about where leads convert best, offered so a partner can get
+     more out of the volume they already send. None of it is a request for
+     volume, and none of it is a gate — we accept every lead, any day, any
+     hour, from any state.
+
+     This matters commercially, not just tonally: a partner who reads these as
+     requirements sends LESS, holding back volume that falls outside them.
+     Every rendering of a window, a day split or a state list carries this
+     note for that reason. */
   var COVERAGE_NOTE =
-    'We accept leads any day and any hour, so none of this is a restriction. ' +
-    'These are the windows where our team is working hardest and where leads convert ' +
-    'best for us, so weighting your sends this way gets faster contact and a better ' +
-    'read on your traffic. Saturday runs on lighter staffing, and anything landing ' +
-    'Sunday sits until Monday morning.';
+    'Nothing here is a requirement, and none of it is us asking for more leads — ' +
+    'we accept every lead you send, any day, any hour, from any state. These are ' +
+    'simply the windows where our floor is fully staffed, so leads landing in them ' +
+    'get contacted fastest and convert best for you. Weighting your sends this way ' +
+    'lifts the return on volume you are already buying. Saturday runs on lighter ' +
+    'staffing, and anything landing Sunday sits until Monday morning.';
 
   /* Arrival windows, consumer local time. `ideal` marks the two windows above.
      Weights are the mock's supply mix; yields are how well each converts. */
@@ -857,6 +1039,219 @@
      Sunday is worked until Monday — it is not a restriction, it is where the
      lead lands in the queue. Indexed by JS getDay(). */
   var IDEAL_DOW_SPLIT = [0.00, 0.20, 0.19, 0.19, 0.19, 0.15, 0.08];
+
+  /* ---- Weeks of the month ------------------------------------------------
+     Four buckets rather than 31 days: a per-day read on a 30-day cohort is
+     noise, and the question a partner can act on is "which part of the month
+     works for me".
+
+     THERE IS NO IDEAL WEEK OF THE MONTH AND WE DO NOT INVENT ONE. Unlike
+     hours and days of week — where the call floor's staffing is a real,
+     stated fact — nothing about our operation prefers the 3rd to the 23rd. So
+     the HEALTH SCORE reads this as evenness only, never as conformance to a
+     shape we made up. The Targeting page is different: there it is derived
+     from the partner's OWN results, which is an observation about their
+     traffic rather than a preference of ours.
+
+     (An earlier version of this prototype asserted a 6–9a "golden window"
+      that nobody had ever said. It cost us credibility to unwind. Same trap
+      here — do not fill this in with a preferred week.) */
+  var MONTH_PHASES = [
+    { key: 'w1', label: 'Days 1–7',   from: 1,  to: 7 },
+    { key: 'w2', label: 'Days 8–14',  from: 8,  to: 14 },
+    { key: 'w3', label: 'Days 15–21', from: 15, to: 21 },
+    { key: 'w4', label: 'Day 22–end', from: 22, to: 31 }
+  ];
+  var MONTH_PHASE_ORDER = ['w1', 'w2', 'w3', 'w4'];
+  function monthPhase(d) {
+    var day = d.getDate();
+    return day <= 7 ? 'w1' : day <= 14 ? 'w2' : day <= 21 ? 'w3' : 'w4';
+  }
+  var MONTH_PHASE_LABEL = {};
+  MONTH_PHASES.forEach(function (m) { MONTH_PHASE_LABEL[m.key] = m.label; });
+
+  /* ======================================================================
+     TOP CONVERSION WINDOWS — derived per partner, admin-overridable
+     ----------------------------------------------------------------------
+     What the Targeting page shows for hour of day, day of week and week of
+     the month. Three sources, in strict precedence:
+
+       1. OVERRIDE  — an admin has pinned this partner's windows by hand.
+                      Always wins. This is the failsafe: derived numbers on a
+                      thin or weird month can be wrong, and an account manager
+                      who knows better needs a way to say so without a deploy.
+       2. DERIVED   — computed from THIS partner's own trailing 30-day matured
+                      cohort. The default, and the point of the feature: a
+                      global "9–11am and 3–7pm" tells a partner nothing about
+                      their own traffic.
+       3. DEFAULT   — the stated operating-hours windows. Used when the
+                      partner has too little matured volume to read, or when
+                      the data cannot answer at all.
+
+     WHY IT CAN FALL BACK. Hour of day is UNANSWERABLE on the live export:
+     `TimeStamp` is empty on every row and `Created On` is date-only (A1). So
+     hours land on DEFAULT for everyone until that field arrives, and the card
+     says so rather than plotting a shape it cannot support.
+
+     "Best" is measured against THE PARTNER'S OWN AVERAGE, not against a
+     threshold we picked. A bucket is highlighted when it beats that partner's
+     own Priority/Hot conversion rate on a large enough sample. That keeps the
+     claim honest — "these convert better than your average" is true or it is
+     not — and it means a strong account is not told everything is bad because
+     it fails somebody else's bar.
+     ====================================================================== */
+
+  /* Admin override. `null` for a partner (or absent) means DERIVE.
+     Shape when set — any grain may be set independently:
+       { hours: ['primeam','primepm'], dow: [2,3,4], week: ['w1','w2'] }
+     THIS IS A HARDCODED STAND-IN FOR AN ADMIN SCREEN — ADMIN-MAPPING §5b. */
+  var ADMIN_CONVERSION_WINDOWS = {};
+
+  /* THREE GUARDS ON CALLING SOMETHING A TOP WINDOW. All of them are needed;
+     each one alone lets an obvious piece of noise through.
+
+       CW_MIN_BUCKET — matured leads in the bucket. Three leads and one sale
+                       is not a 33% hour.
+       CW_MIN_SALES  — Priority/Hot sales in the bucket. This is the guard
+                       that matters on a low-converting account: with a 0.2%
+                       baseline, ONE sale in a 25-lead bucket reads as a 20×
+                       lift. Requiring real sales kills that.
+       CW_LIFT       — how much better than the partner's own average it has
+                       to be. Without a margin, a 0.24% day "beats" a 0.20%
+                       average and gets recommended, which is worse than
+                       recommending nothing. */
+  var CW_MIN_BUCKET = 25;
+  var CW_MIN_SALES = 3;
+  var CW_LIFT = 1.20;
+  /* And the scope as a whole needs this much matured volume before we derive
+     at all, rather than showing a partner a shape built from nothing. */
+  var CW_MIN_SCOPE = 150;
+
+  function cwRate(b) { return b && b.mature ? b.ph / b.mature : 0; }
+
+  /**
+   * Rank one grain's buckets by the partner's own conversion rate.
+   * @param buckets  map of key -> {raw, mature, ph}
+   * @param defs     [{key,label}] in display order
+   * @param baseline the partner's own overall P/H rate
+   */
+  function cwRank(buckets, defs, baseline) {
+    return defs.map(function (d) {
+      var b = buckets[d.key] || { raw: 0, mature: 0, ph: 0 };
+      var r = cwRate(b);
+      var thin = b.mature < CW_MIN_BUCKET || b.ph < CW_MIN_SALES;
+      return {
+        key: d.key, label: d.label,
+        raw: b.raw, mature: b.mature, ph: b.ph, rate: r,
+        thin: thin,
+        best: !thin && baseline > 0 && r >= baseline * CW_LIFT
+      };
+    }).sort(function (a, b) {
+      /* Thin buckets sink regardless of their rate — a 100% hour on six
+         leads must never head this list. */
+      if (a.thin !== b.thin) return a.thin ? 1 : -1;
+      return b.rate - a.rate;
+    });
+  }
+
+  /**
+   * The three grains for one partner.
+   * @param opts.partnerId
+   * @param opts.campaignId  optional scope
+   * @returns { hours, dow, week } — each { source, items, note, baseline }
+   */
+  function conversionWindows(opts) {
+    opts = opts || {};
+    var pid = resolvePartnerId(opts.partnerId);
+    var override = ADMIN_CONVERSION_WINDOWS[pid] || null;
+
+    var coh = cohort({ partnerId: pid, campaignId: opts.campaignId });
+    var m = coh.metrics;
+    var scopeMature = m.mature || 0;
+
+    /* BASELINE MUST SHARE THE BUCKETS' DENOMINATOR. The buckets count P/H
+       sales over ALL matured leads in the bucket (cwRate), because that is
+       the only count a bucket carries — so the average has to be computed the
+       same way. Using m.priorityHotRate here instead is wrong and silently
+       breaks the whole card: that rate divides by matured ACCEPTED leads, so
+       on a partner accepting ~49% it sits at roughly double every bucket, no
+       bucket can ever clear it, and every grain reports "no clear standout".
+       Same basis as the Investable assets and States cards on the Targeting
+       page, which both rate a bucket as ph / mature. */
+    var baseline = scopeMature ? (m.soldPriorityHot || 0) / scopeMature : 0;
+    var enough = scopeMature >= CW_MIN_SCOPE;
+
+    var noTime = !!(DATASET_NOTES && DATASET_NOTES.noTimeOfDay);
+
+    function grain(key, buckets, defs, defaultItems, defaultNote) {
+      /* 1. override */
+      if (override && override[key] && override[key].length) {
+        var pick = {};
+        override[key].forEach(function (k) { pick[String(k)] = 1; });
+        return {
+          source: 'override',
+          baseline: baseline,
+          items: defs.filter(function (d) { return pick[String(d.key)]; })
+                     .map(function (d) { return { key: d.key, label: d.label, best: true }; }),
+          note: 'Set by your account manager for this account.'
+        };
+      }
+      /* 2. derived */
+      if (buckets && enough) {
+        var ranked = cwRank(buckets, defs, baseline);
+        if (ranked.filter(function (r) { return r.best; }).length) {
+          return { source: 'derived', baseline: baseline, items: ranked, note: null };
+        }
+        /* Derived, but nothing beat their own average on a real sample —
+           usually a flat month. Say that rather than highlighting the top of
+           a list of ties. */
+        return { source: 'derived', baseline: baseline, items: ranked,
+                 note: 'No clear standout in the last 30 days — your volume converts about ' +
+                       'evenly across these.' };
+      }
+      /* 3. default */
+      return { source: 'default', baseline: baseline, items: defaultItems, note: defaultNote };
+    }
+
+    var thinNote = 'Based on our staffing until you have more matured volume — you have ' +
+      fmtIntPlain(scopeMature) + ' lead' + (scopeMature === 1 ? '' : 's') +
+      ' finished their sales cycle in the last 30 days, and we want at least ' +
+      CW_MIN_SCOPE + ' before reading your own pattern.';
+
+    var hourDefs = HOUR_SEGMENT_ORDER.map(function (k) {
+      return { key: k, label: HOUR_SEGMENT_LABEL[k] };
+    });
+    var dowDefs = [1, 2, 3, 4, 5, 6, 0].map(function (d) {
+      return { key: d, label: DOW_SHORT[d] };
+    });
+    var weekDefs = MONTH_PHASES.map(function (w) {
+      return { key: w.key, label: w.label };
+    });
+
+    return {
+      scopeMature: scopeMature,
+      enough: enough,
+      hours: grain('hours', noTime ? null : m.bySegment, hourDefs,
+        IDEAL_WINDOWS.map(function (w) {
+          return { key: w.segs[0], label: w.label, best: true };
+        }),
+        noTime
+          ? 'Time of day is not connected yet, so we cannot read your own hours. These are the ' +
+            'hours our floor is fully staffed — your own will appear here once it is wired up.'
+          : thinNote),
+      dow: grain('dow', m.byDow, dowDefs,
+        dowDefs.filter(function (d) { return IDEAL_DOW_SPLIT[d.key] >= 0.19; })
+               .map(function (d) { return { key: d.key, label: d.label, best: true }; }),
+        thinNote),
+      week: grain('week', m.byPhase, weekDefs,
+        weekDefs.map(function (w) { return { key: w.key, label: w.label, best: false }; }),
+        'We have no preferred week of the month, and you do not yet have the volume for us to ' +
+        'read yours. Steady pacing is what helps.')
+    };
+  }
+
+  /* Local int formatter — app.js is not loaded when data.js runs. */
+  function fmtIntPlain(n) { return (n || 0).toLocaleString('en-US'); }
 
   /* ---------------------------------------------------------------------- */
   /* Lead criteria — the Targeting page                                     */
@@ -978,7 +1373,7 @@
       _csrName: null,
       _callResult: null,
       _ipqsScore: Math.round(between(18, 96)),
-      _clawback: false,
+      _unfired: false,
       _badContact: false
     };
 
@@ -1013,7 +1408,7 @@
     lead._callResult = pick(['Contacted — qualified', 'Contacted — not qualified',
                              'No answer', 'Voicemail', 'Callback scheduled']);
     lead._badContact = rnd() < (0.07 / Math.max(0.5, q));
-    lead._clawback = lead.soldType ? rnd() < 0.035 : false;
+    lead._unfired = lead.soldType ? rnd() < 0.035 : false;
 
     return lead;
   }
@@ -1126,19 +1521,21 @@
           return Object.keys(set).sort().join(' + ') || 'Annuity';
         })(),
         integration: '—',
-        integrationNote: 'Not in the lead export.',
-        /* NOT DERIVABLE: the export starts at its own first row, so the
-           earliest lead is a floor on the relationship, not its start date. */
+        integrationNote: null,
+        /* Left NULL rather than derived. The earliest lead we hold is a floor
+           on the relationship, not its start date, and a wrong date on a
+           partnership summary is worse than a blank one. Populates from the
+           partner record once that is connected. */
         sinceISO: null,
         billingPeriod: 'Net 30',
         billingBasis: 'Invoiced monthly',
         exclusivity: '365-day Priority/Hot exclusivity window',
-        /* No contact data exists in the export. `placeholder: true` makes
-           the views render a designed empty state ("no contact on file yet")
-           instead of a fake-looking record — an honest gap should read as an
-           unfilled field, not broken UI. */
+        /* No contact record is connected yet. `placeholder: true` makes the
+           views render a designed empty state ("no contact on file yet")
+           instead of a fake-looking record — an unconnected field should read
+           as an unfilled field, not as broken UI. */
         users: [
-          { id: p.id + '-u1', name: 'Primary contact', title: 'Not in the lead export',
+          { id: p.id + '-u1', name: 'Primary contact', title: null,
             email: 'contact@' + p.id + '.example', isPrimary: true, away: false, avatar: null,
             placeholder: true }
         ]
@@ -1211,7 +1608,7 @@
         _csrName: null,
         _callResult: null,
         _ipqsScore: null,
-        _clawback: row[f.returned] === 1,
+        _unfired: row[f.returned] === 1,
         _badContact: false,
         _attempts: row[f.attempts]
       };
@@ -1537,8 +1934,9 @@
     var byType = { priority: 0, hot: 0, auction: 0, marketplace: 0, appointment: 0, livetransfer: 0 };
     var cycles = [], rejects = {}, salePrices = [];
     var earnings = 0, saleTotal = 0, hasEarnings = false;
-    var byBand = {}, bySegment = {}, byState = {}, byDow = {};
+    var byBand = {}, bySegment = {}, byState = {}, byDow = {}, byPhase = {};
     var idealWindowLeads = 0;
+    var sameDaySold = 0;
 
     function bucket(map, key) {
       if (!map[key]) map[key] = { raw: 0, paid: 0, mature: 0, ph: 0, earnings: 0 };
@@ -1577,7 +1975,13 @@
         rejectedEarnings += r.partnerShare || 0;
       }
 
-      if (r.daysToSale != null) cycles.push(r.daysToSale);
+      if (r.daysToSale != null) {
+        cycles.push(r.daysToSale);
+        /* Sold on the day it arrived. Counted on the LEAD, not on the sale
+           date — this is a property of the lead's own journey, so it belongs
+           on the same received-date basis as everything else in this block. */
+        if (r.daysToSale === 0) sameDaySold++;
+      }
       if (r.saleAmount) salePrices.push(r.saleAmount);
 
       if (r.partnerShare !== undefined) {
@@ -1593,7 +1997,8 @@
       var bSeg = bucket(bySegment, r.hourSegment);
       var bSt = bucket(byState, r.state);
       var bDow = bucket(byDow, r.receivedAt.getDay());
-      [bBand, bSeg, bSt, bDow].forEach(function (b) {
+      var bPh = bucket(byPhase, monthPhase(r.receivedAt));
+      [bBand, bSeg, bSt, bDow, bPh].forEach(function (b) {
         b.raw++;
         if (r.status === 'paid') b.paid++;
         if (matured) b.mature++;
@@ -1638,6 +2043,14 @@
       rejectedEarnings: round2(rejectedEarnings),
 
       medianCycle: median(cycles),
+      /* SAME-DAY CONVERSION. Denominator is the SAME rate denominator every
+         other conversion rate on this object uses, so it sits beside
+         Priority/Hot conversion and Sold rate without a footnote — see the
+         rateBasis doc above. Not "of everything that sold": that would make
+         it a restatement of median sales cycle rather than a conversion
+         measure, and it is filed under Conversion & value for a reason. */
+      sameDaySold: sameDaySold,
+      sameDayRate: rateDenom ? sameDaySold / rateDenom : 0,
       avgSalePrice: salePrices.length ? round2(salePrices.reduce(function (a, b) { return a + b; }, 0) / salePrices.length) : null,
       rejects: rejects,
 
@@ -1648,7 +2061,8 @@
       idealWindowLeads: idealWindowLeads,
       idealWindowShare: raw ? idealWindowLeads / raw : 0,
 
-      byBand: byBand, bySegment: bySegment, byState: byState, byDow: byDow
+      byBand: byBand, bySegment: bySegment, byState: byState, byDow: byDow,
+      byPhase: byPhase
     };
   }
 
@@ -2500,7 +2914,7 @@
   }
 
   /* ======================================================================
-     COMPENSATION — earnings, statements, clawbacks
+     COMPENSATION — earnings, statements, pixel unfires
      ----------------------------------------------------------------------
      Everything on the Compensation page. Three rules carried from the rest
      of the module:
@@ -2509,7 +2923,7 @@
          the SOLD date (including rejected-but-sold, per the Aug 5 2026
          ruling), CPL on the RECEIVED date. Same attribution split as
          targetProgress(); mixing the two is what makes a report look broken.
-       · Clawback rows are built field-by-field from an allowlist, like
+       · Unfire rows are built field-by-field from an allowlist, like
          runQuery(). The internal clawback_reason never leaves this module —
          affiliates see the RETURN_REASONS vocabulary only.
        · A statement with no URL renders "not linked yet", never a dead
@@ -2627,7 +3041,7 @@
   }
 
   /**
-   * The clawback report — leads unfired in audit, affiliate-safe.
+   * The Pixel unfire report — leads unfired in audit, affiliate-safe.
    *
    * MEMBERSHIP COMES FROM THE UNFIRE RECORD ITSELF, nothing inferred. In the
    * live export that is the `returned` flag — and note its shape: unfiring
@@ -2648,7 +3062,7 @@
    * fabricated. The mock derives them so the page demonstrates: audits run
    * weekly, so the unfire date is the Monday after the sale.
    */
-  function queryClawbacks(opts) {
+  function queryUnfires(opts) {
     opts = opts || {};
     var pid = resolvePartnerId(opts.partnerId);
     var from = opts.from || addDays(TODAY, -29);
@@ -2659,7 +3073,7 @@
     var out = [];
     for (var i = 0; i < ALL_LEADS.length; i++) {
       var l = ALL_LEADS[i];
-      if (l.partnerId !== pid || !l._clawback) continue;
+      if (l.partnerId !== pid || !l._unfired) continue;
       if (opts.campaignId && opts.campaignId !== 'all' && l.campaignId !== opts.campaignId) continue;
 
       var returnedAt = null, reason = null;
@@ -2862,6 +3276,12 @@
     columnsForPartner: columnsForPartner,
 
     REJECT_REASONS: REJECT_REASONS,
+    REJECT_GROUPS: REJECT_GROUPS,
+    REJECT_ORDER: REJECT_ORDER,
+    rejectCatalogue: rejectCatalogue,
+    rejectIsReal: rejectIsReal,
+    rejectIsLive: rejectIsLive,
+    rejectGroup: rejectGroup,
     rejectLabel: rejectLabel,
     rejectDesc: rejectDesc,
     DOCUMENTS: DOCUMENTS,
@@ -2890,6 +3310,16 @@
     IDEAL_WINDOWS: IDEAL_WINDOWS,
     IDEAL_DOW_SPLIT: IDEAL_DOW_SPLIT,
     COVERAGE_NOTE: COVERAGE_NOTE,
+    MONTH_PHASES: MONTH_PHASES,
+    ADMIN_CONVERSION_WINDOWS: ADMIN_CONVERSION_WINDOWS,
+    conversionWindows: conversionWindows,
+    CW_MIN_BUCKET: CW_MIN_BUCKET,
+    CW_MIN_SALES: CW_MIN_SALES,
+    CW_LIFT: CW_LIFT,
+    CW_MIN_SCOPE: CW_MIN_SCOPE,
+    MONTH_PHASE_ORDER: MONTH_PHASE_ORDER,
+    MONTH_PHASE_LABEL: MONTH_PHASE_LABEL,
+    monthPhase: monthPhase,
     HOUR_SEGMENT_LABEL: HOUR_SEGMENT_LABEL,
     HOUR_SEGMENT_ORDER: HOUR_SEGMENT_ORDER,
     isIdealSegment: isIdealSegment,
@@ -2897,6 +3327,8 @@
     DOW_SHORT: DOW_SHORT,
 
     STATE_DEMAND: STATE_DEMAND,
+    budgetRoom: budgetRoom,
+    BUDGET_BANDS: BUDGET_BANDS,
     stateDemand: stateDemand,
     isCoverageState: isCoverageState,
     BLENDED_CPL: BLENDED_CPL,
@@ -2928,7 +3360,7 @@
     groupBy: groupBy,
     payoutForWindow: payoutForWindow,
     RETURN_REASONS: RETURN_REASONS,
-    queryClawbacks: queryClawbacks,
+    queryUnfires: queryUnfires,
     leadStatementsFor: leadStatementsFor,
     saveStatementUrl: saveStatementUrl,
     checkDuplicate: checkDuplicate,
@@ -2949,7 +3381,7 @@
       var pid = resolvePartnerId(opts.partnerId);
       var fromMs = new Date(range.from.getFullYear(), range.from.getMonth(), range.from.getDate()).getTime();
       var toMs = new Date(range.to.getFullYear(), range.to.getMonth(), range.to.getDate(), 23, 59, 59, 999).getTime();
-      var margin = 0, revenue = 0, clawbacks = 0, badContacts = 0, paid = 0;
+      var margin = 0, revenue = 0, unfires = 0, badContacts = 0, paid = 0;
       for (var i = 0; i < ALL_LEADS.length; i++) {
         var l = ALL_LEADS[i];
         if (l.partnerId !== pid) continue;
@@ -2961,7 +3393,7 @@
         paid++;
         margin += l._margin;
         revenue += l.saleAmount;
-        if (l._clawback) clawbacks++;
+        if (l._unfired) unfires++;
         if (l._badContact) badContacts++;
       }
       /* The *Usable flags tell the health engine whether an input is real.
@@ -2973,7 +3405,7 @@
         paid: paid,
         marginPct: revenue ? margin / revenue : 0,
         marginUsable: !USING_REAL_DATA,
-        clawbackRate: paid ? clawbacks / paid : 0,
+        unfireRate: paid ? unfires / paid : 0,
         badContactRate: paid ? badContacts / paid : 0,
         badContactUsable: !USING_REAL_DATA
       };

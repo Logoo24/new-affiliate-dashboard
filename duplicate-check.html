@@ -162,13 +162,6 @@
               </ul>
             </div>
           </div>
-          <div class="mocknote">
-            <strong>Build note.</strong> This is a suppression-list API in disguise, so the
-            containment has to be in the design, not the UI: return a boolean, rate-limit per
-            partner per day, log every query with the partner ID, and reject bulk jobs above the
-            cap rather than truncating them silently. A partner who can query without limit can
-            enumerate the database one number at a time.
-          </div>
         </div>
       </section>
 
@@ -191,6 +184,15 @@
             proposing. <strong>Confirm with Sagar before any of it is built</strong>, because if
             the live file already differs, the affiliate-facing version has to match it rather
             than compete with it.
+          </div></div>
+
+          <div class="notice notice-mock"><span class="ico">✎</span><div>
+            <strong>Containment is a design constraint, not a UI one.</strong> This is a
+            suppression-list API in disguise: return a boolean, rate-limit per partner per day,
+            log every query with the partner ID, and reject bulk jobs above the cap rather than
+            truncating them silently. A partner who can query without limit can enumerate the
+            database one number at a time. <em>Moved here from the partner-facing card above —
+            it is engineering direction, not partner copy.</em>
           </div></div>
 
           <h3 style="margin-bottom:8px">Questions for Sagar</h3>

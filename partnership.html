@@ -59,8 +59,8 @@
         <a class="card gauge-card" id="gauge-link" href="health.html">
           <div class="card-head">
             <div>
-              <h2>Health score</h2>
-              <p class="sub">Across every campaign on this account.</p>
+              <h2>Affiliate health score</h2>
+              <p class="sub">Every campaign on this account, weighted by volume.</p>
             </div>
           </div>
           <div class="card-body">
@@ -146,7 +146,8 @@
     '<span class="dot"></span>' + (act.active ? 'Active' : 'Inactive') + '</span>' +
     (D.fmtSince(state.partnerId)
       ? '<div class="quota" style="margin-top:8px">Partner since ' + A.esc(D.fmtSince(state.partnerId)) + '</div>'
-      : '<div class="quota" style="margin-top:8px" title="The lead export does not carry a partnership start date — see the Data source page.">Partner since — <em>not in the export</em></div>') +
+      : '<div class="quota" style="margin-top:8px">Partner since ' +
+          A.notConnected('Your partnership start date') + '</div>') +
     (!act.active && act.lastAcceptedAt
       ? '<div class="quota" style="margin-top:2px">Last accepted lead ' + A.fmtDate(act.lastAcceptedAt) + '</div>'
       : '');
@@ -181,8 +182,12 @@
      Drawn by the SHARED dial in charts.js — the same one the Health
      scorecard's hero uses, so the two can never drift apart. */
   document.getElementById('gauge-link').href = A.linkTo('health.html', state);
+  /* Computed once and shared with the Active campaigns table below, so the
+     account dial and the per-campaign column are the same run of the engine —
+     the itemised scores always add up to the dial. */
+  var health = H.score({ partnerId: state.partnerId });
   (function () {
-    var hs = H.score({ partnerId: state.partnerId });
+    var hs = health;
     var sevSuffix = { '': '', 'is-warning': '-warning', 'is-serious': '-serious',
                       'is-critical': '-critical' }[H.meterClass(hs.score)];
     FZCharts.gauge(document.getElementById('gauge'), {
@@ -259,8 +264,84 @@
   (function () {
     var camps = D.activeCampaignsFor(state.partnerId);
 
+    /* Per-campaign scores off the SAME engine run that drew the dial above,
+       keyed by campaign id. The campaign is the scoring unit, so this column
+       is the dial itemised — not a second, differently-derived number. */
+    var scoreById = {};
+    health.campaigns.forEach(function (cs) {
+      if (cs.campaign) scoreById[cs.campaign.id] = cs;
+    });
+
+    /* A campaign score covers the two campaign-grain pillars only (conversion
+       and delivered quality). Consistency and compliance are account-level
+       behaviour and stay on the affiliate score — same split as the Health
+       scorecard's own per-campaign table, so the two pages agree. */
+    var scoreTip = A.tip('Conversion and lead quality for this campaign alone, scored against ' +
+      'its own campaign class. Account-level behaviour — consistency, compliance — is not ' +
+      'repeated per campaign, so these do not simply average to your affiliate score: that is ' +
+      'the volume-weighted rollup of these plus the account-level pillars.');
+
+    function scoreCell(cid) {
+      var cs = scoreById[cid];
+      if (!cs || cs.score == null) {
+        return noScore('This campaign has no leads that have finished their sales cycle yet, ' +
+                       'so it is not scored. An unscored campaign is not a zero — it is ' +
+                       'left out of your affiliate score rather than counted against it.');
+      }
+      /* The number carries its own band by colour, with the band name in the
+         hover bubble beside it — a compact glance column, with the full read
+         one click away on the campaign's own pages.
+
+         Colour source: the meter ramp (--meter-fill*), not the status tokens,
+         and picked with the same H.meterClass() the gauge above uses, so the
+         number and the dial can never disagree. This is the one exception the
+         palette allows to "no status by colour alone", and it is the meter
+         case exactly: those steps are validated to carry meaning unaided,
+         whereas --warning (#fab219, 1.83:1 on white) would be illegible as
+         text. The score itself is also its own label — a 44 reads as a 44
+         whether or not the colour lands — and the bubble carries the band as
+         text for anyone who cannot use the colour.
+
+         SIZE IS LOAD-BEARING: 19px bold clears WCAG's large-text cutoff
+         (18.66px bold), so the applicable contrast floor is 3:1 — the same
+         one the meter ramp was validated against. At 16px the 4.5:1 body-text
+         floor would apply and --meter-fill-warning (#A8730B on white) lands
+         at 4.10:1, a fail. Do not shrink this number without moving to a
+         text-validated colour. Measured on white: good 6.63 · warning 4.10 ·
+         serious 5.30 · critical 6.34; on the dark card all four clear 5.6. */
+      /* The bubble carries the band as TEXT — it is what the badge used to
+         say. Deliberately not tier.action: that copy ends in "the breakdown
+         below", which is true on the Health scorecard and false here. What
+         is driving the number lives one click away, on this row's own
+         pages. */
+      var band = (cs.tier ? A.esc(cs.tier.label) + '.' : 'Not banded yet.') +
+        (cs.provisional
+          ? ' Provisional — fewer than 100 of this campaign’s leads have finished ' +
+            'their sales cycle, so read it as directional rather than final.'
+          : '') +
+        ' Open the campaign to see what is driving it.';
+
+      return '<td data-sort="' + cs.score + '">' +
+        '<span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap">' +
+          '<span style="font-weight:700;font-size:19px;line-height:1.15;color:var(--meter-fill' +
+            H.meterClass(cs.score).replace('is-', '-') + ')">' + cs.score + '</span>' +
+          A.tip(band) +
+        '</span>' +
+        '</td>';
+    }
+
+    /* data-sort="" so the sorter reads this as EMPTY and floats it to the
+       bottom in both directions. Without it the tip glyph rides along in the
+       cell's text and an unscored campaign sorts as the string "—i", landing
+       above the real scores on an ascending sort. */
+    function noScore(why) {
+      return '<td data-sort=""><span style="color:var(--ink-muted)">—</span>' +
+        A.tip(why) + '</td>';
+    }
+
     var head = '<thead><tr><th>CID</th><th>Campaign</th><th>Product</th>' +
-      '<th>Comp model</th><th>Launched</th><th></th></tr></thead>';
+      '<th>Comp model</th><th>Health score' + scoreTip + '</th>' +
+      '<th>Launched</th><th></th></tr></thead>';
 
     var body = camps.map(function (c) {
       return '<tr>' +
@@ -268,6 +349,7 @@
         '<td><strong>' + A.esc(c.name) + '</strong></td>' +
         '<td>' + A.esc(c.product) + '</td>' +
         '<td>' + A.esc(D.compLabelForCampaign(c)) + '</td>' +
+        scoreCell(c.id) +
         '<td style="color:var(--ink-2);white-space:nowrap">' + A.esc(c.launched) + '</td>' +
         '<td style="text-align:right">' +
           '<a class="btn btn-sm" href="' +
@@ -288,6 +370,8 @@
         '<td><strong>' + A.esc(c.name) + '</strong></td>' +
         '<td>' + A.esc(c.product) + '</td>' +
         '<td>' + A.esc(D.compLabelForCampaign(c)) + '</td>' +
+        noScore('This campaign is still in setup — it starts scoring once it has sent leads ' +
+                'that have finished their sales cycle.') +
         '<td><span class="badge badge-warn"><span class="dot"></span>In setup — ' +
           (su.current && su.current.owner !== 'us' ? 'your move' : 'with us') + '</span></td>' +
         '<td style="text-align:right">' +
@@ -301,7 +385,7 @@
     /* Logan's rule for a campaign-less account: one plain sentence. */
     document.getElementById('campaign-table').innerHTML = head + '<tbody>' +
       (body ||
-       '<tr><td colspan="6" class="empty">There are no active campaigns on this account.</td></tr>') +
+       '<tr><td colspan="7" class="empty">There are no active campaigns on this account.</td></tr>') +
       '</tbody>';
 
     document.getElementById('camp-sub').textContent =

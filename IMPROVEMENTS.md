@@ -24,7 +24,7 @@ question: *"what will the check be, and does it match our numbers?"*
 | **Earnings statement page** | A monthly statement view per partner: opening period, leads accepted (CPL) or sales attributed (rev-share), rate applied per campaign, returns/adjustments, total due, payment date, payment status. Downloadable as CSV/PDF. | Today the partner reconstructs their invoice from the lead table. A statement that matches the wire, line for line, removes the single largest source of support email — and the OptiLabX $5,194 variance shows what reconstruction errors cost. |
 | **Payment history** | Past statements with paid date and amount. | "Did the June payment go out?" should never be an email. |
 | **Pending vs settled earnings** | Rev-share: sales inside the current period marked *pending* until the statement closes; CPL: accepted-lead spend to date vs the weekly target. | Partners plan media buys against expected cash. Pending/settled removes the guesswork about what is real yet. |
-| **Returns & adjustments visibility** | When a lead is returned/credited, it shows on the statement with its reason (from the affiliate-safe vocabulary — never clawback internals). | An unexplained deduction reads as us shorting them. An explained one reads as bookkeeping. |
+| **Returns & adjustments visibility** | When a lead is returned/credited, it shows on the statement with its reason (from the affiliate-safe vocabulary — never the internal `clawback_reason`). | An unexplained deduction reads as us shorting them. An explained one reads as bookkeeping. |
 
 *Depends on: billing terms per partner (B3), statement storage. The attribution rules are already
 built — statements are the sold-date basis for rev-share and received-date for CPL, which

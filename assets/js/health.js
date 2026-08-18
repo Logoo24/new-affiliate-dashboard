@@ -175,7 +175,10 @@
     ipqs:      { higherBetter: false, K: 50,  fallback: null /* custom */ },
     stability: { higherBetter: false, K: null, fallback: null /* custom */ },
     pacing:    { higherBetter: false, K: null, fallback: null /* custom */ },
-    stateFit:  { higherBetter: true,  K: null, fallback: [0.05, 0.28] }
+    stateFit:  { higherBetter: true,  K: null, fallback: [0.05, 0.28] },
+    sameDay:   { higherBetter: true,  K: 100, fallback: [0.00, 0.06] },
+    dowFit:    { higherBetter: true,  K: null, fallback: [0.55, 0.95] },
+    domEven:   { higherBetter: false, K: null, fallback: null /* custom */ }
   };
 
   /* Fallback scores for inverse metrics when no pool exists (v1 formulas). */
@@ -187,6 +190,9 @@
       case 'ipqs':      return norm(0.15 - v, 0, 0.13);
       case 'stability': return norm(0.12 - v, 0, 0.10);
       case 'pacing':    return norm(1 - v, 0.30, 0.85);
+      /* 0 = perfectly even across the month, 0.67 = everything in one phase.
+         Anything past ~0.40 is a partner delivering in bursts. */
+      case 'domEven':   return norm(0.45 - v, 0, 0.40);
       default:
         var fb = METRIC_DEFS[key].fallback;
         return fb ? norm(v, fb[0], fb[1]) : null;
@@ -216,8 +222,69 @@
       cycle: m.medianCycle,
       accept: m.acceptanceRate,
       dupe: raw ? (m.rejects.duplicate || 0) / raw : null,
-      ipqs: raw ? (m.rejects.ipqs || 0) / raw : null
+      ipqs: raw ? (m.rejects.ipqs || 0) / raw : null,
+
+      /* ---- delivery timing ---------------------------------------------
+         WHAT THESE DO AND DO NOT MEASURE. They are about WHEN a partner
+         delivers, which is theirs to control, not about how fast we work a
+         lead once it lands — that is our call floor and it stays out of an
+         affiliate-facing score (the v1 Speed & operations pillar was deleted
+         for exactly this reason; do not walk it back in through this door).
+
+         Hour of day is UNSCORABLE on the live export: `TimeStamp` is empty on
+         every row and `Created On` is date-only (A1). It is parked and
+         renormalised away, never scored zero.
+
+         Day of week is scored against IDEAL_DOW_SPLIT — a real, stated fact
+         about when the floor is staffed. Week of month has NO ideal shape and
+         we do not invent one, so it is scored on evenness only. */
+      sameDay: m.sameDayRate == null ? null : m.sameDayRate,
+      dowFit: dowFit(m),
+      domEven: domUnevenness(m)
     };
+  }
+
+  /* Share of volume landing on the days we are most staffed for, expressed as
+     overlap with IDEAL_DOW_SPLIT. 1.0 means the partner's week matches ours
+     exactly; a partner sending everything on Sunday scores 0. Higher better.
+
+     This is an ASK, not a gate — we accept leads any day, and the coverage
+     note says so everywhere this idea is rendered. It earns a place in the
+     score because a lead landing when the floor is closed waits longer for
+     its first dial and converts worse for it, which is a lead-quality
+     outcome, not an obedience test. */
+  function dowFit(m) {
+    var by = m.byDow;
+    if (!by) return null;
+    var total = 0;
+    Object.keys(by).forEach(function (d) { total += by[d].raw; });
+    if (!total) return null;
+    var overlap = 0;
+    for (var d = 0; d < 7; d++) {
+      var share = (by[d] ? by[d].raw : 0) / total;
+      overlap += Math.min(share, D.IDEAL_DOW_SPLIT[d]);
+    }
+    return overlap;
+  }
+
+  /* How lumpy the month is: total absolute deviation from an even split
+     across the three month phases, halved so it lands on 0–1. 0 is perfectly
+     paced, 1 is everything in one phase. LOWER BETTER.
+
+     Deliberately measured against EVEN, not against a preferred phase — we
+     have no operational preference for early or late in the month, and
+     inventing one is the mistake the 6–9a "golden window" was. */
+  function domUnevenness(m) {
+    var by = m.byPhase;
+    if (!by) return null;
+    var total = 0;
+    D.MONTH_PHASE_ORDER.forEach(function (k) { total += by[k] ? by[k].raw : 0; });
+    if (!total) return null;
+    var even = 1 / D.MONTH_PHASE_ORDER.length, dev = 0;
+    D.MONTH_PHASE_ORDER.forEach(function (k) {
+      dev += Math.abs(((by[k] ? by[k].raw : 0) / total) - even);
+    });
+    return dev / 2;
   }
 
   function buildPools() {
@@ -289,6 +356,52 @@
     return (n * v + K * med) / (n + K);
   }
 
+  /* ---------------------------------------------------------------------- */
+  /* Within-pillar weights — ONE definition, both code paths                 */
+  /* ---------------------------------------------------------------------- */
+  /* scoreUnit() (per campaign) and the rollup in score() (per account) both
+     build the same part lists. They used to carry two separate hardcoded
+     weight tables, which is a silent-drift bug waiting to happen — a weight
+     changed in one place and the campaign scores stopped reconciling with
+     the account score. Defined once here. */
+
+  var CONV_PARTS = [
+    { key: 'ph', metric: 'ph', weight: 0.405, shrinkOn: 'maturePaid',
+      label: 'Priority/Hot conversion (of accepted)', fmt: function (v) { return pct(v); } },
+    { key: 'topTier', metric: 'topTier', weight: 0.180,
+      label: 'Share of sales in the top tiers',
+      fmt: function (v) { return v == null ? '—' : pct(v); } },
+    { key: 'sold', metric: 'sold', weight: 0.180, shrinkOn: 'maturePaid',
+      label: 'Sold rate (of accepted)', fmt: function (v) { return pct(v); } },
+    /* Same-day conversion. Sits with the other conversion rates on the same
+       denominator, so "3.1% of what you sent sold the same day" reads
+       straight across from "Priority/Hot conversion". It is not a restatement
+       of median sales cycle: the cycle answers "how long do sales take", this
+       answers "how often is it immediate", and a partner can move the second
+       without moving the first. */
+    { key: 'sameDay', metric: 'sameDay', weight: 0.100, shrinkOn: 'maturePaid',
+      label: 'Same-day conversion (of accepted)',
+      fmt: function (v) { return v == null ? '—' : pct(v); } },
+    { key: 'cycle', metric: 'cycle', weight: 0.135,
+      label: 'Median sales cycle',
+      fmt: function (v) { return v == null ? '—' : v + 'd'; } }
+  ];
+
+  var QUAL_W = {
+    badcontact: 0.204, ipqs: 0.187, dupe: 0.170, accept: 0.170, stability: 0.119,
+    timeHour: 0.060, timeDow: 0.050, timeDom: 0.040
+  };
+
+  /* Plain-language read on the month-evenness number, which is otherwise a
+     bare 0–0.67 nobody can interpret. */
+  function evenLabel(v) {
+    if (v == null) return '—';
+    if (v < 0.12) return 'even';
+    if (v < 0.25) return 'fairly even';
+    if (v < 0.40) return 'uneven';
+    return 'bursty';
+  }
+
   /* Banded, not continuous — see mechanics note #4 in the header. */
   function bandedAcceptScore(p) {
     if (p == null) return null;
@@ -305,43 +418,64 @@
     var raw = m.raw || 0;
     var vals = campaignMetricValues(m);
 
-    var conv = [
-      { key: 'ph', label: 'Priority/Hot conversion (of accepted)', weight: 0.45,
-        score: percentileScore(cls, 'ph', shrink('ph', cls, vals.ph, m.maturePaid)),
-        display: pct(vals.ph) },
-      { key: 'topTier', label: 'Share of sales in the top tiers', weight: 0.20,
-        score: vals.topTier == null ? null : percentileScore(cls, 'topTier', vals.topTier),
-        parked: vals.topTier == null,
-        display: vals.topTier == null ? '—' : pct(vals.topTier) },
-      { key: 'sold', label: 'Sold rate (of accepted)', weight: 0.20,
-        score: percentileScore(cls, 'sold', shrink('sold', cls, vals.sold, m.maturePaid)),
-        display: pct(vals.sold) },
-      { key: 'cycle', label: 'Median sales cycle', weight: 0.15,
-        score: vals.cycle == null ? null : percentileScore(cls, 'cycle', vals.cycle),
-        parked: vals.cycle == null,
-        display: vals.cycle == null ? '—' : vals.cycle + 'd' }
-    ];
+    /* CONV_W / QUAL_W are the within-pillar weights, defined once so the
+       scoring path and the display path below cannot drift apart — they used
+       to be two hardcoded lists and a change to one silently disagreed with
+       the other.
+
+       Same-day conversion was added Aug 18 at 0.10. The four original parts
+       keep their RELATIVE weights exactly (each scaled by 0.90) rather than
+       being re-argued from scratch: nothing about their importance changed,
+       only that there is now a fifth thing in the pillar. */
+    var conv = CONV_PARTS.map(function (d) {
+      var v = vals[d.metric];
+      var sc = v == null ? null
+        : percentileScore(cls, d.metric,
+            d.shrinkOn ? shrink(d.metric, cls, v, m[d.shrinkOn]) : v);
+      return { key: d.key, label: d.label, weight: d.weight,
+               score: sc, parked: sc == null, display: d.fmt(v) };
+    });
 
     /* Quality: validity signals weigh MORE than raw acceptance — acceptance
        measures fit-to-filter, which is the weakest health signal here. */
     var acceptPct = percentileScore(cls, 'accept', shrink('accept', cls, vals.accept, raw));
     var qual = [
-      { key: 'badcontact', label: 'Bad-contact rate', weight: 0.24, internal: true,
+      { key: 'badcontact', label: 'Bad-contact rate', weight: QUAL_W.badcontact, internal: true,
         parked: true, score: null,
         parkNote: 'needs the call-outcome feed' },
-      { key: 'ipqs', label: 'Contact-validation rejects', weight: 0.22,
+      { key: 'ipqs', label: 'Contact-validation rejects', weight: QUAL_W.ipqs,
         score: percentileScore(cls, 'ipqs', shrink('ipqs', cls, vals.ipqs, raw)),
         display: pct(vals.ipqs) },
-      { key: 'dupe', label: 'Duplicate rate', weight: 0.20,
+      { key: 'dupe', label: 'Duplicate rate', weight: QUAL_W.dupe,
         score: percentileScore(cls, 'dupe', shrink('dupe', cls, vals.dupe, raw)),
         display: pct(vals.dupe) },
-      { key: 'accept', label: 'Acceptance rate (banded)', weight: 0.20,
+      { key: 'accept', label: 'Acceptance rate (banded)', weight: QUAL_W.accept,
         score: bandedAcceptScore(acceptPct),
         display: pct(vals.accept) },
       /* Stability is account-level by design — weekly acceptance at single-
          campaign grain is too noisy to judge anyone on. Filled in by the
          caller at scope level; parked here. */
-      { key: 'stability', label: 'Acceptance stability', weight: 0.14, parked: true, score: null }
+      { key: 'stability', label: 'Acceptance stability', weight: QUAL_W.stability,
+        parked: true, score: null },
+
+      /* ---- DELIVERY TIMING (added Aug 18) -------------------------------
+         Three parts, 0.15 of the pillar between them. The five parts above
+         keep their relative weights exactly (each scaled by 0.85).
+
+         Hour of day is PARKED, not zero — `TimeStamp` is empty on every row
+         of the live export (A1). Parked means excluded and renormalised, so
+         a partner is never docked for a gap on our side. It turns on the day
+         the export carries a time. */
+      { key: 'timeHour', label: 'Delivery timing — hour of day', weight: QUAL_W.timeHour,
+        parked: true, score: null, parkNote: 'needs time of day connected' },
+      { key: 'timeDow', label: 'Delivery timing — day of week', weight: QUAL_W.timeDow,
+        score: vals.dowFit == null ? null : percentileScore(cls, 'dowFit', vals.dowFit),
+        parked: vals.dowFit == null,
+        display: vals.dowFit == null ? '—' : pct(vals.dowFit) },
+      { key: 'timeDom', label: 'Delivery timing — week of month', weight: QUAL_W.timeDom,
+        score: vals.domEven == null ? null : percentileScore(cls, 'domEven', vals.domEven),
+        parked: vals.domEven == null,
+        display: vals.domEven == null ? '—' : evenLabel(vals.domEven) }
     ];
 
     return { conv: conv, qual: qual, vals: vals };
@@ -477,15 +611,11 @@
       ? units.slice().sort(function (a, b) { return b.weight - a.weight; })[0].cls
       : 'fresh';
 
-    var convParts = ['ph', 'topTier', 'sold', 'cycle'].map(function (k) {
-      var proto = units.length ? units[0].conv.filter(function (x) { return x.key === k; })[0] : null;
-      var s = rollupPart('conv', k);
-      var av = campaignMetricValues(m);
-      var disp = { ph: pct(av.ph), topTier: av.topTier == null ? '—' : pct(av.topTier),
-                   sold: pct(av.sold), cycle: av.cycle == null ? '—' : av.cycle + 'd' }[k];
-      return { key: k, label: proto ? proto.label : k,
-        weight: { ph: 0.45, topTier: 0.20, sold: 0.20, cycle: 0.15 }[k],
-        score: s, parked: s == null, display: disp };
+    var avConv = campaignMetricValues(m);
+    var convParts = CONV_PARTS.map(function (d) {
+      var sc = rollupPart('conv', d.key);
+      return { key: d.key, label: d.label, weight: d.weight,
+               score: sc, parked: sc == null, display: d.fmt(avConv[d.metric]) };
     });
 
     var av2 = campaignMetricValues(m);
@@ -495,17 +625,29 @@
       /* Parked displays say "not yet reported" — WHY it is parked (the
          call-outcome feed, the export's missing timestamp) is a note to the
          build team and lives in ADMIN-MAPPING, not in a partner's face. */
-      { key: 'badcontact', label: 'Bad-contact rate', weight: 0.24, parked: true, score: null,
-        display: 'not yet reported' },
-      { key: 'ipqs', label: 'Contact-validation rejects', weight: 0.22,
+      { key: 'badcontact', label: 'Bad-contact rate', weight: QUAL_W.badcontact,
+        parked: true, score: null, display: 'not yet reported' },
+      { key: 'ipqs', label: 'Contact-validation rejects', weight: QUAL_W.ipqs,
         score: rollupPart('qual', 'ipqs'), display: pct(av2.ipqs) },
-      { key: 'dupe', label: 'Duplicate rate', weight: 0.20,
+      { key: 'dupe', label: 'Duplicate rate', weight: QUAL_W.dupe,
         score: rollupPart('qual', 'dupe'), display: pct(av2.dupe) },
-      { key: 'accept', label: 'Acceptance rate (banded)', weight: 0.20,
+      { key: 'accept', label: 'Acceptance rate (banded)', weight: QUAL_W.accept,
         score: rollupPart('qual', 'accept'), display: pct(av2.accept) },
-      { key: 'stability', label: 'Acceptance stability', weight: 0.14,
+      { key: 'stability', label: 'Acceptance stability', weight: QUAL_W.stability,
         parked: stabilityScore == null, score: stabilityScore,
-        display: stabilityStd == null ? '—' : '±' + (stabilityStd * 100).toFixed(1) + 'pp weekly' }
+        display: stabilityStd == null ? '—' : '±' + (stabilityStd * 100).toFixed(1) + 'pp weekly' },
+
+      /* Delivery timing. Hour of day stays parked until the export carries a
+         timestamp (A1); the other two are scored at account grain from the
+         same rollup as everything else in this pillar. */
+      { key: 'timeHour', label: 'Delivery timing — hour of day', weight: QUAL_W.timeHour,
+        parked: true, score: null, display: 'not yet reported' },
+      { key: 'timeDow', label: 'Delivery timing — day of week', weight: QUAL_W.timeDow,
+        score: rollupPart('qual', 'timeDow'),
+        display: av2.dowFit == null ? '—' : pct(av2.dowFit) },
+      { key: 'timeDom', label: 'Delivery timing — week of month', weight: QUAL_W.timeDom,
+        score: rollupPart('qual', 'timeDom'),
+        display: evenLabel(av2.domEven) }
     ];
     qualParts.forEach(function (p) { if (p.score == null) p.parked = true; });
     convParts.forEach(function (p) { if (p.score == null) p.parked = true; });
@@ -517,9 +659,11 @@
       { key: 'stateFit', label: 'Volume in needed states', weight: 0.45,
         score: percentileScore(domCls, 'stateFit', stateShare),
         display: pct(stateShare) },
-      /* Blocked on time-of-day landing in the export — ADMIN-MAPPING A1. */
-      { key: 'windowFit', label: 'Send-window fit', weight: 0.0, parked: true, score: null,
-        display: 'not yet reported' }
+      /* `windowFit` used to sit here at weight 0, parked on A1. It is now
+         "Delivery timing — hour of day" inside Delivered quality, where the
+         rest of the timing signals live. Removed rather than left as a second
+         parked copy of the same idea — two rows saying "not yet reported"
+         about one missing field read as two separate gaps. */
     ];
 
     var compScore = weightedAvg(compParts);

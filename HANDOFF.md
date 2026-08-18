@@ -521,6 +521,59 @@ annuity.org runs at 85%.
 
 ---
 
+## Performance vs Targeting — what lives where, and why
+
+Reorganised Aug 18. The two pages had drifted into overlapping on "which slice of my traffic
+converts best", and the date filter is what exposed it: **Investable assets, Arrival window and
+Geography were the only cards on the Performance overview that did not respond to the range
+picker.** All three read the fixed trailing 30-day matured cohort — correctly, per the attribution
+rules — so switching that page to "Last 7 days" left them sitting still.
+
+The rule now: **a card that responds to a date range belongs on Performance; a card scored on the
+matured cohort belongs on Targeting.** Targeting gained `campaign · sub-ID` filters and no range,
+the same set the Health scorecard carries for the same reason.
+
+- **Investable assets** moved to Targeting, beside Lead criteria — criteria is our rule, this is
+  their result against it, and the $100K–$250K finding is a targeting decision by our own framing.
+- **Geography** merged into the state-demand list as one **States** card. The decision is the
+  intersection of "where do I convert" and "where is budget unspent", and it used to need two
+  pages. States we want that an affiliate sends nothing from now appear in the table.
+- **Arrival window was deleted, not moved.** It had become a straight duplicate of the Top
+  conversion windows hour-of-day grain — same source, same metric, both blocked on A1.
+
+Performance keeps the hero, tiles, by-day charts, rejections, lead tier mix, campaigns and sub-ID,
+plus a pointer to Targeting. It reads as one question again: how did I do in this window.
+
+---
+
+## Top conversion windows — derived per affiliate, NEEDS AN ADMIN OVERRIDE
+
+Changed Aug 18. The Targeting card used to show every affiliate the same two hours and the same
+weekly split — a leaflet, not an analysis. It now derives that affiliate's best **hour of day, day
+of week and week of the month** from their own trailing 30-day matured cohort.
+
+**The override is the part that still needs building.** `ADMIN_CONVERSION_WINDOWS` in `data.js` is
+an empty hardcoded object. Derived numbers on a thin or unusual month can be wrong, and an account
+manager who knows better needs to pin them without a deploy. It must be **per grain** — the common
+case is pinning hours while letting days derive. Precedence is **override → derived → default**,
+and the card renders which one it used rather than hiding it: an affiliate reading "based on our
+staffing" needs to know they are not looking at their own numbers yet.
+
+A window is only called a standout at **25+ matured leads, 3+ Priority/Hot sales, and 20% above
+that affiliate's own average**. All three guards are needed. The sales floor is the one that
+matters on a low-converting account: with a 0.2% baseline, a single sale in a 25-lead bucket reads
+as a 20× lift. The lift margin is the one that matters everywhere else: without it a 0.24% day
+"beats" a 0.20% average and gets recommended, which is worse than recommending nothing.
+
+**Hour of day reads Default for every affiliate today** — the export carries no time (A1). It turns
+on by itself when the field lands.
+
+**Do not confuse this with the score.** The card says when *your* leads convert best; Delivery
+timing in Delivered quality says how much of your volume lands while *our floor* is staffed. An
+affiliate can top the card and still score mid on the pillar. Full spec in ADMIN-MAPPING §5b-i.
+
+---
+
 ## Spend & volume targets — CPL only, NOT BUILT, needs an admin screen
 
 **Revenue-share partners get no target at all — confirmed by Logan, Aug 2026.** They can send as
@@ -564,8 +617,10 @@ Nothing below is a nice-to-have; each one blocks a specific thing already drawn 
 | **`sold_type`** as distinct labels — Priority / Hot / Auction / Marketplace | The North Star metric, the entire scorecard, the sold-type column. The current lead table cannot separate Priority from Hot. | **Blocking.** Nothing affiliate-facing is worth shipping without it. |
 | **`subid`, `click_id`, `utm_campaign`, `utm_medium`** | Sub-ID drilldown, publisher-level scoring, Madrivo's core requirement | **Blocking** for Module A drilldown |
 | **`speed_to_lead`** (seconds, receipt → first dial) | Operations pillar | Pillar is **parked** in the mock until this lands |
-| **Unfire feed** — lead id, unfire timestamp, affiliate-safe reason code, amount credited *(Sagar to connect)* | The Clawback report on the Compensation page. The export carries only a `returned` flag — no date, reason, or amount, so those columns render as absent rather than invented | **Blocking** for the Clawback report. The reason code must be the affiliate-safe `RETURN_REASONS` vocabulary, never the internal `clawback_reason` |
+| **Unfire feed** — lead id, unfire timestamp, affiliate-safe reason code, amount credited *(Sagar to connect)* | The Pixel unfire report on the Compensation page. The export carries only a `returned` flag — no date, reason, or amount, so those columns render as absent rather than invented | **Blocking** for the Pixel unfire report. The reason code must be the affiliate-safe `RETURN_REASONS` vocabulary, never the internal `clawback_reason` |
 | **`call_attempts_to_convert`** | Operations pillar, Courtney's internal view | Parked |
+| **True consumer-submission timestamp**, separate from the import/`Created On` date, plus a flag on bulk-imported rows | The three Delivery timing components in Delivered quality | **Blocking** for those components being honest. On aged bulk imports `Created On` is our load date: Heritage campaign 600 is 55,481 of 56,309 cohort leads landing on three weekdays and 100% in the last third of the month. We would be scoring our own import schedule. ADMIN-MAPPING A12 |
+| **Controlled `reject_reason` vocabulary**, with `IPQS` split into the failing check and a distinct code for blank/null required fields | The entire rejection breakdown, the lead-table reason filter, every drill-down. `REJECT_REASONS` in `data.js` is the proposed target list | **Blocking** for shipping the Performance overview honestly. IPQS alone is 52% of rejections as one unactionable label. Full spec in ADMIN-MAPPING §3a |
 | `campaign_id` + received/sold timestamps | — | Already on the table |
 
 The Speed & operations pillar is **excluded and the remaining three renormalised to 100**, rather
@@ -621,7 +676,7 @@ made the case for it:
   and holds across months — the highest-leverage targeting change most partners can make.
 - **Arrival-window performance**, against the two ideal reception windows. See the correction
   below — an earlier version of this asserted a 6–9a "golden window" that was invented.
-- **Tier mix and average sale price**, explicitly requested by Heritage. Revenue share sees the
+- **Lead tier mix and average sale price**, explicitly requested by Heritage. Revenue share sees the
   earnings column; CPL sees the mix and share only, because sale price is revenue.
 
 ### CORRECTION — the 6–9a "golden window" was invented, and is gone

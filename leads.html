@@ -76,7 +76,7 @@
     subtitle: 'Every lead you sent, what happened to it, and why.'
   });
   A.filterBar(document.getElementById('filter-host'), state,
-    ['range', 'campaign', 'subid', 'status', 'sold']);
+    ['range', 'campaign', 'subid', 'status', 'reason', 'sold']);
 
   var all = D.queryLeads({
     partnerId: state.partnerId,
@@ -87,6 +87,10 @@
   var rows = all.filter(function (r) {
     if (state.status === 'paid' && r.status !== 'paid') return false;
     if (state.status === 'free' && r.status !== 'free') return false;
+    /* A reason only exists on a rejected row, so filtering by one implies
+       rejected — no need to make the user set Status as well, and setting
+       Status = Accepted alongside a reason correctly yields nothing. */
+    if (state.reason !== 'all' && r.rejectReason !== state.reason) return false;
     if (state.sold === 'all') return true;
     if (state.sold === 'ph') return r.soldType === 'priority' || r.soldType === 'hot';
     if (state.sold === 'unsold') return !r.soldType;

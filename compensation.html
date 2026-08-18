@@ -76,15 +76,15 @@
       <section class="card">
         <div class="card-head">
           <div>
-            <h2>Clawback report</h2>
-            <p class="sub" id="cb-sub"></p>
+            <h2>Pixel unfire report</h2>
+            <p class="sub" id="unfire-sub"></p>
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data" id="cb-table"></table>
+          <table class="data" id="unfire-table"></table>
         </div>
-        <div class="card-foot" id="cb-foot"></div>
-        <div class="card-body" id="cb-note" style="padding-top:0"></div>
+        <div class="card-foot" id="unfire-foot"></div>
+        <div class="card-body" id="unfire-note" style="padding-top:0"></div>
       </section>
 
     </div>
@@ -124,7 +124,7 @@
     revshare: 'Revenue share is paid on the date a lead sells, so this window counts every sale that closed inside it — including sales of leads submitted earlier, and your share of any sale of a lead we declined.',
     cpl: 'CPL is billed on acceptance, so this window counts every lead accepted inside it. Whether it later sells does not change what you are owed.'
   };
-  var AUDIT_TIP = 'This figure is provisional until the monthly statement closes. We audit accepted leads weekly; any lead that should not have been accepted is removed and never billed — removals appear in the Clawback report below.';
+  var AUDIT_TIP = 'This figure is provisional until the monthly statement closes. We audit accepted leads weekly; any lead that should not have been accepted is removed and never billed — removals appear in the Pixel unfire report below.';
 
   /* ---- earned this period ------------------------------------------------ */
   (function () {
@@ -176,7 +176,7 @@
         '<td style="text-align:right">' + A.fmtInt(c.count) + '</td>' +
         '<td style="text-align:right">' +
           (c.known ? A.fmtMoney(c.amount)
-                   : '—' + A.tip('No rate card is on file for this campaign in the mock, so a dollar figure here would be invented. Rate cards are an admin field — see ADMIN-MAPPING.md.')) +
+                   : '—' + A.tip('Your rate for this campaign is not connected yet, so we are not showing a figure rather than showing a guess. It fills in automatically once it is on your campaign record — ask your account manager if you need it sooner.')) +
         '</td></tr>';
     }).join('');
     document.getElementById('earned-table').innerHTML = head + '<tbody>' +
@@ -245,27 +245,32 @@
 
     document.getElementById('stmt-table').innerHTML = head + '<tbody>' + rows + '</tbody>';
 
+    /* Affiliate-facing wording. The storage spec that used to sit here — a
+       Google Sheet URL per affiliate per month — belongs in ADMIN-MAPPING
+       §7e, not on a partner's screen. */
     document.getElementById('stmt-foot').innerHTML =
-      '<strong>Build note.</strong> Statement links are admin-managed — a Google Sheet URL per ' +
-      'affiliate per month, pasted after the statement is generated (first business day after ' +
-      'month close, give or take). Storage spec in ADMIN-MAPPING §7e.';
+      'Statements are posted on the first business day after the month closes, give or take. ' +
+      'A month that is not linked yet is being prepared, not missing.';
   })();
 
-  /* ---- clawback report ---------------------------------------------------
+  /* ---- pixel unfire report -----------------------------------------------
      Leads unfired in the weekly audit, with affiliate-safe reasons. Reasons
      come from RETURN_REASONS only — the internal clawback_reason field stays
      forbidden along with the rest of the how-we-work-leads internals. */
   (function () {
-    var rows = D.queryClawbacks({ partnerId: state.partnerId,
-                                  from: state.range.from, to: state.range.to });
-    var real = D.usingRealData();
+    var rows = D.queryUnfires({ partnerId: state.partnerId,
+                               from: state.range.from, to: state.range.to });
+    /* Whether the unfire feed is connected is a DATA question, not a
+       which-file-are-we-reading question: the columns populate when the feed
+       is wired and stay blank until then, on any source. */
+    var feedLive = rows.some(function (r) { return r.returnedAt || r.reason; });
 
-    document.getElementById('cb-sub').innerHTML =
+    document.getElementById('unfire-sub').innerHTML =
       'Leads removed by audit in this window — you are not billed for these' +
       A.tip('We audit accepted leads weekly. A lead that should not have been accepted is unfired: the charge is removed from your statement (CPL) or the share reversed (revenue share). This list is the line-by-line record, so a smaller statement never reads as us shorting you.');
 
     var head = '<thead><tr><th>Lead ID</th><th>Received</th><th>Campaign</th>' +
-      '<th>Unfired' + (real ? A.tip('The lead export carries only a returned flag — the unfire date arrives with the unfire feed. See the build note below.') : '') + '</th>' +
+      '<th>Unfired' + (feedLive ? '' : A.tip('The date each lead was unfired is not connected yet, so this column is blank. It fills in automatically once that is wired up.')) + '</th>' +
       '<th>Reason</th>' +
       '<th style="text-align:right">Adjustment</th></tr></thead>';
 
@@ -289,27 +294,30 @@
         '</td></tr>';
     }).join('');
 
-    document.getElementById('cb-table').innerHTML = head + '<tbody>' +
+    document.getElementById('unfire-table').innerHTML = head + '<tbody>' +
       (body || '<tr><td colspan="6" class="empty">No leads were removed by audit in this window.</td></tr>') +
       '</tbody>';
 
     /* A summed total is only honest when every row's amount is known — a
        "$0.00" over 335 unknown amounts reads as a real zero. */
-    document.getElementById('cb-foot').innerHTML = rows.length
+    document.getElementById('unfire-foot').innerHTML = rows.length
       ? '<strong>' + A.fmtInt(rows.length) + '</strong> lead' + (rows.length === 1 ? '' : 's') +
         ' unfired in this window' +
         (knownAdj === rows.length
           ? ' · total adjustment <strong>' + fmtSigned(total) + '</strong>'
-          : ' · credited amounts arrive with the unfire feed')
+          : ' · credited amounts are not connected yet')
       : 'Most weeks this list is empty — that is the audit working, not the report failing.';
 
-    document.getElementById('cb-note').innerHTML =
-      '<div class="notice notice-mock"><span class="ico">✎</span><div>' +
-      '<strong>Build note.</strong> The lead export carries only a <code>returned</code> flag. ' +
-      'The unfire date, affiliate-safe reason code and credited amount are the <strong>unfire ' +
-      'feed</strong> — on the gating-dependency list in HANDOFF.md for Sagar to connect. ' +
-      (real ? 'Running on the real export, those three columns render as absent rather than invented.'
-            : 'The mock derives them (audits run Mondays) so the page demonstrates.') +
+    /* Blank columns need a reason a PARTNER can act on — in this case,
+       "nothing, it is on us". The dependency itself (the unfire feed, and who
+       owns connecting it) is tracked in ADMIN-MAPPING A9 and HANDOFF, which
+       is where build state belongs. Once the feed is connected this notice
+       stops rendering on its own. */
+    document.getElementById('unfire-note').innerHTML = feedLive ? '' :
+      '<div class="notice notice-info"><span class="ico">◆</span><div>' +
+      'The unfire date, the reason and the credited amount are not connected yet, so those ' +
+      'columns are blank. The lead IDs and the count are accurate — use them to reconcile a ' +
+      'statement, and ask your account manager if you need the detail behind a specific row.' +
       '</div></div>';
   })();
 

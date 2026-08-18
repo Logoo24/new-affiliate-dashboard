@@ -158,13 +158,17 @@
       rest.map(function (d) { return card(d, false); }).join('');
 
     var unlinked = docs.filter(function (d) { return !d.url; });
+    /* Affiliate-facing. What a partner needs is "is this current, and what
+       do I do if something is missing" — not how the links are stored. The
+       storage spec lives in ADMIN-MAPPING §7. A document with no URL is
+       named rather than silently absent, so a gap reads as a gap. */
     document.getElementById('doc-note').innerHTML =
-      '<strong>Build note.</strong> This list is admin-managed — documents are added and ' +
-      're-linked without a deploy. <strong>Your agreement</strong> is per-affiliate: the admin ' +
-      'pastes that partner\'s own Google Doc URL onto their record.' +
+      'Documents here are kept current by your account manager, and <strong>your agreement</strong> ' +
+      'is the copy specific to your account.' +
       (unlinked.length
-        ? ' Currently unlinked in this mock: ' +
-          unlinked.map(function (d) { return A.esc(d.label); }).join(', ') + '.'
+        ? ' Not linked yet: ' +
+          unlinked.map(function (d) { return A.esc(d.label); }).join(', ') +
+          ' — ask your account manager and we will get it posted.'
         : '');
   })();
 

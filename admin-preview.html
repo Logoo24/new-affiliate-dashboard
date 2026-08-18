@@ -166,6 +166,19 @@
       <section class="card">
         <div class="card-head">
           <div>
+            <h2>Top conversion windows — override</h2>
+            <p class="sub">Derived per affiliate by default. This is the failsafe.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="cw-config"></table>
+        </div>
+        <div class="card-foot" id="cw-foot"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
             <h2>Per-state demand</h2>
             <p class="sub">Drives the "states we need" widget on the scorecard.</p>
           </div>
@@ -478,6 +491,62 @@
      is fully rendered, so sorting the DOM sorts the whole dataset for the
      selected window - not just the visible rows. */
   if (window.FZTable) FZTable.enhanceAll();
+
+  /* ---- top conversion windows override ------------------------------------
+     The Targeting card derives its windows from each affiliate's own trailing
+     30 days. This table is the manual escape hatch: an account manager who
+     knows the derived answer is wrong for an account pins it here and the
+     derivation is skipped for that grain.
+
+     Nothing here saves — see the header. It exists so the dev team can see
+     the shape the setting needs: one row per affiliate, three independently
+     overridable grains, empty meaning "derive". */
+  (function () {
+    var host = document.getElementById('cw-config');
+    if (!host) return;
+
+    var head = '<thead><tr><th>Affiliate</th><th class="num">Matured (30d)</th>' +
+      '<th>Hour of day</th><th>Day of week</th><th>Week of month</th></tr></thead>';
+
+    function cell(g) {
+      if (g.source === 'override') {
+        return '<span class="badge badge-warn"><span class="dot"></span>Override</span> ' +
+          g.items.map(function (i) { return A.esc(i.label); }).join(', ');
+      }
+      if (g.source === 'derived') {
+        var best = g.items.filter(function (i) { return i.best; });
+        return best.length
+          ? '<span style="color:var(--ink-2)">Derived</span> · ' +
+            best.map(function (i) { return A.esc(i.label); }).join(', ')
+          : '<span style="color:var(--ink-muted)">Derived · no standout</span>';
+      }
+      return '<span style="color:var(--ink-muted)">Default (' +
+        g.items.map(function (i) { return A.esc(i.label); }).join(', ') + ')</span>';
+    }
+
+    var body = Object.keys(D.PARTNERS).map(function (pid) {
+      var cw = D.conversionWindows({ partnerId: pid });
+      return '<tr>' +
+        '<td><strong>' + A.esc(D.PARTNERS[pid].name) + '</strong></td>' +
+        '<td class="num">' + A.fmtInt(cw.scopeMature) + '</td>' +
+        '<td>' + cell(cw.hours) + '</td>' +
+        '<td>' + cell(cw.dow) + '</td>' +
+        '<td>' + cell(cw.week) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    host.innerHTML = head + '<tbody>' + body + '</tbody>';
+
+    document.getElementById('cw-foot').innerHTML =
+      'Storage: <code>ADMIN_CONVERSION_WINDOWS[partnerId] = { hours: [], dow: [], week: [] }</code>. ' +
+      'An empty or absent grain derives. Precedence is <strong>override → derived → default</strong>. ' +
+      'Derivation needs <strong>' + D.CW_MIN_SCOPE + '</strong> matured leads in scope, and a window ' +
+      'is only called a standout at <strong>' + D.CW_MIN_BUCKET + '</strong>+ matured leads, ' +
+      '<strong>' + D.CW_MIN_SALES + '</strong>+ Priority/Hot sales, and <strong>' +
+      Math.round((D.CW_LIFT - 1) * 100) + '%</strong> above that affiliate\u2019s own average. ' +
+      'Hour of day reads Default for everyone until the export carries a time (A1). ' +
+      'Spec in ADMIN-MAPPING \u00a75b.';
+  })();
 
 })();
 </script>

@@ -560,6 +560,164 @@
   }
 
   /* ---------------------------------------------------------------------- */
+  /* Bars — ranked horizontal magnitude                                     */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * A ranked horizontal bar chart, for the case a pie handles badly: many
+   * categories where most of the tail is small.
+   *
+   * WHY THIS EXISTS. The rejection breakdown used a pie. With three reasons
+   * carrying 96% of the volume and a long tail under 2% each, every tail
+   * slice collapsed to a hairline — the chart read as a couple of wedges and
+   * a fan of lines, and only slices over 8% could hold a label at all, so the
+   * rest of the reading happened in the legend. A ranked bar gives every row
+   * the same height whatever its share, puts the name and the number ON the
+   * row, and grows down rather than out, so it fits a card without a 520px
+   * square.
+   *
+   * The ramp is the same ordinal blue as the pie (darkest = biggest), so the
+   * two views of the same data stay recognisably the same data. Order is the
+   * ranking, which is the whole point — do not re-sort by name.
+   *
+   * @param cfg.bars       [{label, value}]
+   * @param cfg.total      denominator for the share text (defaults to the sum)
+   * @param cfg.maxBars    keep the top N, fold the rest into "Other" (default 12)
+   * @param cfg.valueLabel noun for the tooltip row (default 'Leads')
+   * @param cfg.onSelect   fn(bar) — makes rows clickable
+   */
+  function bars(host, cfg) {
+    host.__cfg = cfg;
+    host.__kind = 'bars';
+    render();
+
+    function render() {
+      host.querySelectorAll('svg, .chart-table, .pie-legend').forEach(function (n) { n.remove(); });
+      if (host.__mode === 'table') { host.appendChild(buildBarTable(cfg)); return; }
+
+      var max = cfg.maxBars || 12;
+      var all = cfg.bars.slice()
+        .filter(function (b) { return b.value > 0; })
+        .sort(function (a, b) { return b.value - a.value; });
+
+      if (!all.length) {
+        host.innerHTML = '<div class="empty">Nothing to chart in this window.</div>';
+        return;
+      }
+      if (all.length > max) {
+        var head = all.slice(0, max - 1);
+        var tail = all.slice(max - 1);
+        head.push({ label: 'Other (' + tail.length + ')',
+                    value: tail.reduce(function (a, b) { return a + b.value; }, 0) });
+        all = head;
+      }
+
+      var total = cfg.total || all.reduce(function (a, b) { return a + b.value; }, 0);
+      var peak = all[0].value || 1;
+
+      /* Geometry. Rows are a fixed height so the chart's size is a function
+         of how many reasons there are, not of an arbitrary square. */
+      var ROW = 26, GAP = 6, PAD_T = 4, PAD_B = 4;
+      var W = Math.max(280, host.clientWidth || 460);
+      var LABEL_W = Math.round(Math.min(190, Math.max(120, W * 0.34)));
+      var VALUE_W = 92;
+      var trackX = LABEL_W + 10;
+      var trackW = Math.max(40, W - trackX - VALUE_W);
+      var H = PAD_T + all.length * ROW + (all.length - 1) * GAP + PAD_B;
+
+      var ink = cssVar('--ink');
+      var muted = cssVar('--ink-muted');
+      var track = cssVar('--surface-2');
+      var ramp = ['--pie-1', '--pie-2', '--pie-3', '--pie-4', '--pie-5', '--pie-6'];
+
+      var svg = el('svg', {
+        width: W, height: H, viewBox: '0 0 ' + W + ' ' + H,
+        role: 'img', 'aria-label': cfg.ariaLabel || 'Ranked breakdown'
+      });
+
+      all.forEach(function (b, i) {
+        var y = PAD_T + i * (ROW + GAP);
+        var color = cssVar(ramp[Math.min(i, ramp.length - 1)]);
+        var w = Math.max(2, Math.round((b.value / peak) * trackW));
+        var share = total ? b.value / total : 0;
+
+        /* Name, left, truncated by the SVG's own clip rather than by
+           guessing character widths. */
+        var clipId = 'barclip' + i + '-' + Math.round(W);
+        var clip = el('clipPath', { id: clipId });
+        clip.appendChild(el('rect', { x: 0, y: y, width: LABEL_W, height: ROW }));
+        svg.appendChild(clip);
+
+        var name = el('text', {
+          x: 0, y: y + ROW / 2 + 4, 'font-size': 13, fill: ink,
+          'clip-path': 'url(#' + clipId + ')'
+        });
+        name.textContent = b.label;
+        svg.appendChild(name);
+
+        svg.appendChild(el('rect', {
+          x: trackX, y: y + 3, width: trackW, height: ROW - 6, rx: 3, fill: track
+        }));
+        svg.appendChild(el('rect', {
+          x: trackX, y: y + 3, width: w, height: ROW - 6, rx: 3, fill: color
+        }));
+
+        /* Count and share sit AFTER the bar, on the surface — never inside
+           the fill, where a short bar would clip them. */
+        var val = el('text', {
+          x: W, y: y + ROW / 2 + 4, 'text-anchor': 'end', 'font-size': 12.5, fill: ink
+        });
+        val.textContent = fmtInt(b.value);
+        svg.appendChild(val);
+
+        var pctText = el('text', {
+          x: W - VALUE_W + 46, y: y + ROW / 2 + 4, 'text-anchor': 'end',
+          'font-size': 12, fill: muted
+        });
+        pctText.textContent = (share * 100).toFixed(1) + '%';
+        svg.appendChild(pctText);
+
+        var hit = el('rect', {
+          x: 0, y: y, width: W, height: ROW, fill: 'transparent',
+          style: 'cursor:' + (cfg.onSelect && b.key ? 'pointer' : 'default')
+        });
+        hit.addEventListener('mouseenter', function () {
+          host.__tip.show(tooltipRows(b.label, [
+            { color: color, label: cfg.valueLabel || 'Leads', value: fmtInt(b.value) },
+            { color: null, label: 'Share', value: (share * 100).toFixed(1) + '%' }
+          ]), trackX + w / 2, y);
+        });
+        hit.addEventListener('mouseleave', function () { host.__tip.hide(); });
+        if (cfg.onSelect && b.key) {
+          hit.addEventListener('click', function () { cfg.onSelect(b); });
+        }
+        svg.appendChild(hit);
+      });
+
+      host.appendChild(svg);
+    }
+
+    host.__render = render;
+  }
+
+  function buildBarTable(cfg) {
+    var rows = cfg.bars.slice()
+      .filter(function (b) { return b.value > 0; })
+      .sort(function (a, b) { return b.value - a.value; });
+    var total = cfg.total || rows.reduce(function (a, b) { return a + b.value; }, 0);
+    var t = document.createElement('table');
+    t.className = 'data chart-table';
+    t.innerHTML = '<thead><tr><th>Reason</th><th class="num">' +
+      (cfg.valueLabel || 'Leads') + '</th><th class="num">Share</th></tr></thead><tbody>' +
+      rows.map(function (b) {
+        return '<tr><td>' + b.label + '</td><td class="num">' + fmtInt(b.value) +
+          '</td><td class="num">' + (total ? (b.value / total * 100).toFixed(1) : '0.0') +
+          '%</td></tr>';
+      }).join('') + '</tbody>';
+    return t;
+  }
+
+  /* ---------------------------------------------------------------------- */
   /* Pie — part-to-whole                                                    */
   /* ---------------------------------------------------------------------- */
 
@@ -787,6 +945,7 @@
     host.__tip = makeTooltip(host);
     if (kind === 'columns') columns(host, cfg);
     else if (kind === 'pie') pie(host, cfg);
+    else if (kind === 'bars') bars(host, cfg);
     else line(host, cfg);
     registerResize(host);
   }

@@ -55,7 +55,7 @@
           <div class="card-head">
             <div>
               <h2>Leads by day</h2>
-              <p class="sub" id="volume-chart-sub">Submitted leads, split by accepted and rejected.</p>
+              <p class="sub" id="volume-chart-sub">How much did you send each day, and how much was accepted?</p>
             </div>
             <div class="spacer"></div>
             <div id="toggle-volume"></div>
@@ -70,7 +70,7 @@
           <div class="card-head">
             <div>
               <h2>Priority &amp; Hot by day</h2>
-              <p class="sub">Counted on the day they sold.</p>
+              <p class="sub">How much of your traffic is selling at the top tiers?</p>
             </div>
             <div class="spacer"></div>
             <div id="toggle-conv"></div>
@@ -82,53 +82,59 @@
         </section>
       </div>
 
-      <!-- The three things an affiliate can actually act on -->
-      <div class="grid-3">
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>Investable assets</h2>
-              <p class="sub">Where your leads convert best.</p>
-            </div>
+      <!-- Rejections sit directly under the by-day charts: the volume chart
+           splits accepted from rejected, and this is the immediate "why".
+           Anchored so the Acceptance rate tile can scroll to it. -->
+      <section class="card" id="reject-card">
+        <div class="card-head">
+          <div>
+            <h2>Why leads were rejected</h2>
+            <p class="sub" id="reject-sub"></p>
           </div>
-          <div class="table-wrap">
-            <table class="data" id="band-table"></table>
-          </div>
-          <div class="card-foot" id="band-foot"></div>
-        </section>
+          <div class="spacer"></div>
+          <div id="reject-toggle"></div>
+        </div>
+        <div class="table-wrap" id="reject-table-wrap">
+          <table class="data" id="reject-table"></table>
+        </div>
+        <div class="card-body" id="reject-chart-wrap" style="display:none">
+          <div class="chart-wrap" id="reject-chart"></div>
+        </div>
+        <div class="card-foot" id="reject-foot"></div>
+      </section>
 
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>Arrival window</h2>
-              <p class="sub">When your leads come in, local time.</p>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table class="data" id="window-table"></table>
-          </div>
-          <div class="card-foot" id="window-foot"></div>
-        </section>
+      <p class="sub" style="margin:0 0 4px">
+        Looking for which asset ranges, hours or states convert best for you?
+        Those moved to <a id="targeting-link" href="targeting.html">Targeting</a>.
+      </p>
 
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>Tier mix</h2>
-              <p class="sub" id="tier-sub">What your sold leads sold as.</p>
-            </div>
+      <!-- Investable assets, Arrival window and Geography moved to the
+           Targeting page on Aug 18. They were the only cards here that did NOT
+           respond to the date-range filter — all three read the fixed trailing
+           30-day matured cohort, so switching this page to "Last 7 days" left
+           them sitting still. That is the same class of question the Top
+           conversion windows card asks, and it now lives beside it. Arrival
+           window was not moved but DELETED: it had become a straight duplicate
+           of that card's hour-of-day grain. -->
+      <!-- Whole-account summary, not a segment pointer — see above. -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Lead tier mix</h2>
+            <p class="sub" id="tier-sub">Which buckets are your leads selling to?</p>
           </div>
-          <div class="table-wrap">
-            <table class="data" id="tier-table"></table>
-          </div>
-          <div class="card-foot" id="tier-foot"></div>
-        </section>
-      </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="tier-table"></table>
+        </div>
+        <div class="card-foot" id="tier-foot"></div>
+      </section>
 
       <section class="card">
         <div class="card-head">
           <div>
             <h2>Campaigns</h2>
-            <p class="sub">Broken out, never blended.</p>
+            <p class="sub">Which of your campaigns is carrying the account?</p>
           </div>
         </div>
         <div class="table-wrap">
@@ -141,7 +147,7 @@
         <div class="card-head">
           <div>
             <h2>Sub-ID breakdown</h2>
-            <p class="sub">Account averages hide publisher-level problems.</p>
+            <p class="sub">Which of your sources is helping, and which is dragging?</p>
           </div>
           <div class="spacer"></div>
           <div style="display:flex;gap:8px;align-items:center">
@@ -157,28 +163,6 @@
         </div>
         <div style="padding:0 18px 14px" id="export-toast"></div>
       </section>
-
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <h2>Why leads were rejected</h2>
-            <p class="sub">Plain language, with the fix.</p>
-          </div>
-          <div class="spacer"></div>
-          <div id="reject-toggle"></div>
-        </div>
-        <div class="table-wrap" id="reject-table-wrap">
-          <table class="data" id="reject-table"></table>
-        </div>
-        <div class="card-body" id="reject-chart-wrap" style="display:none">
-          <div class="chart-wrap" id="reject-chart"></div>
-        </div>
-      </section>
-
-      <p class="mocknote" style="border:0;padding:0;margin:0">
-        Mock-up — figures are fabricated but internally consistent. Every filter recomputes the
-        whole page. See <code>HANDOFF.md</code> for what is mocked and what needs dev work.
-      </p>
 
     </div>
   </div>
@@ -316,10 +300,14 @@
              ? A.fmtInt(m.free) + ' rejected — rev-share campaigns can still earn on theirs'
              : A.fmtInt(m.free) + ' rejected',
       delta: A.deltaHtml(m.paid, pm.paid, {}) },
+    /* Acceptance rate is the one tile with a single obvious follow-up
+       question — "why were the others rejected?" — and the answer is a card
+       on this same page, so it scrolls rather than navigates. */
     { label: 'Acceptance rate', value: A.fmtPct(m.acceptanceRate, 1),
-      sub: state.rateBasis === 'all' ? 'Quality signal'
+      cls: 'tile-link', scrollTo: 'reject-card',
+      sub: (state.rateBasis === 'all' ? 'Quality signal'
          : state.rateBasis === 'mixed' ? 'Drives your CPL invoices'
-         : 'Drives your invoice',
+         : 'Drives your invoice') + ' · see why →',
       delta: A.deltaHtml(m.acceptanceRate, pm.acceptanceRate, {}) },
     { label: 'Median sales cycle',
       value: sm.medianCycle == null ? '—'
@@ -331,17 +319,56 @@
 
   var hs = H.score({ partnerId: state.partnerId, campaignId: state.campaignId, subid: state.subid });
   tiles.push({
-    label: 'Health score', value: String(hs.score),
+    label: A.healthScoreLabel(state), value: String(hs.score),
     sub: '<span class="badge ' + hs.tier.badge + '"><span class="dot"></span>' + hs.tier.label + '</span>',
     delta: '<div class="tile-delta delta-flat"><a href="' + A.linkTo('health.html', state) + '">See the breakdown →</a></div>'
   });
 
   document.getElementById('tiles').innerHTML = tiles.map(function (t) {
-    return '<div class="tile ' + (t.cls || '') + '">' +
+    /* A tile that acts is a real control: role, tabindex and a keyboard
+       handler, not a bare click listener on a div. */
+    var interactive = t.scrollTo
+      ? ' role="button" tabindex="0" data-scroll-to="' + t.scrollTo + '"'
+      : '';
+    return '<div class="tile ' + (t.cls || '') + '"' + interactive + '>' +
       '<div class="tile-label">' + t.label + '</div>' +
       '<div class="tile-value">' + t.value + '</div>' +
       '<div class="tile-sub">' + t.sub + '</div>' + (t.delta || '') + '</div>';
   }).join('');
+
+  document.querySelectorAll('#tiles [data-scroll-to]').forEach(function (el) {
+    function go() {
+      var target = document.getElementById(el.dataset.scrollTo);
+      if (!target) return;
+
+      /* Focus BEFORE scrolling, with preventScroll, so a keyboard user
+         actually lands on the card rather than watching it slide past while
+         focus stays on the tile. */
+      target.setAttribute('tabindex', '-1');
+      target.focus({ preventScroll: true });
+
+      var reduce = window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduce) { target.scrollIntoView({ block: 'start' }); return; }
+
+      var before = window.pageYOffset;
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      /* Smooth scrolling is not universally honoured — some engines and some
+         embedded viewers accept the call and never move. A navigation
+         affordance that silently does nothing is worse than an abrupt jump,
+         so if nothing has moved shortly after, jump. */
+      setTimeout(function () {
+        if (Math.abs(window.pageYOffset - before) < 2 &&
+            Math.abs(target.getBoundingClientRect().top) > 4) {
+          target.scrollIntoView({ block: 'start' });
+        }
+      }, 350);
+    }
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    });
+  });
 
   /* ---- targets -----------------------------------------------------------
      CPL only. weeklyProgress is null for revenue share (always) and for a
@@ -454,111 +481,10 @@
   }
   var EMPTY = D.computeMetrics([], null, mOpts);
   function pull(idx, key) { return idx[key] ? idx[key].metrics : EMPTY; }
-  function rate(b) { return b && b.mature ? b.ph / b.mature : 0; }
-
-  /* ---- investable assets -------------------------------------------------
-     The bar is now a TRUE PROPORTION of the band's own leads: blue is the
-     share that sold Priority or Hot, grey is everything that did not. It used
-     to be scaled to whichever band converted best, which made a 0.3% band
-     look like a full bar just because it led a weak field.
-
-     Rates here can be a fraction of a percent, so the blue slice is sometimes
-     invisible — which is why the Priority/Hot COUNT sits beside it. "Which
-     band produced the most top-tier sales" is answerable from the count even
-     when the percentage is too small to see. */
+  /* Deep-link the pointer above to Targeting, carrying the current scope. */
   (function () {
-    var bands = coh.metrics.byBand;
-
-    var stats = D.ASSET_BANDS.map(function (b) {
-      var bucket = bands[b.key] || { raw: 0, mature: 0, ph: 0 };
-      return { band: b, bucket: bucket, rate: rate(bucket), ph: bucket.ph };
-    });
-    /* The star marks the band that actually converts best for THIS partner,
-       rather than a hardcoded favourite. */
-    var bestRate = stats.reduce(function (a, s) {
-      return (s.bucket.mature > 0 && s.rate > a) ? s.rate : a;
-    }, 0);
-    var topPh = stats.reduce(function (a, s) { return Math.max(a, s.ph); }, 0);
-
-    var head = '<thead><tr><th>Band</th><th class="num">Leads</th>' +
-      '<th class="num">P/H sales</th><th class="num">Converted to Priority/Hot</th></tr></thead>';
-
-    var body = stats.map(function (s) {
-      var isBest = bestRate > 0 && s.rate === bestRate && s.bucket.mature > 0;
-      var pctW = Math.min(100, s.rate * 100);
-      return '<tr' + (isBest ? ' style="background:var(--surface-2)"' : '') + '>' +
-        '<td>' + A.esc(s.band.label) +
-          (isBest ? ' <strong style="color:var(--good-text)" title="Your best-converting band">★</strong>' : '') +
-          (!s.band.payable ? '<div style="font-size:12px;color:var(--ink-muted)">never pays</div>' : '') + '</td>' +
-        '<td class="num">' + A.fmtInt(s.bucket.raw) + '</td>' +
-        '<td class="num"' + (s.ph && s.ph === topPh ? ' style="font-weight:650"' : '') + '>' +
-          A.fmtInt(s.ph) + '</td>' +
-        '<td class="num"><span class="bar-cell">' +
-          '<span>' + A.fmtPct(s.rate, 1) + '</span>' +
-          '<span class="bar-track" title="' + A.fmtPct(s.rate, 1) + ' of matured leads in this band sold Priority or Hot">' +
-            '<span class="bar-fill" style="width:' + pctW.toFixed(2) + '%"></span>' +
-          '</span></span></td>' +
-        '</tr>';
-    }).join('');
-
-    document.getElementById('band-table').innerHTML = head + '<tbody>' + body + '</tbody>';
-    document.getElementById('band-foot').innerHTML =
-      '<span>Blue is the share of that band\'s matured leads that sold Priority or Hot; ' +
-      'grey is everything that did not. ★ is your best-converting band. ' +
-      'We see the strongest results overall in <strong>$100K–$250K</strong>.</span>';
-  })();
-
-  /* ---- arrival window ---------------------------------------------------
-     The lead export carries date only — TimeStamp is empty on every row — so
-     arrival window is genuinely unknown. Say so rather than plotting zeros. */
-  (function () {
-    var notes = D.datasetNotes && D.datasetNotes();
-    if (notes && notes.noTimeOfDay) {
-      /* The notice explains there is no time data — the card sub saying
-         "when your leads come in" right above it read as a stutter. */
-      var windowCard = document.getElementById('window-table').closest('.card');
-      var windowSub = windowCard.querySelector('.card-head .sub');
-      if (windowSub) windowSub.remove();
-      A.unsupported(windowCard,
-        'Arrival window needs a timestamp',
-        'The lead export records a date but no time of day, so we cannot tell when in the ' +
-        'day your leads arrive. Adding a time component to the export turns this on.');
-      return;
-    }
-    var segs = coh.metrics.bySegment;
-    var best = 0;
-    D.HOUR_SEGMENT_ORDER.forEach(function (k) { best = Math.max(best, rate(segs[k])); });
-    best = best || 1;
-
-    var head = '<thead><tr><th>Window</th><th class="num">Leads</th><th class="num">Priority/Hot</th></tr></thead>';
-    var body = D.HOUR_SEGMENT_ORDER.map(function (k) {
-      var bucket = segs[k] || { raw: 0, mature: 0, ph: 0 };
-      var r = rate(bucket);
-      var w = Math.round((r / best) * 100);
-      /* Starred windows are the two IDEAL ones — 9–11a and 3–7p, which are
-         the hours the floor is busiest. An earlier version starred 6–9a,
-         which was invented and contradicted our own operating hours. */
-      var isIdeal = D.isIdealSegment(k);
-      return '<tr' + (isIdeal ? ' style="background:var(--surface-2)"' : '') + '>' +
-        '<td>' + D.HOUR_SEGMENT_LABEL[k] + (isIdeal ? ' <strong style="color:var(--good-text)">★</strong>' : '') + '</td>' +
-        '<td class="num">' + A.fmtInt(bucket.raw) + '</td>' +
-        '<td class="num"><span class="bar-cell"><span>' + A.fmtPct(r, 1) + '</span>' +
-        '<span class="bar-track"><span class="bar-fill" style="width:' + w + '%"></span></span></span></td>' +
-        '</tr>';
-    }).join('');
-    document.getElementById('window-table').innerHTML = head + '<tbody>' + body + '</tbody>';
-
-    var dows = coh.metrics.byDow;
-    var bestDow = null;
-    Object.keys(dows).forEach(function (d) {
-      if (!bestDow || rate(dows[d]) > rate(dows[bestDow])) bestDow = d;
-    });
-    document.getElementById('window-foot').innerHTML =
-      '<span>★ ' + D.IDEAL_WINDOWS.map(function (w) { return A.esc(w.label); }).join(' and ') +
-      ' are the hours our floor is busiest, so they convert best. Not a restriction — ' +
-      'we accept leads any hour.' +
-      (bestDow != null ? ' Your strongest day is <strong>' + D.DOW_LABEL[bestDow] + '</strong>.' : '') +
-      ' <a href="' + A.linkTo('health.html', state) + '">Coverage asks →</a></span>';
+    var el = document.getElementById('targeting-link');
+    if (el) el.href = A.linkTo('targeting.html', state);
   })();
 
   /* ---- tier mix --------------------------------------------------------- */
@@ -575,8 +501,8 @@
     var showMoney = sm.hasEarnings;
 
     document.getElementById('tier-sub').textContent = showMoney
-      ? 'What sold, and what it paid you.'
-      : 'What your sold leads sold as.';
+      ? 'Which buckets are your leads selling to, and what did each pay you?'
+      : 'Which buckets are your leads selling to?';
 
     var head = '<thead><tr><th>Tier</th><th class="num">Sold</th><th class="num">Share</th>' +
       (showMoney ? '<th class="num revshare-col">You earned</th>' : '') + '</tr></thead>';
@@ -749,38 +675,81 @@
     };
   });
 
-  /* ---- rejection reasons -------------------------------------------------- */
+  /* ---- rejection reasons -------------------------------------------------
+     ONLY REASONS WITH LEADS IN THIS WINDOW, flat, biggest first. No group
+     headings, no zero rows. A partner reading this wants to know what went
+     wrong with the traffic they actually sent; a catalogue of things that did
+     not happen to them is noise on the page that is supposed to answer that.
+
+     The full catalogue still exists — `REJECT_REASONS` in data.js, documented
+     in ADMIN-MAPPING §3a. It is the spec the internal vocabulary has to
+     standardise on (the IPQS split, the blank-field reason), and it belongs
+     in the handoff docs, not in a partner's face.
+
+     THE ONE THING THIS LIST STILL SEPARATES: "Pixel manually unfired" is not
+     a rejection. It is pinned last, excluded from the rejected total, and its
+     share reads n/a rather than a percentage — sorting it into the middle of
+     the list by volume would tell a partner their lead failed a check when it
+     passed. That is a correctness rule, not a category.
+
+     Every row links into the lead table filtered to that reason. */
   (function () {
-    var entries = Object.keys(m.rejects).map(function (k) {
-      return { key: k, count: m.rejects[k] };
-    }).sort(function (a, b) { return b.count - a.count; });
+    var cat = D.rejectCatalogue(m.rejects).filter(function (r) { return r.count > 0; });
+
+    var real = cat.filter(function (r) { return !r.notReject; })
+      .sort(function (a, b) { return b.count - a.count; });
+    var notReal = cat.filter(function (r) { return r.notReject; })
+      .sort(function (a, b) { return b.count - a.count; });
+    var realTotal = real.reduce(function (a, r) { return a + r.count; }, 0);
+
+    document.getElementById('reject-sub').textContent =
+      'Why were your leads not accepted?';
 
     var head = '<thead><tr><th>Reason</th><th class="num">Leads</th>' +
       '<th class="num">% of rejected</th><th>What fixes it</th></tr></thead>';
 
-    /* Short label + hover descriptor, not a sentence crammed into the cell.
-       The descriptor is partner-aware where the criteria are — the age text
-       carries THIS account's negotiated band (the OptiLabX 45–79 exception
-       has already caused a $5,194 invoice variance when treated as 45–75). */
-    var body = entries.map(function (e) {
-      return '<tr><td>' + A.esc(D.rejectLabel(e.key)) +
-        A.tip(D.rejectDesc(e.key, state.partnerId)) + '</td>' +
-        '<td class="num">' + A.fmtInt(e.count) + '</td>' +
-        '<td class="num">' + A.fmtPct(m.free ? e.count / m.free : 0, 1) + '</td>' +
-        '<td style="color:var(--ink-2)">' + A.esc(D.rejectFix(e.key)) + '</td></tr>';
-    }).join('');
+    function reasonRow(r) {
+      var href = A.linkTo('leads.html', state, { reason: r.key, status: 'free' });
+      return '<tr>' +
+        '<td><a href="' + href + '" style="color:inherit;text-decoration:none;' +
+          'border-bottom:1px solid var(--border)">' + A.esc(r.label) + '</a>' +
+          A.tip(D.rejectDesc(r.key, state.partnerId)) + '</td>' +
+        '<td class="num" data-sort="' + r.count + '">' + A.fmtInt(r.count) + '</td>' +
+        /* A share is only meaningful against the denominator this row is IN.
+           Manual unfires are excluded from the rejected total, so printing
+           "13.5% of rejected" beside one would contradict its own label. */
+        '<td class="num" data-sort="' + (r.notReject ? -1 : r.count / realTotal) + '">' +
+          (r.notReject
+            ? '<span style="color:var(--ink-muted)" title="Not counted in the rejected total">n/a</span>'
+            : A.fmtPct(realTotal ? r.count / realTotal : 0, 1)) + '</td>' +
+        '<td style="color:var(--ink-2)">' + A.esc(r.fix) + '</td>' +
+        '</tr>';
+    }
+
+    var body = real.map(reasonRow).join('') + notReal.map(reasonRow).join('');
 
     document.getElementById('reject-table').innerHTML =
-      head + '<tbody>' + (body || '<tr><td colspan="4" class="empty">No rejected leads in this window.</td></tr>') + '</tbody>';
+      head + '<tbody>' + (body ||
+        '<tr><td colspan="4" class="empty">No leads were rejected in this window.</td></tr>') +
+      '</tbody>';
 
-    /* Table ⇄ pie. The table stays the default because it carries the fix
-       text, which the chart cannot; the pie answers "what dominates" faster.
-       Toggling is view-only — both read the same numbers. */
-    if (!entries.length) return;
+    document.getElementById('reject-foot').innerHTML = real.length
+      ? '<span><strong>' + A.fmtInt(realTotal) + '</strong> rejected in this window. ' +
+        'Click a reason to open those leads in the lead table.</span>'
+      : '<span>Nothing was rejected in this window.</span>';
+
+    /* ---- table ⇄ chart ---------------------------------------------------
+       The chart is a RANKED BAR, not a pie. Three reasons carry 96% of the
+       volume and the tail is under 2% each: as a pie the tail collapsed into
+       hairlines and only slices over 8% could hold a label, so the chart read
+       as two wedges and a fan of lines. A bar row is the same height whatever
+       its share, carries its own name and number, and grows down instead of
+       out, so it fits the card. */
     var tableWrap = document.getElementById('reject-table-wrap');
     var chartWrap = document.getElementById('reject-chart-wrap');
     var chartHost = document.getElementById('reject-chart');
     var mounted = false;
+    if (!real.length) return;
 
     var toggle = document.getElementById('reject-toggle');
     toggle.innerHTML =
@@ -798,17 +767,24 @@
         chartWrap.style.display = wantChart ? '' : 'none';
         if (wantChart && !mounted) {
           mounted = true;
-          C.mount(chartHost, 'pie', {
-            slices: entries.map(function (e) {
-              return { label: A.esc(D.rejectLabel(e.key)), value: e.count };
+          C.mount(chartHost, 'bars', {
+            /* Real rejections only — the chart is "what share of my rejects
+               is what", and a manual unfire is not a reject. */
+            bars: real.map(function (r) {
+              return { key: r.key, label: r.label, value: r.count };
             }),
-            ariaLabel: 'Share of rejected leads by reason'
+            total: realTotal,
+            valueLabel: 'Leads',
+            ariaLabel: 'Rejected leads by reason, largest first',
+            onSelect: function (bar) {
+              window.location.href =
+                A.linkTo('leads.html', state, { reason: bar.key, status: 'free' });
+            }
           });
         }
       });
     });
   })();
-
 
   /* Sortable / resizable / configurable columns. Every table on this page
      is fully rendered, so sorting the DOM sorts the whole dataset for the

@@ -21,14 +21,20 @@
         <div id="framing-note"></div>
       </div>
 
-      <!-- Dense top row: three compact facts side by side. Everything here is
-           short reference material, not analysis, so none of it earns a full-
-           width card. -->
-      <div class="grid-3">
+      <!-- Campaign + sub-ID, no date range. Everything on this page is scored
+           on the fixed trailing 30-day matured cohort — a rate needs a
+           finished cohort — so a range picker here would be a control that
+           changes nothing. Same filter set as the Health scorecard, for the
+           same reason. -->
+      <div id="filter-host"></div>
+
+      <!-- Reference first: our hours, then what your own asset ranges do. -->
+      <div class="grid-2">
         <section class="card">
           <div class="card-head">
             <div>
               <h2>Call center hours</h2>
+              <p class="sub">When is our floor open to work your leads?</p>
             </div>
           </div>
           <div class="card-body" id="hours-body"></div>
@@ -38,29 +44,65 @@
         <section class="card">
           <div class="card-head">
             <div>
-              <h2>Best times to send<span id="windows-tip-host"></span></h2>
+              <h2>Investable assets</h2>
+              <p class="sub">Which asset ranges convert best for your campaigns?</p>
             </div>
           </div>
-          <div class="card-body">
-            <div class="tile-label" style="margin-top:2px">Ideal windows, Mon–Fri</div>
-            <div id="windows" style="display:flex;gap:8px;margin:8px 0 14px;flex-wrap:wrap"></div>
-            <div class="tile-label">Ideal weekly split<span id="dow-tip-host"></span></div>
-            <div id="dow-chips" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"></div>
+          <div class="table-wrap">
+            <table class="data" id="band-table"></table>
           </div>
-        </section>
-
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>States we need most<span id="states-tip-host"></span></h2>
-            </div>
-          </div>
-          <div class="card-body">
-            <div id="states-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"></div>
-          </div>
-          <div class="card-foot"><span>Volume in these states earns budget.</span></div>
+          <div class="card-foot" id="band-foot"></div>
         </section>
       </div>
+
+      <!-- WHEN TO SEND. Summary is the answer; Detail is the working —
+           how much you send in each window AND how each converts, which is
+           the pair that turns it into an action. Replaces the Arrival window
+           card that used to live on the Performance overview. -->
+      <section class="card" id="windows-card">
+        <div class="card-head">
+          <div>
+            <h2>Top conversion windows<span id="windows-tip-host"></span></h2>
+            <p class="sub">When do your leads convert best?</p>
+          </div>
+          <div class="spacer"></div>
+          <div id="windows-toggle"></div>
+        </div>
+
+        <div class="card-body" id="windows-summary">
+          <div class="tile-label" style="margin-top:2px">Hour of day, Mon–Fri</div>
+          <div id="windows" style="display:flex;gap:8px;margin:8px 0 14px;flex-wrap:wrap"></div>
+          <div class="tile-label">Day of week<span id="dow-tip-host"></span></div>
+          <div id="dow-chips" style="display:flex;gap:6px;margin:8px 0 14px;flex-wrap:wrap"></div>
+          <div class="tile-label">Week of month<span id="dom-tip-host"></span></div>
+          <div id="dom-chips" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"></div>
+        </div>
+
+        <div class="card-body" id="windows-detail" style="display:none">
+          <div id="detail-hour"></div>
+          <div id="detail-dow" style="margin-top:22px"></div>
+          <div id="detail-week" style="margin-top:22px"></div>
+        </div>
+
+        <div class="card-foot" id="windows-foot"></div>
+      </section>
+
+      <!-- WHERE TO SEND. Your results and our unspent budget in ONE table:
+           the decision is the intersection, and it used to need two pages. -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>States<span id="states-tip-host"></span></h2>
+            <p class="sub" id="states-sub"></p>
+          </div>
+          <div class="spacer"></div>
+          <div id="states-toggle"></div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="states-table"></table>
+        </div>
+        <div class="card-foot" id="states-foot"></div>
+      </section>
 
       <section class="card">
         <div class="card-head">
@@ -105,7 +147,7 @@
 <script>
 (function () {
   'use strict';
-  var D = FZData, A = FZApp;
+  var D = FZData, A = FZApp, C = FZCharts;
 
   var state = A.params();
 
@@ -115,9 +157,20 @@
     subtitle: 'Everything that helps you send leads that qualify and sell.'
   });
 
+  /* Campaign + sub-ID only. Everything here is scored on the fixed trailing
+     30-day matured cohort — a rate needs a finished cohort — so a date-range
+     picker would be a control that changes nothing. Same set, same reason, as
+     the Health scorecard. */
+  A.filterBar(document.getElementById('filter-host'), state, ['campaign', 'subid']);
+
   /* The framing is not optional — a partner who reads these as gates sends
      less, not better. */
   document.getElementById('framing-note').textContent = D.COVERAGE_NOTE;
+
+  /* One cohort for the whole page, scoped by the filters above. */
+  var coh = D.cohort({ partnerId: state.partnerId, campaignId: state.campaignId,
+                       subid: state.subid, rateBasis: state.rateBasis });
+  function rate(b) { return b && b.mature ? b.ph / b.mature : 0; }
 
   /* ---- hours (compact) --------------------------------------------------- */
   (function () {
@@ -134,7 +187,6 @@
       }).join('');
 
     /* Saturday western caveat only for partners actually sending west. */
-    var coh = D.cohort({ partnerId: state.partnerId, rateBasis: state.rateBasis });
     var western = 0, total = 0;
     Object.keys(coh.metrics.byState || {}).forEach(function (st) {
       var b = coh.metrics.byState[st];
@@ -148,40 +200,572 @@
         : '<span>Anything landing Sunday sits until Monday morning.</span>';
   })();
 
-  /* ---- windows + day split (chips, not a table) --------------------------- */
+  /* ---- top conversion windows -------------------------------------------
+     DERIVED FROM THIS PARTNER'S OWN LAST 30 DAYS, not from a global default.
+     A card that tells every account the same two hours is a leaflet; this one
+     answers "when does MY traffic convert". D.conversionWindows() resolves
+     override → derived → default and hands back the reason, which is rendered
+     rather than hidden — a partner reading "based on our staffing" needs to
+     know they are not looking at their own numbers yet.
+
+     Hours land on the default for everyone until time of day is connected
+     (A1). Day of week and week of month are live.
+
+     Still an ASK, never a gate — COVERAGE_NOTE sits at the top of this page
+     and the card foot repeats it. */
   (function () {
+    var cw = D.conversionWindows({ partnerId: state.partnerId });
+
     document.getElementById('windows-tip-host').innerHTML =
-      A.tip('The windows where our team is fully staffed and leads convert best. Sends outside ' +
-            'them are still accepted and worked.');
-    document.getElementById('windows').innerHTML = D.IDEAL_WINDOWS.map(function (w) {
-      return '<span class="badge badge-info"><span class="dot"></span>' + A.esc(w.label) + '</span>';
-    }).join('');
+      A.tip('Worked out from your own leads over the last 30 days: which hours, days and parts ' +
+            'of the month produced your best Priority/Hot conversion. Highlighted entries beat ' +
+            'your own average on enough volume to mean something. Nothing here is a ' +
+            'restriction — every lead is accepted whenever it arrives.');
+
+    /* One renderer for all three grains, so they cannot drift apart. A
+       highlighted chip carries its rate as text, because the highlight is a
+       colour and a colour alone is never allowed to carry meaning here. */
+    function chips(grain, opts) {
+      opts = opts || {};
+      var showRate = grain.source === 'derived';
+      var items = grain.items;
+      if (opts.limit && items.length > opts.limit) items = items.slice(0, opts.limit);
+      return items.map(function (it) {
+        var on = it.best;
+        return '<span class="badge' + (on ? ' badge-info' : '') + '"' +
+          (on ? '' : ' style="opacity:.62"') + '>' +
+          (on ? '<span class="dot"></span>' : '') +
+          A.esc(it.label) +
+          (showRate && it.rate != null && !it.thin
+            ? ' <span style="color:var(--ink-muted)">' + A.fmtPct(it.rate, 1) + '</span>'
+            : '') +
+          '</span>';
+      }).join('');
+    }
+
+    function sourceNote(grain) {
+      if (!grain.note) return '';
+      /* flex-basis:100% — the chip rows are flex containers, so without it
+         the note becomes another chip on the same line. */
+      return '<div class="tile-sub" style="flex-basis:100%;margin-top:2px' +
+        (grain.source === 'derived' ? '' : ';font-style:italic') + '">' +
+        A.esc(grain.note) + '</div>';
+    }
+
+    /* Hour of day — top 4 of 8 windows, so the card does not become a list of
+       every hour bucket we bin into. */
+    document.getElementById('windows').innerHTML =
+      chips(cw.hours, { limit: 4 }) + sourceNote(cw.hours);
 
     document.getElementById('dow-tip-host').innerHTML =
-      A.tip('How we would ideally see your weekly volume spread across days. Sunday is 0% ' +
-            'because the call floor is closed.');
-    var order = [1, 2, 3, 4, 5, 6, 0];
-    document.getElementById('dow-chips').innerHTML = order.map(function (d) {
-      var pct = D.IDEAL_DOW_SPLIT[d];
-      return '<span class="badge"' + (pct ? '' : ' style="opacity:.55"') + '>' +
-        D.DOW_SHORT[d] + ' ' + Math.round(pct * 100) + '%</span>';
-    }).join('');
+      A.tip(cw.dow.source === 'derived'
+        ? 'Your own days, ranked by how well the leads you sent on each converted. Sunday will ' +
+          'usually sit last — the floor is closed, so a Sunday lead waits until Monday for its ' +
+          'first call. It is still accepted.'
+        : 'The days our floor is most heavily staffed. Once you have more matured volume this ' +
+          'switches to your own results.');
+    document.getElementById('dow-chips').innerHTML =
+      chips(cw.dow) + sourceNote(cw.dow);
+
+    document.getElementById('dom-tip-host').innerHTML =
+      A.tip(cw.week.source === 'derived'
+        ? 'Your own weeks of the month, ranked by conversion. We have no preferred week — this ' +
+          'is your pattern, not our request. If it is flat, that is a good sign: steady pacing ' +
+          'means your leads never hit a floor that is already full.'
+        : 'We have no preferred week of the month. Steady pacing is what helps — a month\u2019s ' +
+          'volume landing in its final week meets a floor that is already full.');
+    document.getElementById('dom-chips').innerHTML =
+      chips(cw.week) + sourceNote(cw.week);
+
+    /* The two timing ideas on this page are NOT the same measurement and the
+       foot has to say so, or the scorecard reads as a contradiction:
+         · this card   — when YOUR leads convert best (your own results)
+         · the score   — how much of your volume lands when OUR floor is
+                         staffed (Delivered quality → Delivery timing)
+       A partner can top this card and still score mid on that pillar. */
+    document.getElementById('windows-foot').innerHTML =
+      '<span>' +
+      (cw.enough
+        ? 'From your own leads over the last 30 days'
+        : 'Based on our staffing — not enough of your volume has matured yet') +
+      '. Your <a href="' + A.linkTo('health.html', state) + '">health scorecard</a> measures ' +
+      'something different under Delivery timing: how much of your volume lands while our floor ' +
+      'is staffed. Neither one gates a lead.</span>';
+
+    /* ---- DETAIL VIEW ------------------------------------------------------
+       This is what replaced the Arrival window card on the Performance
+       overview, and it does more than that card did.
+
+       TWO STATISTICS, ONE ROW, per window: how much of your volume you sent
+       into it, and how well that volume converted. Either one alone misleads.
+       A window converting at 0.4% means nothing until you know whether it
+       carries 2% or 40% of the send; a window carrying 40% of the send means
+       nothing until you know whether it converts. THE MISMATCH IS THE POINT —
+       "most of your volume is going into your worst-converting window" is the
+       sentence this view exists to make visible, and no single-series chart
+       can say it.
+
+       All three grains, because the same mismatch can hide in any of them.
+       Hour of day renders its own not-yet-available notice rather than an
+       empty table (A1 — time of day is not connected yet). */
+    var summaryEl = document.getElementById('windows-summary');
+    var detailEl = document.getElementById('windows-detail');
+    var mounted = false;
+
+    var toggle = document.getElementById('windows-toggle');
+    toggle.innerHTML =
+      '<div class="view-toggle">' +
+        '<button type="button" class="is-on" data-wv="summary">Summary</button>' +
+        '<button type="button" data-wv="detail">Detail</button>' +
+      '</div>';
+
+    toggle.querySelectorAll('[data-wv]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        toggle.querySelectorAll('[data-wv]').forEach(function (x) { x.classList.remove('is-on'); });
+        b.classList.add('is-on');
+        var wantDetail = b.dataset.wv === 'detail';
+        summaryEl.style.display = wantDetail ? 'none' : '';
+        detailEl.style.display = wantDetail ? '' : 'none';
+        if (wantDetail && !mounted) { mounted = true; buildDetail(); }
+      });
+    });
+
+    function buildDetail() {
+      var m = coh.metrics;
+      var totalRaw = m.raw || 0;
+      var baseline = m.mature ? (m.soldPriorityHot || 0) / m.mature : 0;
+
+      /* A share that rounds to "0%" on a real bucket reads as a bug — Heritage
+         has 41 Monday leads against 56,309, which is a true 0.07% and a real
+         row. Say "under 1%" instead of printing a zero next to a lead count. */
+      function shareText(v) {
+        if (v > 0 && v < 0.005) return 'under 1%';
+        return A.fmtPct(v, 0);
+      }
+
+      function bucketsFor(buckets, defs) {
+        return defs.map(function (d) {
+          var bk = (buckets && buckets[d.key]) || { raw: 0, mature: 0, ph: 0 };
+          return {
+            key: d.key, label: d.label, raw: bk.raw, mature: bk.mature, ph: bk.ph,
+            share: totalRaw ? bk.raw / totalRaw : 0,
+            rate: bk.mature ? bk.ph / bk.mature : null,
+            thin: bk.mature < D.CW_MIN_BUCKET || bk.ph < D.CW_MIN_SALES
+          };
+        }).filter(function (r) { return r.raw > 0; });
+      }
+
+      /* THE HEADLINE IS THE FEATURE. Two columns of numbers still leave the
+         reader to spot the mismatch themselves; this says it. "Most of your
+         volume goes to your worst-converting window" is the whole reason this
+         view exists, so it is written out in a sentence rather than left to be
+         inferred from bar lengths. */
+      function headline(rows) {
+        var usable = rows.filter(function (r) { return !r.thin; });
+        if (!usable.length) {
+          return 'Not enough matured volume here yet to compare these — the split below is ' +
+                 'what you sent, but the conversion rates are still too thin to read.';
+        }
+        var biggest = rows.slice().sort(function (a, b) { return b.raw - a.raw; })[0];
+        var best = usable.slice().sort(function (a, b) { return b.rate - a.rate; })[0];
+
+        if (biggest.key === best.key) {
+          return 'Your biggest ' + (rows.length > 1 ? 'slot' : 'one') + ' is also your best: ' +
+                 biggest.label + ' takes ' + shareText(biggest.share) + ' of your volume and ' +
+                 'converts at ' + A.fmtPct(best.rate, 1) + '. Nothing to move.';
+        }
+        var biggestReads = biggest.thin ? null
+          : biggest.rate >= baseline * 1.10 ? 'above'
+          : biggest.rate <= baseline * 0.90 ? 'below' : 'about';
+        return 'Most of your volume — ' + shareText(biggest.share) + ' — goes to ' +
+          biggest.label +
+          (biggestReads === null
+            ? ', which has too little matured volume to rate yet'
+            : ', which converts at ' + A.fmtPct(biggest.rate, 1) + ', ' + biggestReads +
+              ' your average') +
+          '. Your best is ' + best.label + ' at ' + A.fmtPct(best.rate, 1) +
+          ', taking ' + shareText(best.share) + '.';
+      }
+
+      function convCell(r) {
+        if (r.thin) {
+          return '<span style="color:var(--ink-muted)">too few to tell</span>' +
+            A.tip('Under ' + D.CW_MIN_BUCKET + ' matured leads or under ' + D.CW_MIN_SALES +
+                  ' Priority/Hot sales here, so a rate would be noise rather than a signal.');
+        }
+        var isBest = r.isBest;
+        var cmp = isBest ? 'your best'
+          : r.rate >= baseline * 1.10 ? 'above your average'
+          : r.rate <= baseline * 0.90 ? 'below your average'
+          : 'about your average';
+        var tone = isBest || cmp === 'above your average' ? 'var(--good-text)'
+          : cmp === 'below your average' ? 'var(--ink-muted)' : 'var(--ink-2)';
+        return '<strong>' + A.fmtPct(r.rate, 1) + '</strong>' +
+          '<div style="font-size:11.5px;color:' + tone + '">' +
+          (isBest ? '\u2605 ' : '') + cmp + '</div>';
+      }
+
+      /* Sorted BEST-CONVERTING FIRST, not by volume or clock order. Read top
+         to bottom it answers "where should more of this go"; and when the long
+         volume bars sit at the bottom, that IS the problem, visible without
+         reading a number. */
+      function section(hostId, title, rows) {
+        var host = document.getElementById(hostId);
+        if (!rows.length) {
+          host.innerHTML = '<div class="tile-label">' + A.esc(title) + '</div>' +
+            '<div class="empty">No leads in the last 30 days.</div>';
+          return;
+        }
+        var best = rows.filter(function (r) { return !r.thin; })
+          .reduce(function (a, r) { return (!a || r.rate > a.rate) ? r : a; }, null);
+        rows.forEach(function (r) { r.isBest = best && r.key === best.key; });
+
+        var sorted = rows.slice().sort(function (a, b) {
+          if (a.thin !== b.thin) return a.thin ? 1 : -1;
+          return (b.rate || 0) - (a.rate || 0);
+        });
+
+        var body = sorted.map(function (r) {
+          /* Volume bar is a TRUE SHARE OF THE WHOLE — 0-100%, no scaling
+             trick — so its length means one thing and needs no legend. The
+             old chart scaled each series to its own max, which made every bar
+             relative to a number that was never shown. */
+          var w = Math.min(100, r.share * 100);
+          return '<tr>' +
+            '<td><strong>' + A.esc(r.label) + '</strong></td>' +
+            '<td>' +
+              '<div style="display:flex;align-items:center;gap:9px">' +
+                '<span class="bar-track" style="width:96px;flex:none">' +
+                  '<span class="bar-fill" style="width:' + w.toFixed(1) + '%"></span>' +
+                '</span>' +
+                '<span style="font-size:13px">' + shareText(r.share) +
+                  '<span style="color:var(--ink-muted)"> \u00b7 ' + A.fmtInt(r.raw) +
+                  '</span></span>' +
+              '</div>' +
+            '</td>' +
+            '<td data-sort="' + (r.thin ? -1 : r.rate) + '">' + convCell(r) + '</td>' +
+            '</tr>';
+        }).join('');
+
+        host.innerHTML =
+          '<div class="tile-label" style="margin-bottom:6px">' + A.esc(title) + '</div>' +
+          '<p class="sub" style="margin:0 0 10px">' + A.esc(headline(rows)) + '</p>' +
+          '<div class="table-wrap"><table class="data">' +
+          '<thead><tr><th>' + A.esc(title) + '</th><th>Share of what you sent</th>' +
+          '<th>Converted to Priority/Hot</th></tr></thead>' +
+          '<tbody>' + body + '</tbody></table></div>';
+      }
+
+      var notes = D.datasetNotes && D.datasetNotes();
+      if (notes && notes.noTimeOfDay) {
+        /* Say what is missing and what it would turn on. An empty table here
+           reads as "you sent nothing", which is the opposite of true. */
+        document.getElementById('detail-hour').innerHTML =
+          '<div class="tile-label" style="margin-bottom:6px">Hour of day</div>' +
+          '<div class="notice notice-mock"><span class="ico">\u270e</span><div>' +
+          '<strong>Not connected yet.</strong> We record the date each lead arrives but not yet ' +
+          'the time, so we cannot show which hours you send in or how each one converts. This ' +
+          'fills in on its own once that is wired up \u2014 nothing changes on your side.' +
+          '</div></div>';
+      } else {
+        section('detail-hour', 'Hour of day',
+          bucketsFor(m.bySegment, D.HOUR_SEGMENT_ORDER.map(function (k) {
+            return { key: k, label: D.HOUR_SEGMENT_LABEL[k] };
+          })));
+      }
+
+      section('detail-dow', 'Day of week',
+        bucketsFor(m.byDow, [1, 2, 3, 4, 5, 6, 0].map(function (d) {
+          return { key: d, label: D.DOW_LABEL[d] };
+        })));
+
+      section('detail-week', 'Week of month',
+        bucketsFor(m.byPhase, D.MONTH_PHASES.map(function (w) {
+          return { key: w.key, label: w.label };
+        })));
+
+      var foot = document.createElement('p');
+      foot.className = 'sub';
+      foot.style.margin = '18px 0 0';
+      foot.textContent =
+        'Best-converting first. Trailing 30 days, matured leads only. Nothing here is a ' +
+        'restriction — every lead is accepted whenever it arrives.';
+      detailEl.appendChild(foot);
+
+      if (window.FZTable) FZTable.enhanceAll();
+    }
   })();
 
-  /* ---- states we need (top 10, names only) --------------------------------
-     Deliberately JUST the state names. The budget behind the list and the
-     lead counts it implies are internal — the affiliate only needs to know
-     where volume is wanted. The list itself is admin-set and changes often;
-     see ADMIN-MAPPING §5a. */
+  /* ---- investable assets -------------------------------------------------
+     Moved from the Performance overview Aug 18. It belongs beside Lead
+     criteria: criteria carries the $25K floor (our rule), this is how the
+     partner's own volume performs against it. The $100K–$250K band is the
+     single highest-leverage change most partners can make, which makes it a
+     targeting decision, not a performance readout.
+
+     THE BAR IS GONE. It was a true proportion of the band's own leads, which
+     is honest but useless: conversion runs 0.1%-20%, so a strong band drew a
+     stub and every band looked equally empty. The States card had the same
+     column drawn the OTHER way — scaled to the best row — so two cards on one
+     page disagreed about what a bar meant. Both now read as a number plus a
+     plain-language comparison to the partner's own average, which is the
+     comparison they actually want and needs no legend. */
   (function () {
+    var bands = coh.metrics.byBand;
+    var baseline = coh.metrics.mature
+      ? (coh.metrics.soldPriorityHot || 0) / coh.metrics.mature : 0;
+
+    var stats = D.ASSET_BANDS.map(function (b) {
+      var bucket = bands[b.key] || { raw: 0, mature: 0, ph: 0 };
+      return {
+        band: b, bucket: bucket, rate: rate(bucket), ph: bucket.ph,
+        thin: bucket.mature < D.CW_MIN_BUCKET || bucket.ph < D.CW_MIN_SALES
+      };
+    });
+    var bestRate = stats.reduce(function (a, x) {
+      return (!x.thin && x.rate > a) ? x.rate : a;
+    }, 0);
+
+    /* Same cell treatment as the States card, so the two tables on this page
+       read alike: the number, then one sentence comparing it to the partner's
+       own average. No bar, no legend. */
+    function convCell(x) {
+      if (!x.bucket.raw) return '<span style="color:var(--ink-muted)">no leads yet</span>';
+      if (x.thin) {
+        return '<span style="color:var(--ink-muted)">too few to tell</span>' +
+          A.tip('Under ' + D.CW_MIN_BUCKET + ' matured leads or under ' + D.CW_MIN_SALES +
+                ' Priority/Hot sales in this band, so a rate would be noise.');
+      }
+      var isBest = bestRate > 0 && x.rate === bestRate;
+      var cmp = isBest ? 'your best'
+        : x.rate >= baseline * 1.10 ? 'above your average'
+        : x.rate <= baseline * 0.90 ? 'below your average'
+        : 'about your average';
+      var tone = isBest || cmp === 'above your average' ? 'var(--good-text)'
+        : cmp === 'below your average' ? 'var(--ink-muted)' : 'var(--ink-2)';
+      return '<strong>' + A.fmtPct(x.rate, 1) + '</strong>' +
+        '<div style="font-size:11.5px;color:' + tone + '">' +
+        (isBest ? '\u2605 ' : '') + cmp + '</div>';
+    }
+
+    var head = '<thead><tr><th>Band</th><th class="num">Your leads</th>' +
+      '<th>Converted to Priority/Hot</th></tr></thead>';
+
+    var body = stats.map(function (x) {
+      var isBest = bestRate > 0 && x.rate === bestRate && !x.thin;
+      return '<tr' + (isBest ? ' style="background:var(--surface-2)"' : '') + '>' +
+        '<td>' + A.esc(x.band.label) +
+          (!x.band.payable
+            ? '<div style="font-size:11.5px;color:var(--ink-muted)">never pays</div>' : '') +
+        '</td>' +
+        '<td class="num" data-sort="' + x.bucket.raw + '">' + A.fmtInt(x.bucket.raw) + '</td>' +
+        '<td data-sort="' + (x.thin ? -1 : x.rate) + '">' + convCell(x) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    document.getElementById('band-table').innerHTML = head + '<tbody>' + body + '</tbody>';
+    document.getElementById('band-foot').innerHTML =
+      '<span>\u2605 is your best-converting band. Across our whole book the strongest results ' +
+      'sit in <strong>$100K\u2013$250K</strong> \u2014 for most partners this is the single ' +
+      'highest-leverage change available.</span>';
+  })();
+
+  /* ---- states -------------------------------------------------------------
+     THREE ORDERINGS OF ONE TABLE, because a partner arrives with one of three
+     questions and each wants a different sort:
+
+       Budget room  — "where do you need volume?"      (our demand)
+       Your volume  — "where am I already sending?"    (their history)
+       Best converting — "where does my traffic work?" (their outcome)
+
+     Same four columns every time, so switching views moves rows rather than
+     changing what a column means. The active dimension is marked in the
+     header so it is obvious which question is on screen.
+
+     WHAT REPLACED THE BLUE BAR. The conversion column used to carry a bar
+     scaled to the best row in the table — a state at 16.3% against a best of
+     23.5% drew a bar at 69% of the track, and 69% of a track with no axis
+     means nothing. It now reads as a number plus a plain-language comparison
+     to the partner's OWN average, which is the comparison they actually want
+     and needs no legend. Thin samples say so instead of showing a rate.
+
+     Budget stays a BAND, never a figure (§5a). "High / Moderate / Some" tells
+     a partner how badly a state is wanted, which the old binary "Room for
+     more" did not, without leaking what the room is worth. */
+  (function () {
+    var VIEWS = [
+      { key: 'budget',  label: 'Budget room',
+        sub: 'Where do we have the most unspent buyer budget?' },
+      { key: 'volume',  label: 'Your volume',
+        sub: 'Which states have you sent us the most leads from?' },
+      { key: 'convert', label: 'Best converting',
+        sub: 'Which of your states convert best to Priority/Hot?' }
+    ];
+    var view = 'budget';
+
     document.getElementById('states-tip-host').innerHTML =
-      A.tip('States where we currently want more volume than we are getting. Updated as our ' +
-            'buyer demand shifts.');
-    document.getElementById('states-chips').innerHTML =
-      D.stateDemand({ limit: 10 }).map(function (s) {
-        return '<span class="badge"><strong>' + A.esc(s.st) + '</strong>&nbsp;' +
-          A.esc(s.name) + '</span>';
+      A.tip('Three ways to read the same states. Budget room is ours — how much unspent buyer ' +
+            'budget a state carries. Volume and conversion are yours, from the last 30 days. ' +
+            'Every state is accepted whatever this says; a state with budget room simply means ' +
+            'your lead there clears faster and holds its price better.');
+
+    var byState = coh.metrics.byState || {};
+    var room = D.budgetRoom();
+    var baseline = coh.metrics.mature
+      ? (coh.metrics.soldPriorityHot || 0) / coh.metrics.mature : 0;
+
+    /* Union of "states we want" and "states they send from" — either alone
+       hides a row that matters. A state we want with no volume is the most
+       actionable row on the card; a state they flood that we do not want is
+       the most expensive one. */
+    var keys = {};
+    Object.keys(byState).forEach(function (st) { if (byState[st].raw > 0) keys[st] = 1; });
+    Object.keys(room).forEach(function (st) { keys[st] = 1; });
+
+    var rows = Object.keys(keys).map(function (st) {
+      var b = byState[st] || { raw: 0, mature: 0, ph: 0 };
+      var r = room[st] || null;
+      var thin = b.mature < D.CW_MIN_BUCKET || b.ph < D.CW_MIN_SALES;
+      return {
+        st: st, bucket: b, room: r,
+        rate: b.mature ? b.ph / b.mature : null,
+        thin: thin
+      };
+    });
+
+    var best = rows.reduce(function (a, r) {
+      return (!r.thin && r.rate > a) ? r.rate : a;
+    }, 0);
+
+    /* Plain-language read on a rate, against the partner's own average. No
+       bar, no legend — the sentence is the comparison. */
+    function convCell(r) {
+      if (!r.bucket.raw) {
+        return '<span style="color:var(--ink-muted)">no leads yet</span>';
+      }
+      if (r.thin) {
+        return '<span style="color:var(--ink-muted)">too few to tell</span>' +
+          A.tip('Under ' + D.CW_MIN_BUCKET + ' matured leads or under ' + D.CW_MIN_SALES +
+                ' Priority/Hot sales here, so a rate would be noise rather than a signal.');
+      }
+      var isBest = best > 0 && r.rate === best;
+      var cmp = isBest ? 'your best'
+        : r.rate >= baseline * 1.10 ? 'above your average'
+        : r.rate <= baseline * 0.90 ? 'below your average'
+        : 'about your average';
+      var tone = isBest || cmp === 'above your average' ? 'var(--good-text)'
+        : cmp === 'below your average' ? 'var(--ink-muted)' : 'var(--ink-2)';
+      return '<strong>' + A.fmtPct(r.rate, 1) + '</strong>' +
+        '<div style="font-size:11.5px;color:' + tone + '">' +
+        (isBest ? '★ ' : '') + cmp + '</div>';
+    }
+
+    function roomCell(r) {
+      if (!r.room) {
+        return '<span style="color:var(--ink-muted)">Fully covered</span>' +
+          A.tip('Buyer budget here is already being met. Leads are still accepted — they just ' +
+                'do not clear any faster than normal.');
+      }
+      var cls = r.room.band === 'high' ? 'badge-good'
+              : r.room.band === 'mid' ? 'badge-info' : 'badge';
+      return '<span class="badge ' + cls + '"><span class="dot"></span>' +
+        A.esc(r.room.bandLabel) + '</span>';
+    }
+
+    var rank = { high: 3, mid: 2, low: 1 };
+    function sortFor(v) {
+      if (v === 'volume') {
+        return function (a, b) { return b.bucket.raw - a.bucket.raw; };
+      }
+      if (v === 'convert') {
+        return function (a, b) {
+          /* Thin rows sink in BOTH directions — a 40% state on four leads
+             must never head a list titled "best converting". */
+          if (a.thin !== b.thin) return a.thin ? 1 : -1;
+          return (b.rate || 0) - (a.rate || 0);
+        };
+      }
+      return function (a, b) {
+        var ra = a.room ? rank[a.room.band] : 0, rb = b.room ? rank[b.room.band] : 0;
+        if (ra !== rb) return rb - ra;
+        if (a.room && b.room) return a.room.rank - b.room.rank;
+        return b.bucket.raw - a.bucket.raw;
+      };
+    }
+
+    var TOP = 12;
+    function render() {
+      var cfg = VIEWS.filter(function (v) { return v.key === view; })[0];
+      document.getElementById('states-sub').textContent = cfg.sub;
+
+      var shown = rows.slice().sort(sortFor(view)).slice(0, TOP);
+
+      function th(label, key, num) {
+        var on = view === key;
+        return '<th' + (num ? ' class="num"' : '') +
+          (on ? ' style="color:var(--ink)"' : '') + '>' +
+          (on ? '▸ ' : '') + label + '</th>';
+      }
+
+      var head = '<thead><tr><th>State</th>' +
+        th('Buyer budget room', 'budget') +
+        th('Your leads', 'volume', true) +
+        th('Converted to Priority/Hot', 'convert') +
+        '</tr></thead>';
+
+      var body = shown.map(function (r) {
+        var name = r.room ? r.room.name : null;
+        return '<tr>' +
+          '<td><strong>' + A.esc(r.st) + '</strong>' +
+            (name ? '<div style="font-size:11.5px;color:var(--ink-muted)">' +
+              A.esc(name) + '</div>' : '') + '</td>' +
+          '<td>' + roomCell(r) + '</td>' +
+          '<td class="num" data-sort="' + r.bucket.raw + '">' +
+            (r.bucket.raw ? A.fmtInt(r.bucket.raw)
+                          : '<span style="color:var(--ink-muted)">none yet</span>') + '</td>' +
+          '<td data-sort="' + (r.thin || r.rate == null ? -1 : r.rate) + '">' +
+            convCell(r) + '</td>' +
+          '</tr>';
       }).join('');
+
+      document.getElementById('states-table').innerHTML =
+        head + '<tbody>' + (body ||
+          '<tr><td colspan="4" class="empty">No states to show.</td></tr>') + '</tbody>';
+
+      var wanted = shown.filter(function (r) { return r.room && !r.bucket.raw; });
+      document.getElementById('states-foot').innerHTML =
+        '<span>' +
+        (view === 'budget'
+          ? 'Ranked by how much buyer budget is going unspent. ' +
+            (wanted.length
+              ? '<strong>' + wanted.length + '</strong> of these you have not sent from at all yet.'
+              : 'You already send from all of these.')
+          : view === 'volume'
+          ? 'Ranked by the leads you sent in the last 30 days.'
+          : 'Ranked by conversion, best first. States without enough matured volume sit at the ' +
+            'bottom rather than being ranked on noise.') +
+        ' Every state is accepted — budget room means your lead clears faster there, not that ' +
+        'other states are unwanted.</span>';
+    }
+
+    var toggle = document.getElementById('states-toggle');
+    toggle.innerHTML = '<div class="view-toggle">' +
+      VIEWS.map(function (v, i) {
+        return '<button type="button"' + (i === 0 ? ' class="is-on"' : '') +
+          ' data-sv="' + v.key + '">' + v.label + '</button>';
+      }).join('') + '</div>';
+
+    toggle.querySelectorAll('[data-sv]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        toggle.querySelectorAll('[data-sv]').forEach(function (x) { x.classList.remove('is-on'); });
+        b.classList.add('is-on');
+        view = b.dataset.sv;
+        render();
+        if (window.FZTable) FZTable.enhanceAll();
+      });
+    });
+
+    render();
   })();
 
   /* ---- lead criteria — one box, product toggle, compact chips -------------

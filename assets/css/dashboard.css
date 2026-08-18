@@ -617,6 +617,17 @@ h3 { font-size: 15px; }
 .delta-down { color: var(--critical-text); }
 .delta-flat { color: var(--ink-muted); }
 
+/* A tile that navigates. Only used where the tile has a single obvious
+   destination — Acceptance rate scrolls to the rejection breakdown that
+   explains it. Keyboard-reachable, because a click target that only works
+   with a mouse is not a control. */
+.tile-link { cursor: pointer; }
+.tile-link:hover { border-color: var(--border-strong); }
+.tile-link:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 2px;
+}
+
 .tile-northstar { border-color: var(--series-1); border-width: 1px; }
 .tile-revshare {
   border-style: dashed;

@@ -242,7 +242,7 @@
       storage: 'Global list of windows, consumer local time. Displays to every affiliate, so ' +
                'one edit must propagate everywhere.' },
 
-    { group: 'Operational', name: 'States we need most', status: 'build',
+    { group: 'Operational', name: 'States with most budget', status: 'build',
       controls: 'The top-10 state list on Targeting.',
       today: 'STATE_DEMAND constant.',
       storage: 'Ranked list of states, admin-ordered. CHANGES OFTEN — this needs to be easy to ' +
@@ -367,7 +367,7 @@
       impact: 'The sub-ID drilldown is off for most partners.' },
     { name: 'Sold rows with no sold type', severity: 'warning',
       detail: 'Some rows are marked sold without a tier label.',
-      impact: 'Tier mix undercounts. Blocks the North Star metric being exact.' }
+      impact: 'Lead tier mix undercounts. Blocks the North Star metric being exact.' }
   ];
 
   global.FZHandoff = {

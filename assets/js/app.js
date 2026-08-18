@@ -101,6 +101,10 @@
       subid: q.get('subid') || 'all',
       status: q.get('status') || 'all',
       sold: q.get('sold') || 'all',
+      /* Rejection reason. Set by the "Why leads were rejected" table on the
+         Performance overview, which links a row straight into the lead table
+         filtered to that reason. */
+      reason: q.get('reason') || 'all',
       page: Math.max(1, parseInt(q.get('p'), 10) || 1)
     };
   }
@@ -211,7 +215,11 @@
         '</div>' +
         /* Built from PARTNERS rather than hardcoded, so the names cannot
            drift out of step with the data the way they previously did. */
-        '<div class="ctx" title="Mock-up affordance only. In production the partner comes from the session, and each comp model is a different SQL projection — see HANDOFF.md.">' +
+        /* Reviewer scaffolding: the whole control disappears in production,
+           where the partner comes off the session and cannot be chosen. The
+           projection detail it used to name lives in HANDOFF, not in a
+           tooltip. */
+        '<div class="ctx" title="Preview control — not part of the partner view. Your account is set by your login.">' +
           '<span class="ctx-label">Viewing as</span>' +
           '<select id="ctx-partner">' +
             Object.keys(D.PARTNERS).map(function (k) {
@@ -305,6 +313,21 @@
         '</select></div>';
     }
 
+    /* Reason is only meaningful on rejected rows, so choosing one also
+       implies Status = Rejected. The select is built from the shared
+       catalogue rather than a second hardcoded list — a reason added in
+       data.js appears here with no change to this file. */
+    if (fields.indexOf('reason') !== -1) {
+      html += '<div class="field"><label for="f-reason">Rejection reason</label>' +
+        '<select id="f-reason" name="reason">' +
+        '<option value="all"' + (state.reason === 'all' ? ' selected' : '') + '>Any reason</option>' +
+        D.REJECT_ORDER.map(function (k) {
+          return '<option value="' + k + '"' + (state.reason === k ? ' selected' : '') + '>' +
+            esc(D.rejectLabel(k)) + '</option>';
+        }).join('') +
+        '</select></div>';
+    }
+
     if (fields.indexOf('sold') !== -1) {
       html += '<div class="field"><label for="f-sold">Sold type</label>' +
         '<select id="f-sold" name="sold">' +
@@ -344,10 +367,22 @@
         if (!custom) document.getElementById('filter-form').submit();
       });
     }
-    ['f-campaign', 'f-subid', 'f-status', 'f-sold'].forEach(function (id) {
+    ['f-campaign', 'f-subid', 'f-status', 'f-reason', 'f-sold'].forEach(function (id) {
       var n = document.getElementById(id);
       if (n) n.addEventListener('change', function () { document.getElementById('filter-form').submit(); });
     });
+  }
+
+  /* The score is named for what it covers, so a filtered page can never read
+     as the account's number. Scoped to a campaign it is a CAMPAIGN health
+     score; unscoped it is the AFFILIATE health score — the volume-weighted
+     rollup of those campaigns. One helper so the three pages that show the
+     score cannot drift apart. Sub-ID alone does not rename it: a sub-ID cuts
+     across campaigns, so the scope is still the account. */
+  function healthScoreLabel(state, opts) {
+    var scoped = state && state.campaignId && state.campaignId !== 'all';
+    var label = scoped ? 'Campaign health score' : 'Affiliate health score';
+    return (opts && opts.lower) ? label.charAt(0).toLowerCase() + label.slice(1) : label;
   }
 
   function rangeSummary(range) {
@@ -524,6 +559,35 @@
    * zeros read as a finding — "your early-morning volume is 0%" is a lie when
    * the truth is "the export has no clock."
    */
+  /* ======================================================================
+     NOT CONNECTED YET — the one way this UI says "no data here"
+     ----------------------------------------------------------------------
+     THE DASHBOARD IS BUILT AGAINST A BACKEND, NOT AGAINST A FILE. While it
+     is in testing it happens to be reading a lead export, but that is a
+     temporary source and NOTHING AFFILIATE-FACING MAY MENTION IT. A partner
+     reading "the lead export does not carry this" learns about our internal
+     plumbing and reads a permanent-sounding limitation; the same gap phrased
+     as "not connected yet" reads as a field that will fill in, which is what
+     it is.
+
+     So: a field with no source renders BLANK plus this note, never a zero,
+     never an invented value, and never an explanation of where our data
+     currently comes from. When the field is wired on the backend it simply
+     populates and the note disappears — no copy change anywhere.
+
+     Internal surfaces (admin-preview, the data-connections page, HANDOFF and
+     ADMIN-MAPPING) are exempt: naming the export is exactly their job.
+     ====================================================================== */
+  function notConnected(what) {
+    return '<span style="color:var(--ink-muted)">—</span>' +
+      tip((what ? what + ' is not connected yet. ' : 'Not connected yet. ') +
+          'This fills in automatically once the field is wired up on our side — ' +
+          'there is nothing for you to do.');
+  }
+
+  /* Same idea, as plain text for places that cannot take markup. */
+  var NOT_CONNECTED_TEXT = 'Not connected yet';
+
   function unsupported(cardEl, title, reason) {
     if (!cardEl) return;
     cardEl.querySelectorAll('.table-wrap, .card-body, .card-foot').forEach(function (n) { n.remove(); });
@@ -757,6 +821,7 @@
     linkTo: linkTo,
     isoDate: isoDate,
     rangeSummary: rangeSummary,
+    healthScoreLabel: healthScoreLabel,
     esc: esc,
     fmtInt: fmtInt,
     fmtPct: fmtPct,
@@ -771,6 +836,8 @@
     exportCsv: exportCsv,
     exportControl: exportControl,
     unsupported: unsupported,
+    notConnected: notConnected,
+    NOT_CONNECTED_TEXT: NOT_CONNECTED_TEXT,
     openModal: openModal,
     tip: tip,
     infoButton: infoButton,
