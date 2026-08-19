@@ -28,7 +28,16 @@
            same reason. -->
       <div id="filter-host"></div>
 
-      <!-- Reference first: our hours, then what your own asset ranges do. -->
+      <!-- REFERENCE ABOVE, YOUR OWN NUMBERS BELOW. Reorganised Aug 19.
+
+           The top block is fixed material a partner CHECKS rather than
+           studies: when we are open, what qualifies, what to run. None of it
+           moves with their data, and it is what a new partner reads first.
+
+           Everything under it is derived from their own trailing 30 days and
+           is the part they come back to. Keeping the two apart stops a
+           reference table and an analysis table sitting side by side looking
+           like the same kind of object. -->
       <div class="grid-2">
         <section class="card">
           <div class="card-head">
@@ -44,16 +53,48 @@
         <section class="card">
           <div class="card-head">
             <div>
-              <h2>Investable assets</h2>
-              <p class="sub">Which asset ranges convert best for your campaigns?</p>
+              <h2>Lead criteria<span id="criteria-tip-host"></span></h2>
+              <p class="sub">What makes a lead payable on your account.</p>
+            </div>
+            <div class="spacer"></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <div id="product-toggle"></div>
+              <a class="btn btn-sm" id="full-criteria" target="_blank" rel="noopener">Full criteria ↗</a>
             </div>
           </div>
-          <div class="table-wrap">
-            <table class="data" id="band-table"></table>
+          <div class="card-body">
+            <div id="criteria-chips" class="user-grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))"></div>
           </div>
-          <div class="card-foot" id="band-foot"></div>
         </section>
       </div>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Creatives</h2>
+            <p class="sub">Example ads that convert on each product, and the rules yours need to follow.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="creative-btns" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+          <p id="creative-policy" style="font-size:13px;color:var(--ink-2);margin:14px 0 0"></p>
+        </div>
+      </section>
+
+      <!-- ---- Your own last 30 days from here down ---- -->
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Investable assets</h2>
+            <p class="sub">Which asset ranges convert best for your campaigns?</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="band-table"></table>
+        </div>
+        <div class="card-foot" id="band-foot"></div>
+      </section>
 
       <!-- WHEN TO SEND. Summary is the answer; Detail is the working —
            how much you send in each window AND how each converts, which is
@@ -87,51 +128,25 @@
         <div class="card-foot" id="windows-foot"></div>
       </section>
 
-      <!-- WHERE TO SEND. Your results and our unspent budget in ONE table:
-           the decision is the intersection, and it used to need two pages. -->
+      <!-- WHERE TO SEND. All fifty states, ten to a page. The columns sort
+           across the WHOLE set, not the visible page — see the note in the
+           script. The three-way view toggle that used to sit here is gone:
+           the columns it switched between are all present and all sortable,
+           so it was a second control for something the headers already do. -->
       <section class="card">
         <div class="card-head">
           <div>
             <h2>States<span id="states-tip-host"></span></h2>
             <p class="sub" id="states-sub"></p>
           </div>
-          <div class="spacer"></div>
-          <div id="states-toggle"></div>
         </div>
         <div class="table-wrap">
           <table class="data" id="states-table"></table>
         </div>
-        <div class="card-foot" id="states-foot"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <h2>Lead criteria<span id="criteria-tip-host"></span></h2>
-            <p class="sub">What makes a lead payable on your account.</p>
-          </div>
-          <div class="spacer"></div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <div id="product-toggle"></div>
-            <a class="btn btn-sm" id="full-criteria" target="_blank" rel="noopener">View full criteria ↗</a>
-          </div>
+        <div class="card-foot">
+          <div class="pager" id="states-pager"></div>
         </div>
-        <div class="card-body">
-          <div id="criteria-chips" class="user-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))"></div>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <h2>Creatives</h2>
-            <p class="sub">Example ads that convert on each product, and the rules yours need to follow.</p>
-          </div>
-        </div>
-        <div class="card-body">
-          <div id="creative-btns" style="display:flex;gap:10px;flex-wrap:wrap"></div>
-          <p id="creative-policy" style="font-size:13px;color:var(--ink-2);margin:14px 0 0"></p>
-        </div>
+        <div class="card-body" id="states-note" style="padding-top:0"></div>
       </section>
 
     </div>
@@ -571,100 +586,103 @@
   })();
 
   /* ---- states -------------------------------------------------------------
-     THREE ORDERINGS OF ONE TABLE, because a partner arrives with one of three
-     questions and each wants a different sort:
+     ALL FIFTY STATES, TEN TO A PAGE.
 
-       Budget room  — "where do you need volume?"      (our demand)
-       Your volume  — "where am I already sending?"    (their history)
-       Best converting — "where does my traffic work?" (their outcome)
+     Two things this has to get right, and the second is the one that is easy
+     to break:
 
-     Same four columns every time, so switching views moves rows rather than
-     changing what a column means. The active dimension is marked in the
-     header so it is obvious which question is on screen.
+       1. Every state is in the set, always — including the ones the affiliate
+          sends nothing from and the ones we hold no demand data on. Building
+          the rows from "states with volume" hid the most actionable row on the
+          card: somewhere they are not sending and we have room.
 
-     WHAT REPLACED THE BLUE BAR. The conversion column used to carry a bar
-     scaled to the best row in the table — a state at 16.3% against a best of
-     23.5% drew a bar at 69% of the track, and 69% of a track with no axis
-     means nothing. It now reads as a number plus a plain-language comparison
-     to the partner's OWN average, which is the comparison they actually want
-     and needs no legend. Thin samples say so instead of showing a rate.
+       2. SORTING RUNS ACROSS THE WHOLE SET, NOT THE VISIBLE PAGE. Sorting ten
+          rendered rows would reorder page 1 and read as if it had sorted all
+          fifty. FZTable's managed mode does this: it gets the full array plus
+          a sortValue accessor, hands back the sorted array, and this page
+          re-paginates from page 1. Same mechanism the lead table uses.
 
-     Budget stays a BAND, never a figure (§5a). "High / Moderate / Some" tells
-     a partner how badly a state is wanted, which the old binary "Room for
-     more" did not, without leaking what the room is worth. */
+     The three-way view toggle that used to live here is gone. It switched
+     between orderings the sortable column headers already provide, so it was
+     a second control for the same job — and it could disagree with the header
+     arrows about what was sorted.
+
+     Budget is a BAND, never a figure (§5a), and a state with no demand record
+     renders blank rather than "covered": no data and no room are different
+     answers. */
   (function () {
-    var VIEWS = [
-      { key: 'budget',  label: 'Budget room',
-        sub: 'Where do we have the most unspent buyer budget?' },
-      { key: 'volume',  label: 'Your volume',
-        sub: 'Which states have you sent us the most leads from?' },
-      { key: 'convert', label: 'Best converting',
-        sub: 'Which of your states convert best to Priority/Hot?' }
-    ];
-    var view = 'budget';
+    var PER_PAGE = 10;
+    var page = 1;
 
     document.getElementById('states-tip-host').innerHTML =
-      A.tip('Three ways to read the same states. Budget room is ours — how much unspent buyer ' +
-            'budget a state carries. Volume and conversion are yours, from the last 30 days. ' +
-            'Every state is accepted whatever this says; a state with budget room simply means ' +
-            'your lead there clears faster and holds its price better.');
+      A.tip('All fifty states. Your leads and conversion come from your own last 30 days; ' +
+            'buyer budget room is ours. Sort any column to reorder the whole list, not just ' +
+            'this page. Every state is accepted — budget room means your lead there clears ' +
+            'faster, not that other states are unwanted.');
 
-    var byState = coh.metrics.byState || {};
-    var room = D.budgetRoom();
     var baseline = coh.metrics.mature
       ? (coh.metrics.soldPriorityHot || 0) / coh.metrics.mature : 0;
 
-    /* Union of "states we want" and "states they send from" — either alone
-       hides a row that matters. A state we want with no volume is the most
-       actionable row on the card; a state they flood that we do not want is
-       the most expensive one. */
-    var keys = {};
-    Object.keys(byState).forEach(function (st) { if (byState[st].raw > 0) keys[st] = 1; });
-    Object.keys(room).forEach(function (st) { keys[st] = 1; });
-
-    var rows = Object.keys(keys).map(function (st) {
-      var b = byState[st] || { raw: 0, mature: 0, ph: 0 };
-      var r = room[st] || null;
-      var thin = b.mature < D.CW_MIN_BUCKET || b.ph < D.CW_MIN_SALES;
-      return {
-        st: st, bucket: b, room: r,
-        rate: b.mature ? b.ph / b.mature : null,
-        thin: thin
-      };
+    var rows = D.stateRows({ byState: coh.metrics.byState });
+    rows.forEach(function (r) {
+      r.thin = r.mature < D.CW_MIN_BUCKET || r.ph < D.CW_MIN_SALES;
     });
-
     var best = rows.reduce(function (a, r) {
       return (!r.thin && r.rate > a) ? r.rate : a;
     }, 0);
+    rows.forEach(function (r) { r.isBest = !r.thin && best > 0 && r.rate === best; });
 
-    /* Plain-language read on a rate, against the partner's own average. No
-       bar, no legend — the sentence is the comparison. */
-    function convCell(r) {
-      if (!r.bucket.raw) {
-        return '<span style="color:var(--ink-muted)">no leads yet</span>';
+    /* Default order: most budget room first, then by the affiliate's own
+       volume. It is the question the card exists to answer. */
+    var ROOM_RANK = { high: 3, mid: 2, low: 1 };
+    rows.sort(function (a, b) {
+      var ra = a.room ? ROOM_RANK[a.room.band] : 0, rb = b.room ? ROOM_RANK[b.room.band] : 0;
+      if (ra !== rb) return rb - ra;
+      if (a.room && b.room) return a.room.rank - b.room.rank;
+      return b.raw - a.raw;
+    });
+
+    var COLS = ['state', 'room', 'volume', 'conv'];
+
+    /* What each column sorts ON — taken from the row, not the rendered cell,
+       so a band sorts by rank and "too few to tell" sorts last. */
+    function sortValueFor(row, idx) {
+      switch (COLS[idx]) {
+        case 'state':  return row.st;
+        case 'room':   return row.room ? ROOM_RANK[row.room.band] : '';
+        case 'volume': return row.raw ? row.raw : '';
+        case 'conv':   return (row.thin || row.rate == null) ? '' : row.rate;
+        default:       return '';
       }
+    }
+
+    function convCell(r) {
+      if (!r.raw) return '<span style="color:var(--ink-muted)">no leads yet</span>';
       if (r.thin) {
         return '<span style="color:var(--ink-muted)">too few to tell</span>' +
           A.tip('Under ' + D.CW_MIN_BUCKET + ' matured leads or under ' + D.CW_MIN_SALES +
                 ' Priority/Hot sales here, so a rate would be noise rather than a signal.');
       }
-      var isBest = best > 0 && r.rate === best;
-      var cmp = isBest ? 'your best'
+      var cmp = r.isBest ? 'your best'
         : r.rate >= baseline * 1.10 ? 'above your average'
         : r.rate <= baseline * 0.90 ? 'below your average'
         : 'about your average';
-      var tone = isBest || cmp === 'above your average' ? 'var(--good-text)'
+      var tone = r.isBest || cmp === 'above your average' ? 'var(--good-text)'
         : cmp === 'below your average' ? 'var(--ink-muted)' : 'var(--ink-2)';
       return '<strong>' + A.fmtPct(r.rate, 1) + '</strong>' +
         '<div style="font-size:11.5px;color:' + tone + '">' +
-        (isBest ? '★ ' : '') + cmp + '</div>';
+        (r.isBest ? '\u2605 ' : '') + cmp + '</div>';
     }
 
     function roomCell(r) {
+      if (r.blocked) {
+        return '<span class="badge badge-crit"><span class="dot"></span>Not accepted</span>' +
+          A.tip(r.blockedNote);
+      }
       if (!r.room) {
-        return '<span style="color:var(--ink-muted)">Fully covered</span>' +
-          A.tip('Buyer budget here is already being met. Leads are still accepted — they just ' +
-                'do not clear any faster than normal.');
+        /* No demand record. NOT the same as "no room" — say so rather than
+           implying we are covered here. */
+        return A.notConnected('Buyer budget for this state');
       }
       var cls = r.room.band === 'high' ? 'badge-good'
               : r.room.band === 'mid' ? 'badge-info' : 'badge';
@@ -672,100 +690,78 @@
         A.esc(r.room.bandLabel) + '</span>';
     }
 
-    var rank = { high: 3, mid: 2, low: 1 };
-    function sortFor(v) {
-      if (v === 'volume') {
-        return function (a, b) { return b.bucket.raw - a.bucket.raw; };
-      }
-      if (v === 'convert') {
-        return function (a, b) {
-          /* Thin rows sink in BOTH directions — a 40% state on four leads
-             must never head a list titled "best converting". */
-          if (a.thin !== b.thin) return a.thin ? 1 : -1;
-          return (b.rate || 0) - (a.rate || 0);
-        };
-      }
-      return function (a, b) {
-        var ra = a.room ? rank[a.room.band] : 0, rb = b.room ? rank[b.room.band] : 0;
-        if (ra !== rb) return rb - ra;
-        if (a.room && b.room) return a.room.rank - b.room.rank;
-        return b.bucket.raw - a.bucket.raw;
-      };
-    }
+    function renderTable() {
+      var totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+      page = Math.min(page, totalPages);
+      var slice = rows.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
-    var TOP = 12;
-    function render() {
-      var cfg = VIEWS.filter(function (v) { return v.key === view; })[0];
-      document.getElementById('states-sub').textContent = cfg.sub;
+      var head = '<thead><tr><th>State</th><th>Buyer budget room</th>' +
+        '<th class="num">Your leads</th><th>Converted to Priority/Hot</th></tr></thead>';
 
-      var shown = rows.slice().sort(sortFor(view)).slice(0, TOP);
-
-      function th(label, key, num) {
-        var on = view === key;
-        return '<th' + (num ? ' class="num"' : '') +
-          (on ? ' style="color:var(--ink)"' : '') + '>' +
-          (on ? '▸ ' : '') + label + '</th>';
-      }
-
-      var head = '<thead><tr><th>State</th>' +
-        th('Buyer budget room', 'budget') +
-        th('Your leads', 'volume', true) +
-        th('Converted to Priority/Hot', 'convert') +
-        '</tr></thead>';
-
-      var body = shown.map(function (r) {
-        var name = r.room ? r.room.name : null;
-        return '<tr>' +
+      var body = slice.map(function (r) {
+        return '<tr' + (r.isBest ? ' style="background:var(--surface-2)"' : '') + '>' +
           '<td><strong>' + A.esc(r.st) + '</strong>' +
-            (name ? '<div style="font-size:11.5px;color:var(--ink-muted)">' +
-              A.esc(name) + '</div>' : '') + '</td>' +
+            '<div style="font-size:11.5px;color:var(--ink-muted)">' + A.esc(r.name) + '</div></td>' +
           '<td>' + roomCell(r) + '</td>' +
-          '<td class="num" data-sort="' + r.bucket.raw + '">' +
-            (r.bucket.raw ? A.fmtInt(r.bucket.raw)
-                          : '<span style="color:var(--ink-muted)">none yet</span>') + '</td>' +
-          '<td data-sort="' + (r.thin || r.rate == null ? -1 : r.rate) + '">' +
-            convCell(r) + '</td>' +
+          '<td class="num">' + (r.raw ? A.fmtInt(r.raw)
+            : '<span style="color:var(--ink-muted)">none yet</span>') + '</td>' +
+          '<td>' + convCell(r) + '</td>' +
           '</tr>';
       }).join('');
 
-      document.getElementById('states-table').innerHTML =
-        head + '<tbody>' + (body ||
-          '<tr><td colspan="4" class="empty">No states to show.</td></tr>') + '</tbody>';
+      document.getElementById('states-table').innerHTML = head + '<tbody>' + body + '</tbody>';
 
-      var wanted = shown.filter(function (r) { return r.room && !r.bucket.raw; });
-      document.getElementById('states-foot').innerHTML =
-        '<span>' +
-        (view === 'budget'
-          ? 'Ranked by how much buyer budget is going unspent. ' +
-            (wanted.length
-              ? '<strong>' + wanted.length + '</strong> of these you have not sent from at all yet.'
-              : 'You already send from all of these.')
-          : view === 'volume'
-          ? 'Ranked by the leads you sent in the last 30 days.'
-          : 'Ranked by conversion, best first. States without enough matured volume sit at the ' +
-            'bottom rather than being ranked on noise.') +
-        ' Every state is accepted — budget room means your lead clears faster there, not that ' +
-        'other states are unwanted.</span>';
+      var sending = rows.filter(function (r) { return r.raw > 0; }).length;
+      var openRoom = rows.filter(function (r) { return r.room && !r.raw && !r.blocked; }).length;
+      document.getElementById('states-sub').innerHTML =
+        'You are sending from <strong>' + sending + '</strong> of 50 states' +
+        (openRoom
+          ? ' \u00b7 <strong>' + openRoom + '</strong> with budget room you have not touched yet'
+          : '');
+
+      renderPager(totalPages);
+      wire();
     }
 
-    var toggle = document.getElementById('states-toggle');
-    toggle.innerHTML = '<div class="view-toggle">' +
-      VIEWS.map(function (v, i) {
-        return '<button type="button"' + (i === 0 ? ' class="is-on"' : '') +
-          ' data-sv="' + v.key + '">' + v.label + '</button>';
-      }).join('') + '</div>';
+    function renderPager(totalPages) {
+      var host = document.getElementById('states-pager');
+      var startN = (page - 1) * PER_PAGE + 1;
+      var endN = Math.min(page * PER_PAGE, rows.length);
+      host.innerHTML =
+        '<span>Showing ' + startN + '\u2013' + endN + ' of ' + rows.length + ' states</span>' +
+        (page > 1 ? '<button class="btn btn-sm" data-sp="' + (page - 1) + '">\u2190 Prev</button>' : '') +
+        '<span>Page ' + page + ' of ' + totalPages + '</span>' +
+        (page < totalPages ? '<button class="btn btn-sm" data-sp="' + (page + 1) + '">Next \u2192</button>' : '');
 
-    toggle.querySelectorAll('[data-sv]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        toggle.querySelectorAll('[data-sv]').forEach(function (x) { x.classList.remove('is-on'); });
-        b.classList.add('is-on');
-        view = b.dataset.sv;
-        render();
-        if (window.FZTable) FZTable.enhanceAll();
+      host.querySelectorAll('[data-sp]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          page = parseInt(b.dataset.sp, 10);
+          renderTable();
+        });
       });
-    });
+    }
 
-    render();
+    function wire() {
+      FZTable.enhance(document.getElementById('states-table'), {
+        labels: ['State', 'Buyer budget room', 'Your leads', 'Converted to Priority/Hot'],
+        data: rows,
+        sortValue: sortValueFor,
+        onSort: function (sorted) {
+          rows = sorted;
+          page = 1;          /* a new sort starts at the top of the whole set */
+          renderTable();
+        }
+      });
+    }
+
+    document.getElementById('states-note').innerHTML =
+      '<p class="sub" style="margin:0">Buyer budget room is how much unspent budget a state ' +
+      'carries right now \u2014 <strong>High</strong>, <strong>Moderate</strong> or ' +
+      '<strong>Some</strong>. States we hold no budget figure for are left blank rather than ' +
+      'marked covered. New York is never accepted on any campaign. Every other state is ' +
+      'accepted whatever this table says.</p>';
+
+    renderTable();
   })();
 
   /* ---- lead criteria — one box, product toggle, compact chips -------------

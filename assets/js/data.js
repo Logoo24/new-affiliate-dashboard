@@ -855,28 +855,85 @@
      MOCK VALUES. In production this comes off the buyer-demand table; see
      ADMIN-MAPPING.md. The shape is real though: Pacific and Mountain are a
      standing coverage gap, which is why they dominate the unused column. */
-  var STATE_DEMAND = [
-    { st: 'CA', name: 'California',   tz: 'PT', budget: 42000, fillRate: 0.38 },
-    { st: 'WA', name: 'Washington',   tz: 'PT', budget: 18000, fillRate: 0.41 },
-    { st: 'AZ', name: 'Arizona',      tz: 'MT', budget: 16000, fillRate: 0.44 },
-    { st: 'NV', name: 'Nevada',       tz: 'PT', budget:  9000, fillRate: 0.36 },
-    { st: 'CO', name: 'Colorado',     tz: 'MT', budget: 12000, fillRate: 0.55 },
-    { st: 'NM', name: 'New Mexico',   tz: 'MT', budget:  6000, fillRate: 0.33 },
-    { st: 'UT', name: 'Utah',         tz: 'MT', budget:  7500, fillRate: 0.52 },
-    { st: 'TX', name: 'Texas',        tz: 'CT', budget: 38000, fillRate: 0.91 },
-    { st: 'KS', name: 'Kansas',       tz: 'CT', budget:  5000, fillRate: 0.48 },
-    { st: 'NE', name: 'Nebraska',     tz: 'CT', budget:  4500, fillRate: 0.51 },
-    { st: 'SD', name: 'South Dakota', tz: 'CT', budget:  3000, fillRate: 0.44 },
-    { st: 'MO', name: 'Missouri',     tz: 'CT', budget:  9000, fillRate: 0.86 },
-    { st: 'FL', name: 'Florida',      tz: 'ET', budget: 36000, fillRate: 0.94 },
-    { st: 'OH', name: 'Ohio',         tz: 'ET', budget: 14000, fillRate: 0.89 },
-    { st: 'PA', name: 'Pennsylvania', tz: 'ET', budget: 13000, fillRate: 0.92 },
-    { st: 'NC', name: 'North Carolina', tz: 'ET', budget: 12000, fillRate: 0.88 },
-    { st: 'GA', name: 'Georgia',      tz: 'ET', budget: 11000, fillRate: 0.90 },
-    { st: 'MI', name: 'Michigan',     tz: 'ET', budget: 10000, fillRate: 0.87 },
-    { st: 'TN', name: 'Tennessee',    tz: 'CT', budget:  8000, fillRate: 0.85 },
-    { st: 'IN', name: 'Indiana',      tz: 'ET', budget:  7000, fillRate: 0.83 }
+  /* ======================================================================
+     STATES — the full 50, and where the demand numbers come from
+     ----------------------------------------------------------------------
+     ALL FIFTY STATES ARE LISTED, ALWAYS. The States card used to build its
+     rows from the union of "states we have demand data for" and "states this
+     affiliate already sends from", which quietly hid the most useful row on
+     the card: a state nobody has data on and nobody is sending to. A partner
+     deciding where to buy needs to see the whole map, including the empty
+     parts of it.
+
+     New York is deliberately present. It is never accepted (see
+     REJECT_REASONS.state) and the card marks it so — a partner who does not
+     know that is exactly the partner who needs to be told, and leaving the
+     row out means they find out through a rejection instead.
+
+     TWO DIFFERENT SOURCES MEET IN THIS CARD, and only one of them exists:
+
+       · Volume and conversion per state — REAL, computed from the affiliate's
+         own leads (`computeMetrics().byState`).
+       · Buyer budget per state — A CONNECTION POINT. `ADMIN_STATE_DEMAND`
+         below is a hardcoded stand-in for what the system will supply. A
+         state with no demand record renders its budget cell blank rather
+         than as "fully covered", because "we have no data" and "we have no
+         room" are different answers and only one of them is true.
+     ====================================================================== */
+  var US_STATES = [
+    ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'],
+    ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'],
+    ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'],
+    ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'],
+    ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'],
+    ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'],
+    ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'],
+    ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'],
+    ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'],
+    ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'],
+    ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'],
+    ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'],
+    ['WI', 'Wisconsin'], ['WY', 'Wyoming']
   ];
+  var STATE_NAME = {};
+  US_STATES.forEach(function (r) { STATE_NAME[r[0]] = r[1]; });
+
+  /* States we never accept, whatever the demand table says. */
+  var BLOCKED_STATES = { NY: 'New York is never accepted on any campaign.' };
+
+  /* HARDCODED STAND-IN FOR THE BUYER-DEMAND CONNECTION. In production this
+     comes off the buyer-demand table, per state, refreshed as budgets move.
+     A state absent from here has NO DATA, which the card renders as blank —
+     not as "covered". ADMIN-MAPPING §5a. */
+  var ADMIN_STATE_DEMAND = [
+    { st: 'CA', tz: 'PT', budget: 42000, fillRate: 0.38 },
+    { st: 'WA', tz: 'PT', budget: 18000, fillRate: 0.41 },
+    { st: 'AZ', tz: 'MT', budget: 16000, fillRate: 0.44 },
+    { st: 'NV', tz: 'PT', budget:  9000, fillRate: 0.36 },
+    { st: 'CO', tz: 'MT', budget: 12000, fillRate: 0.55 },
+    { st: 'NM', tz: 'MT', budget:  6000, fillRate: 0.33 },
+    { st: 'UT', tz: 'MT', budget:  7500, fillRate: 0.52 },
+    { st: 'TX', tz: 'CT', budget: 38000, fillRate: 0.91 },
+    { st: 'KS', tz: 'CT', budget:  5000, fillRate: 0.48 },
+    { st: 'NE', tz: 'CT', budget:  4500, fillRate: 0.51 },
+    { st: 'SD', tz: 'CT', budget:  3000, fillRate: 0.44 },
+    { st: 'MO', tz: 'CT', budget:  9000, fillRate: 0.86 },
+    { st: 'FL', tz: 'ET', budget: 36000, fillRate: 0.94 },
+    { st: 'OH', tz: 'ET', budget: 14000, fillRate: 0.89 },
+    { st: 'PA', tz: 'ET', budget: 13000, fillRate: 0.92 },
+    { st: 'NC', tz: 'ET', budget: 12000, fillRate: 0.88 },
+    { st: 'GA', tz: 'ET', budget: 11000, fillRate: 0.90 },
+    { st: 'MI', tz: 'ET', budget: 10000, fillRate: 0.87 },
+    { st: 'TN', tz: 'CT', budget:  8000, fillRate: 0.85 },
+    { st: 'IN', tz: 'ET', budget:  7000, fillRate: 0.83 }
+  ];
+
+  /* Name comes from the canonical list so the demand table cannot disagree
+     with it, and so a new state needs one entry, not two. */
+  var STATE_DEMAND = ADMIN_STATE_DEMAND.map(function (d) {
+    return { st: d.st, name: STATE_NAME[d.st] || d.st, tz: d.tz,
+             budget: d.budget, fillRate: d.fillRate };
+  });
 
   /* Blended CPL used to convert unused budget into a lead count. Rounded to
      the mid tier rather than computed per band — the point of the widget is
@@ -936,6 +993,41 @@
     });
     rows.forEach(function (r, i) { out[r.st].rank = i + 1; });
     return out;
+  }
+
+  /**
+   * All fifty states for one affiliate, each carrying both halves of the
+   * decision: what they send there, and whether we have room to buy it.
+   *
+   * Returns EVERY state, always — sorting and paging are the caller's job,
+   * and a card that filters rows out before the user sorts is a card that
+   * lies about what it contains.
+   *
+   * @param opts.byState  computeMetrics().byState for this affiliate
+   */
+  function stateRows(opts) {
+    opts = opts || {};
+    var by = opts.byState || {};
+    var room = budgetRoom();
+    return US_STATES.map(function (pair) {
+      var st = pair[0];
+      var b = by[st] || { raw: 0, mature: 0, ph: 0 };
+      var r = room[st] || null;
+      return {
+        st: st,
+        name: pair[1],
+        blocked: !!BLOCKED_STATES[st],
+        blockedNote: BLOCKED_STATES[st] || null,
+        raw: b.raw,
+        mature: b.mature,
+        ph: b.ph,
+        rate: b.mature ? b.ph / b.mature : null,
+        /* null = we have no demand record for this state, which is NOT the
+           same as having no room. The card renders it blank. */
+        room: r,
+        roomRank: r ? r.rank : null
+      };
+    });
   }
 
   /* Kept for the health pillar and the rejection copy: the states we most want
@@ -3294,6 +3386,11 @@
     STATE_DEMAND: STATE_DEMAND,
     budgetRoom: budgetRoom,
     BUDGET_BANDS: BUDGET_BANDS,
+    US_STATES: US_STATES,
+    STATE_NAME: STATE_NAME,
+    BLOCKED_STATES: BLOCKED_STATES,
+    ADMIN_STATE_DEMAND: ADMIN_STATE_DEMAND,
+    stateRows: stateRows,
     stateDemand: stateDemand,
     isCoverageState: isCoverageState,
     BLENDED_CPL: BLENDED_CPL,

@@ -620,6 +620,21 @@
       ' aria-label="' + esc(ariaLabel || 'What does this mean?') + '">i</button>';
   }
 
+  /**
+   * Same bubble, but the body may carry markup — a short list rather than a
+   * run-on sentence. Used by the health-score breakdown, where each pillar's
+   * inputs read as bullets.
+   *
+   * The markup is OURS, assembled in page code from escaped values; this is
+   * not a hole for user content. Anything variable going in must still pass
+   * through esc() first, exactly as the callers do.
+   */
+  function tipHtml(html, ariaLabel) {
+    if (!html) return '';
+    return '<button type="button" class="tip-btn is-rich" data-tip-html="' + esc(html) + '"' +
+      ' aria-label="' + esc(ariaLabel || 'What does this mean?') + '">i</button>';
+  }
+
   function wireTips() {
     if (document.getElementById('fz-tipbox')) return;
     var box = document.createElement('div');
@@ -628,7 +643,9 @@
     document.body.appendChild(box);
 
     function show(btn) {
-      box.textContent = btn.getAttribute('data-tip');
+      var rich = btn.getAttribute('data-tip-html');
+      if (rich) { box.innerHTML = rich; box.classList.add('is-rich'); }
+      else { box.textContent = btn.getAttribute('data-tip'); box.classList.remove('is-rich'); }
       box.style.display = 'block';
       var r = btn.getBoundingClientRect();
       var bw = box.offsetWidth, bh = box.offsetHeight;
@@ -840,6 +857,7 @@
     NOT_CONNECTED_TEXT: NOT_CONNECTED_TEXT,
     openModal: openModal,
     tip: tip,
+    tipHtml: tipHtml,
     infoButton: infoButton,
     viewToggle: viewToggle
   };

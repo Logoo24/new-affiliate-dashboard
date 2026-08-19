@@ -872,6 +872,11 @@ h2 .tip-btn, h3 .tip-btn { vertical-align: 3px; }
   color: var(--ink-2);
   pointer-events: none;
 }
+/* A bubble carrying a list needs room to be a list. */
+#fz-tipbox.is-rich { max-width: 380px; }
+#fz-tipbox.is-rich p:last-child { margin-bottom: 0; }
+#fz-tipbox.is-rich ul { color: var(--ink); }
+#fz-tipbox.is-rich strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* --------------------------------------------------------------------------
    Collapsible card (native <details>)
@@ -1189,7 +1194,7 @@ a.user-card:hover, button.user-card:hover {
    Meters (pillar sub-scores) — track is a lighter step of the fill's own ramp
    -------------------------------------------------------------------------- */
 
-.meter { margin-bottom: 20px; }
+.meter { margin-bottom: 22px; }
 .meter:last-child { margin-bottom: 0; }
 .meter-head {
   display: flex;
@@ -1203,9 +1208,11 @@ a.user-card:hover, button.user-card:hover {
 .meter-score { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
 /* Track and fill carry the SAME severity class — see the meter ramp note in
    the token block. */
+/* Thicker since the explanatory text moved into the info bubble — the bar is
+   now the only thing carrying the pillar visually, so it gets the weight. */
 .meter-track {
-  height: 10px;
-  border-radius: 5px;
+  height: 18px;
+  border-radius: 9px;
   background: var(--meter-track);
   overflow: hidden;
 }
@@ -1213,21 +1220,12 @@ a.user-card:hover, button.user-card:hover {
 .meter-track.is-serious  { background: var(--meter-track-serious); }
 .meter-track.is-critical { background: var(--meter-track-critical); }
 
-.meter-fill { height: 100%; border-radius: 4px; background: var(--meter-fill); }
+.meter-fill { height: 100%; border-radius: 9px; background: var(--meter-fill); }
 .meter-fill.is-warning  { background: var(--meter-fill-warning); }
 .meter-fill.is-serious  { background: var(--meter-fill-serious); }
 .meter-fill.is-critical { background: var(--meter-fill-critical); }
 
 .meter-track.is-parked { background: var(--surface-2); }
-.meter-parts {
-  margin-top: 8px;
-  font-size: 12.5px;
-  color: var(--ink-muted);
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.meter-parts span { font-variant-numeric: tabular-nums; }
 .meter.is-parked .meter-name { color: var(--ink-muted); }
 
 /* --------------------------------------------------------------------------

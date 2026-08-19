@@ -581,7 +581,33 @@ sitting still. Same filter set and same reasoning as the Health scorecard.
    conversion windows hour-of-day grain — same `bySegment`, same ph/mature rate, both blocked on
    A1. Its job is done better by the detail view below.
 
-### 5a-iii. The States card — three orderings, and no bar
+### 5a-iii. The States card — all fifty, ten to a page
+
+Revised Aug 19. **Every one of the fifty states is in the table, always.** It used to build its
+rows from the union of "states we hold demand data for" and "states this affiliate already sends
+from", which hid the single most actionable row on the card: somewhere they send nothing and we
+have room. New York is present too, marked **Not accepted** — a partner who does not know that is
+exactly the one who needs telling, and omitting the row means they learn it through a rejection.
+
+**Ten rows a page, and sorting runs across the whole set.** Sorting the ten rendered rows would
+reorder page 1 and read as if it had sorted all fifty. The card uses `FZTable.enhance()` in managed
+mode — full array in, `sortValue` accessor per column, sorted array back, re-paginate from page 1 —
+the same mechanism the lead table uses. **The three-way view toggle is gone**: it switched between
+orderings the sortable headers already provide, and it could disagree with the header arrows about
+what was sorted.
+
+**Two sources meet in this card and only one of them exists:**
+
+| Column | Source | Status |
+|---|---|---|
+| Your leads, Converted to Priority/Hot | the affiliate's own leads, `computeMetrics().byState` | **REAL** |
+| Buyer budget room | `ADMIN_STATE_DEMAND` in `data.js` | **NEEDS BUILDING** — hardcoded stand-in for the buyer-demand table |
+
+A state with **no demand record renders blank**, not "covered" — no data and no room are different
+answers and only one of them is true. `US_STATES` is the canonical fifty; `stateRows()` joins the
+two halves and always returns all of them.
+
+### The conversion column — why the bar is gone
 
 Revised Aug 18. One table, three sorts, chosen by a toggle, because a partner arrives with one of
 three questions and each wants a different order:

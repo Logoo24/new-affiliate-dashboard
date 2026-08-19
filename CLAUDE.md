@@ -245,10 +245,20 @@ about your average · below your average*, or *too few to tell* under the `CW_MI
 two cards (scaled-to-best on States, true-proportion on Investable assets), and neither was
 readable without a legend the card did not have.
 
-The **States** card is one table with three sorts behind a toggle — budget room (default), your
-volume, best converting — and rows are the **union** of states we want and states they send from,
-so "you send nothing here and we have room" stays visible. Budget renders as a band (`budgetRoom()`:
-High / Moderate / Some / Fully covered), never as a figure — the dollars are internal (§5a).
+The **States** card carries **all fifty states, ten to a page**, and sorting runs across the whole
+set via `FZTable.enhance()` managed mode — never the visible page. `US_STATES` is the canonical
+list and `stateRows()` always returns all of it, so "you send nothing here and we have room" stays
+visible. Budget renders as a band (`budgetRoom()`: High / Moderate / Some), never as a figure — the
+dollars are internal (§5a) — and a state with **no demand record renders blank**, not "covered".
+New York shows **Not accepted**.
+
+### 5c. The health breakdown is bars only; the detail is in the bubble
+
+Each pillar renders its name, an 18px bar and its score — nothing else. What feeds it lives in the
+info bubble as a **bulleted list** (`FZApp.tipHtml()`, the markup-capable variant of `tip()`).
+Printing every input under every bar turned the card into a wall and buried the one number a
+partner reads. Parked inputs are still named in the list — knowing a thing is coming beats it
+silently not being there.
 
 ### 6. Rejection reasons are one vocabulary, ours and theirs
 

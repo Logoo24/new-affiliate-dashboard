@@ -246,10 +246,51 @@
                   'here will cap the whole score.',
       consistency: 'Steady day-to-day flow, landing in the states we need most.'
     };
+    /* EVERYTHING EXPLANATORY LIVES IN THE BUBBLE.
+
+       The breakdown used to print each pillar's inputs as a run-on line of
+       "label: value · label: value" under every bar — four bars, up to eight
+       inputs each, and the one number a partner actually reads (the pillar
+       score) buried in the middle of it. The card was a wall.
+
+       Now the bar carries the score and nothing else, and the info bubble
+       carries what goes into it as a plain bulleted list. Same information,
+       one click away, in the order someone would ask for it: what this
+       measures, what it is worth, what feeds it. */
     function pillarTip(p) {
-      var weightPart = p.parked ? '' :
-        ' Counts for ' + Math.round((p.effectiveWeight || p.weight) * 100) + '% of your score right now.';
-      return A.tip((PILLAR_DESC[p.key] || '') + weightPart);
+      var lines = [PILLAR_DESC[p.key] || ''];
+
+      if (p.parked) {
+        lines.push('Not scored yet, so it is left out and the other pillars are ' +
+                   'rebalanced to 100% — a gap on our side never costs you points.');
+      } else {
+        lines.push('Worth ' + Math.round((p.effectiveWeight || p.weight) * 100) +
+                   '% of your score right now.');
+      }
+
+      /* The inputs, as a list. Parked ones are named too — knowing a thing is
+         coming is worth more than it silently not being there. */
+      var parts = (p.parts || []).filter(function (x) { return x.display !== undefined; });
+      var bullets = parts.map(function (x) {
+        return '<li style="margin:3px 0">' + A.esc(x.label) +
+          (x.parked
+            ? ' <span style="color:var(--ink-muted)">\u2014 not yet reported</span>'
+            : ' <strong>' + A.esc(x.display) + '</strong>') +
+          '</li>';
+      }).join('');
+
+      var html = lines.map(function (t) { return '<p style="margin:0 0 8px">' + A.esc(t) + '</p>'; }).join('') +
+        (bullets
+          ? '<p style="margin:0 0 4px;font-weight:600">What goes into it</p>' +
+            '<ul style="margin:0;padding-left:18px">' + bullets + '</ul>'
+          : '');
+
+      if (p.key === 'conversion') {
+        html += '<p style="margin:8px 0 0;color:var(--ink-2)">Rates are scored against ' +
+          'campaigns of the same class, so an aged campaign is never judged against fresh ' +
+          'numbers.</p>';
+      }
+      return A.tipHtml(html, p.label + " — what goes into it");
     }
 
     var html = result.pillars.map(function (p) {
@@ -263,19 +304,6 @@
           '<div class="meter-track is-parked"></div>' +
           '</div>';
       }
-      var parts = p.parts.map(function (part) {
-        if (part.display === undefined) return null;   /* internal-only inputs stay unnamed */
-        return '<span>' + A.esc(part.label) + ': <strong style="color:var(--ink-2)">' +
-          A.esc(part.display) + '</strong></span>';
-      }).filter(Boolean).join('');
-      /* The bridge between a raw rate and its score: an aged campaign's 0.3%
-         can be mid-pack FOR ITS CLASS. Without this line the two numbers
-         read as a contradiction. */
-      if (p.key === 'conversion') {
-        parts += '<span style="color:var(--ink-muted)">Rates are scored against campaigns of ' +
-          'the same class — see Score by campaign below.</span>';
-      }
-
       return '<div class="meter">' +
         '<div class="meter-head">' +
           '<span class="meter-name">' + A.esc(p.label) + '</span>' + pillarTip(p) +
@@ -287,7 +315,6 @@
         '<div class="meter-track ' + H.meterClass(p.score) + '">' +
           '<div class="meter-fill ' + H.meterClass(p.score) + '" style="width:' + Math.round(p.score) + '%"></div>' +
         '</div>' +
-        '<div class="meter-parts">' + parts + '</div>' +
         '</div>';
     }).join('');
 
