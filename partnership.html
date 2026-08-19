@@ -59,8 +59,8 @@
         <a class="card gauge-card" id="gauge-link" href="health.html">
           <div class="card-head">
             <div>
-              <h2>Affiliate health score</h2>
-              <p class="sub">Every campaign on this account, weighted by volume.</p>
+              <h2>Affiliate health score<span id="hs-tip-host"></span></h2>
+              <p class="sub">How healthy is your traffic?</p>
             </div>
           </div>
           <div class="card-body">
@@ -72,7 +72,7 @@
           <div class="card-head">
             <div>
               <h2>Volume</h2>
-              <p class="sub">Trailing four weeks.</p>
+              <p class="sub">How much are you sending?</p>
             </div>
           </div>
           <div class="card-body">
@@ -185,6 +185,10 @@
   /* Computed once and shared with the Active campaigns table below, so the
      account dial and the per-campaign column are the same run of the engine —
      the itemised scores always add up to the dial. */
+  document.getElementById('hs-tip-host').innerHTML =
+    A.tip('One 0–100 read on how well your traffic is performing, across every campaign on ' +
+          'this account and weighted by how much volume each one sends.');
+
   var health = H.score({ partnerId: state.partnerId });
   (function () {
     var hs = health;
@@ -211,7 +215,9 @@
   /* ---- volume ------------------------------------------------------------- */
   (function () {
     document.getElementById('vol-weekly').textContent = A.fmtInt(D.avgWeeklyVolume(state.partnerId));
-    document.getElementById('vol-sub').textContent = 'leads per week, all campaigns';
+    document.getElementById('vol-sub').innerHTML = 'leads per week, all campaigns' +
+      A.tip('Averaged over the trailing four weeks, so a single quiet or heavy week does not ' +
+            'swing it.');
 
     var coh = D.cohort({ partnerId: state.partnerId, rateBasis: state.rateBasis });
     document.getElementById('vol-accepted').textContent = A.fmtInt(coh.metrics.paid);
@@ -221,7 +227,7 @@
 
   /* ---- billing ------------------------------------------------------------ */
   (function () {
-    document.getElementById('billing-sub').textContent = 'Terms and who to ask.';
+    document.getElementById('billing-sub').textContent = 'When do you get paid, and who do you ask?';
 
     /* Card-level click-through to Compensation. Inner links (the billing
        mailtos) keep their own behaviour and must not also fire this. */

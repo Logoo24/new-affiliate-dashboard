@@ -449,9 +449,11 @@ and the re-validation command are documented at the top of `assets/css/dashboard
 Charts resolve their colours from CSS variables **at render time**, not at mount, so a light/dark
 flip repaints with that theme's own validated step.
 
-> **The logo is a placeholder.** `BRAND_MARK` in `assets/js/app.js` is a geometric stand-in drawn
-> to match the real mark's colours and proportions. **Drop in the actual SVG asset before this
-> goes in front of a partner.**
+> **The logo is the real asset** — `assets/img/financialize-mark.png`, the reverse (light-on-dark)
+> cut, because the nav rail is navy in both themes. It is 644×839 and is sized on height with
+> `width:auto`; giving it both dimensions squashes it. If a vector version turns up, swapping it in
+> is one line in `BRAND_MARK`. The whole brand block links to the Partnership summary, and the
+> wordmark now reads **Affiliate Portal**.
 
 ---
 

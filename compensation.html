@@ -47,7 +47,7 @@
           <div class="card-head">
             <div>
               <h2>Billing details</h2>
-              <p class="sub">Terms and who to ask.</p>
+              <p class="sub">When do you get paid, and who do you ask?</p>
             </div>
           </div>
           <div class="card-body">
@@ -146,7 +146,7 @@
 
     document.getElementById('proj-tip-host').innerHTML = A.tip(ESTIMATE_TIP);
     document.getElementById('earned-sub').textContent =
-      'Estimated, on the basis your invoice uses. Final on your monthly statement.';
+      'What are you on track to be paid?';
     document.getElementById('earned-label').innerHTML =
       'Estimated total' + A.tip(ESTIMATE_TIP);
     document.getElementById('earned-total').textContent =
@@ -287,7 +287,7 @@
     var feedLive = rows.some(function (r) { return r.returnedAt || r.reason; });
 
     document.getElementById('unfire-sub').innerHTML =
-      'Leads removed by audit in this window — you are not billed for these' +
+      'Which leads came off your bill?' +
       A.tip('We audit accepted leads weekly. A lead that should not have been accepted is unfired: the charge is removed from your statement (CPL) or the share reversed (revenue share). This list is the line-by-line record, so a smaller statement never reads as us shorting you.');
 
     var head = '<thead><tr><th>Lead ID</th><th>Received</th><th>Campaign</th>' +

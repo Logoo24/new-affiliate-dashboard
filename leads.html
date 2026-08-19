@@ -169,13 +169,15 @@
       '</tbody>';
 
     var immature = rows.filter(function (r) { return !D.isMature(r); }).length;
+    /* Count and window are the facts; the column total and the maturity
+       caveat are explanation and belong in the tip. */
     document.getElementById('table-sub').innerHTML =
       A.fmtInt(rows.length) + ' leads · ' + A.esc(A.rangeSummary(state.range)) +
-      ' · ' + tableCols.length + ' columns available to you' +
-      (immature
-        ? ' · <strong>' + A.fmtInt(immature) + '</strong> still cooking, so a blank sold ' +
-          'column on a recent lead is expected'
-        : '');
+      A.tip(tableCols.length + ' columns are available to you on this account.' +
+        (immature
+          ? ' ' + A.fmtInt(immature) + ' of these leads are still inside their sales cycle, so ' +
+            'a blank sold column on a recent lead is expected rather than a miss.'
+          : ''));
 
     renderPager(totalPages);
     wireTable();

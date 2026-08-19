@@ -50,8 +50,8 @@
       <section class="card" id="add-card" style="display:none">
         <div class="card-head">
           <div>
-            <h2>Add a user</h2>
-            <p class="sub">They receive an invitation email and set their own password.</p>
+            <h2>Add a user<span id="adduser-tip-host"></span></h2>
+            <p class="sub">Who else needs access?</p>
           </div>
         </div>
         <div class="card-body">
@@ -218,6 +218,10 @@
       });
     });
   }
+
+  document.getElementById('adduser-tip-host').innerHTML =
+    A.tip('They receive an invitation email and set their own password. You can change or '
+          + 'remove their access at any time.');
 
   /* ---- add user ---------------------------------------------------------- */
   document.getElementById('add-user').addEventListener('click', function () {

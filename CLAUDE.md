@@ -275,6 +275,22 @@ retain or analyse their creative beyond the approval. ADMIN-MAPPING §8.
 The mailto route to compliance was removed from both screens rather than kept alongside — a second
 route means an inbox that bypasses the approval record.
 
+### 5e. Card copy: a header, one short subtitle, and nothing else
+
+Every card is **a clear header plus one simple subtitle**, usually phrased as the question that
+card answers ("How much are you sending?", "Which leads came off your bill?"). Anything else —
+methodology, caveats, definitions, date-window notes — goes in the **info bubble**, which is where
+every other explanation on this dashboard already lives. Not every card needs a subtitle; simple
+beats thorough.
+
+**A tile's sub-line carries DATA, never explanation.** "Everything you posted in this window"
+restated its own label as a sentence and pushed the delta further from the figure it belonged to.
+Where a tile needs defining, the definition is a `tip` on its label (`tiles[].tip`).
+
+The logo lives in `assets/img/financialize-mark.png` — the real reverse-cut asset, 644×839. It is
+**sized on height with `width:auto`**: setting both dimensions squashes it. The whole brand block
+is an `<a>` to the Partnership summary.
+
 ### 6. Rejection reasons are one vocabulary, ours and theirs
 
 `REJECT_REASONS` in `data.js` is the affiliate-facing catalogue **and** the proposed internal
@@ -356,8 +372,8 @@ and disarms the gate.
 - **Spend & volume targets have no admin screen.** `TARGETS` in `data.js` is hardcoded. A null
   target means *not set*, must not render, and must not count as missed. Severity is judged against
   expected-to-date pace, never against the monthly total.
-- **The logo is a placeholder.** `BRAND_MARK` in `app.js` is a geometric stand-in. Drop in the real
-  SVG before this goes in front of a partner.
+- **The logo is the real asset** — `assets/img/financialize-mark.png` (reverse cut, 644×839),
+  sized on height with `width:auto`. See §5e.
 - **Google Drive export is mocked** — nothing leaves the browser. The CSV path is real.
 - **Blocking data dependencies** (Zakira): `sold_type` as distinct Priority/Hot/Auction/Marketplace
   labels, and `subid` / `click_id` / `utm_campaign` / `utm_medium`.

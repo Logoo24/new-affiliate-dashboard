@@ -43,7 +43,7 @@
       <section class="card" id="targets-card" style="display:none">
         <div class="card-head">
           <div>
-            <h2>This week's target</h2>
+            <h2>This week's target<span id="targets-tip-host"></span></h2>
             <p class="sub" id="targets-sub"></p>
           </div>
         </div>
@@ -55,7 +55,7 @@
           <div class="card-head">
             <div>
               <h2>Leads by day</h2>
-              <p class="sub" id="volume-chart-sub">How much did you send each day, and how much was accepted?</p>
+              <p class="sub" id="volume-chart-sub">How much did you send each day?</p>
             </div>
             <div class="spacer"></div>
             <div id="toggle-volume"></div>
@@ -269,7 +269,7 @@
              (isRev ? ' matured leads sent' : ' matured paid leads')) +
         stat('Time to a Priority/Hot sale',
              phCycle == null ? '—' : (phCycle < 1 ? 'Same day' : phCycle + (phCycle === 1 ? ' day' : ' days')),
-             'median, received → sold') +
+             '') +
         (phAvg != null
           ? stat('Average Priority/Hot price', A.fmtMoney0(phAvg),
                  'against ' + A.fmtMoney0(sm.avgSalePrice) + ' across all tiers')
@@ -285,8 +285,14 @@
   /* Money tiles (Your earnings, Effective cost per lead) moved to the
      Compensation page — Performance answers "how is my traffic doing",
      Compensation answers "what will the check be". */
+  /* A TILE'S SUB-LINE CARRIES DATA, NOT EXPLANATION. "Everything you posted
+     in this window" restated the label as a sentence and pushed the delta —
+     the only other number on the tile — further from the figure it belongs
+     to. Where a tile genuinely needs defining, the definition goes in a tip
+     on its label, which is where every other explanation on this dashboard
+     already lives. */
   var tiles = [
-    { label: 'Leads submitted (volume)', value: A.fmtInt(m.raw), sub: 'Everything you posted in this window',
+    { label: 'Leads submitted', value: A.fmtInt(m.raw),
       delta: A.deltaHtml(m.raw, pm.raw, {}) },
     /* The rejected-lead promise is PER COMP MODEL, so the sub-line follows
        the rate basis: pure rev share may hear "still earn if they sell",
@@ -305,15 +311,22 @@
        on this same page, so it scrolls rather than navigates. */
     { label: 'Acceptance rate', value: A.fmtPct(m.acceptanceRate, 1),
       cls: 'tile-link', scrollTo: 'reject-card',
-      sub: (state.rateBasis === 'all' ? 'Quality signal'
-         : state.rateBasis === 'mixed' ? 'Drives your CPL invoices'
-         : 'Drives your invoice') + ' · see why →',
+      tip: state.rateBasis === 'all'
+             ? 'The share of what you sent that we accepted. A quality signal rather than a ' +
+               'billing one — on revenue share you are paid on any sale.'
+           : state.rateBasis === 'mixed'
+             ? 'The share of what you sent that we accepted. It drives your CPL invoices; your ' +
+               'revenue-share campaigns are paid on sales instead.'
+             : 'The share of what you sent that we accepted. This is what your invoice is ' +
+               'built from.',
+      sub: 'See why →',
       delta: A.deltaHtml(m.acceptanceRate, pm.acceptanceRate, {}) },
     { label: 'Median sales cycle',
       value: sm.medianCycle == null ? '—'
         : (sm.medianCycle < 1 ? 'Same day'
           : sm.medianCycle + (sm.medianCycle === 1 ? ' day' : ' days')),
-      sub: 'Received → sold',
+      tip: 'The middle value between a lead arriving and it selling. Half your sales land ' +
+           'faster than this, half slower.',
       delta: A.deltaHtml(sm.medianCycle, psm.medianCycle, { lowerIsBetter: true }) }
   ];
 
@@ -331,9 +344,10 @@
       ? ' role="button" tabindex="0" data-scroll-to="' + t.scrollTo + '"'
       : '';
     return '<div class="tile ' + (t.cls || '') + '"' + interactive + '>' +
-      '<div class="tile-label">' + t.label + '</div>' +
+      '<div class="tile-label">' + t.label + (t.tip ? A.tip(t.tip) : '') + '</div>' +
       '<div class="tile-value">' + t.value + '</div>' +
-      '<div class="tile-sub">' + t.sub + '</div>' + (t.delta || '') + '</div>';
+      (t.sub ? '<div class="tile-sub">' + t.sub + '</div>' : '') +
+      (t.delta || '') + '</div>';
   }).join('');
 
   document.querySelectorAll('#tiles [data-scroll-to]').forEach(function (el) {
@@ -406,9 +420,15 @@
     if (!blocks.length) return;
 
     document.getElementById('targets-card').style.display = '';
-    document.getElementById('targets-sub').textContent =
-      weeklyProgress.weekLabel + ' · day ' + weeklyProgress.daysElapsed + ' of 7' +
-      (weeklyProgress.targetCpl != null ? ' · ' + A.fmtMoney(weeklyProgress.targetCpl) + ' target CPL' : '');
+    /* The date range and the target CPL are reference, not the answer. The
+       answer is "am I on pace", which the bars below give. */
+    document.getElementById('targets-sub').textContent = 'Are you on pace this week?';
+    document.getElementById('targets-tip-host').innerHTML =
+      A.tip(weeklyProgress.weekLabel + ', day ' + weeklyProgress.daysElapsed + ' of 7.' +
+            (weeklyProgress.targetCpl != null
+              ? ' Your target CPL is ' + A.fmtMoney(weeklyProgress.targetCpl) + '.' : '') +
+            ' Pace is measured against where you should be today, not against the weekly ' +
+            'total — so a slow start shows up early enough to fix.');
     document.getElementById('targets-body').innerHTML = blocks.join('');
   })();
 
@@ -456,9 +476,13 @@
     });
     if (!sawTarget) cplTargetValues = null;
   }
+  /* The target-pace caveat is methodology, so it rides in the chart's own
+     legend tip rather than replacing the card's one-line question. */
   if (cplTargetValues) {
-    document.getElementById('volume-chart-sub').textContent =
-      'Accepted leads against your weekly target — varies by day, 0 on Sunday unless set otherwise.';
+    document.getElementById('volume-chart-sub').innerHTML =
+      'How much did you send each day?' +
+      A.tip('The dashed line is your weekly target broken into a daily pace. It varies by day ' +
+            'and sits at 0 on Sunday unless your target says otherwise.');
   }
   C.mount(volHost, 'columns', {
     days: days, series: volumeSeries,

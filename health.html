@@ -37,7 +37,7 @@
           <div class="card-head">
             <div>
               <h2>Health score breakdown</h2>
-              <p class="sub">A low score should point straight at its cause.</p>
+              <p class="sub">What is driving your score?</p>
             </div>
           </div>
           <div class="card-body" id="pillars"></div>
@@ -46,8 +46,8 @@
         <section class="card">
           <div class="card-head">
             <div>
-              <h2>90-day trend</h2>
-              <p class="sub">Each point is a full 30-day window ending that week.</p>
+              <h2>90-day trend<span id="trend-tip-host"></span></h2>
+              <p class="sub">How has your score moved?</p>
             </div>
             <div class="spacer"></div>
             <div id="toggle-trend"></div>
@@ -63,7 +63,7 @@
         <div class="card-head">
           <div>
             <h2>Score by campaign<span id="camp-tip-host"></span></h2>
-            <p class="sub">Each campaign is measured against its own class — aged, fresh and life are never compared to each other.</p>
+            <p class="sub">How does each campaign score?</p>
           </div>
         </div>
         <div class="table-wrap">
@@ -376,6 +376,10 @@
   })();
 
   /* ---- trend ----------------------------------------------------------- */
+  document.getElementById('trend-tip-host').innerHTML =
+    A.tip('Each point is a full 30-day window ending that week, so the line moves gradually — ' +
+          'one strong or weak day cannot spike it.');
+
   var trendHost = document.getElementById('chart-trend');
   C.mount(trendHost, 'line', {
     points: H.trend({ partnerId: state.partnerId, campaignId: state.campaignId, subid: state.subid }),

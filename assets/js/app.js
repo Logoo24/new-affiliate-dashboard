@@ -13,16 +13,15 @@
 
   var D = global.FZData;
 
-  /* PLACEHOLDER MARK — a geometric stand-in for the Financialize logo, drawn
-     to match its colours and proportions so the shell reads on-brand. Replace
-     with the real SVG asset before this goes in front of a partner; do not
-     ship this as the logo. */
+  /* THE FINANCIALIZE MARK — the real asset, reverse (light-on-dark) cut,
+     because the nav rail is navy in both themes.
+
+     644x839, so it is TALLER THAN IT IS WIDE. Sized on height in CSS with
+     width:auto; do not give it both dimensions — an earlier hand-traced SVG
+     was forced into a near-square box and came out stretched. */
   var BRAND_MARK =
-    '<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false">' +
-      '<rect x="4" y="6" width="3.6" height="20" rx="1.4" fill="#FFFFFF"/>' +
-      '<path d="M6 6 h13.5 a3.4 3.4 0 0 1 0 6.8 H6 z" fill="#F0604A"/>' +
-      '<path d="M6 15.6 h9 a3.2 3.2 0 0 1 0 6.4 H6 z" fill="#FFFFFF"/>' +
-    '</svg>';
+    '<img src="assets/img/financialize-mark.png" alt="" aria-hidden="true" ' +
+      'width="644" height="839" decoding="async">';
 
   /* Icons are plain text glyphs, chosen to READ as the thing they sit next
      to: home, trend, rows, health, target, lookup, money, gear. Monochrome
@@ -160,13 +159,16 @@
 
     if (side) {
       side.innerHTML =
-        '<div class="brand">' +
+        /* The whole block is the home link — mark and wordmark together.
+           A logo that is decoration while only the nav navigates is a dead
+           target people click anyway. */
+        '<a class="brand" href="' + linkTo('partnership.html', state) + '">' +
           '<span class="brand-logo">' + BRAND_MARK + '</span>' +
           '<span>' +
             '<span class="brand-mark">Financialize</span>' +
-            '<div class="brand-sub">Partner Portal</div>' +
+            '<div class="brand-sub">Affiliate Portal</div>' +
           '</span>' +
-        '</div>' +
+        '</a>' +
         '<nav class="nav">' +
           '<div class="nav-label">Reporting</div>' +
           NAV.map(function (n) {

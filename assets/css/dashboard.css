@@ -235,15 +235,30 @@ h3 { font-size: 15px; }
   height: 100vh;
 }
 
+/* The brand block is an <a> to the Partnership summary. It must not pick up
+   link styling — it is a logo, not a link in prose. */
 .brand {
   padding: 18px 18px 16px;
   border-bottom: 1px solid var(--nav-border);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
+  text-decoration: none;
+  color: inherit;
 }
-.brand-logo { flex: 0 0 26px; }
-.brand-logo svg { display: block; width: 26px; height: 26px; }
+.brand:hover .brand-mark { color: #fff; }
+.brand:focus-visible {
+  outline: 2px solid var(--brand-coral);
+  outline-offset: -2px;
+}
+/* The mark is 644x839 — taller than wide. Height is the fixed dimension and
+   width follows from the aspect ratio; setting both squashes it. */
+.brand-logo { flex: 0 0 auto; display: flex; align-items: center; }
+.brand-logo img {
+  display: block;
+  height: 30px;
+  width: auto;
+}
 .brand-mark {
   font-size: 17px;
   font-weight: 550;
@@ -1229,6 +1244,19 @@ a.user-card:hover, button.user-card:hover {
 .meter-fill.is-critical { background: var(--meter-fill-critical); }
 
 .meter-track.is-parked { background: var(--surface-2); }
+/* Still used by the weekly-target card, which shows three short facts under
+   its bar. The health breakdown dropped it when its inputs moved into the
+   info bubble — removing the rule as well was a regression: the three spans
+   lost their gap and ran together as one string. */
+.meter-parts {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.meter-parts span { font-variant-numeric: tabular-nums; }
 .meter.is-parked .meter-name { color: var(--ink-muted); }
 
 /* --------------------------------------------------------------------------

@@ -20,8 +20,8 @@
       <section class="card">
         <div class="card-head">
           <div>
-            <h2>Your campaigns</h2>
-            <p class="sub">Each campaign has its own setup — open one to see its status, tracking link and pixel.</p>
+            <h2>Your campaigns<span id="camps-tip-host"></span></h2>
+            <p class="sub">Where is each campaign up to?</p>
           </div>
         </div>
         <div class="card-body" id="campaign-list"></div>
@@ -36,7 +36,7 @@
         <div class="card-head">
           <div>
             <h2>Helpful documents</h2>
-            <p class="sub">Everything you need to integrate, qualify and get paid.</p>
+            <p class="sub">Everything you need to get set up and get paid.</p>
           </div>
         </div>
         <div class="card-body">
@@ -77,6 +77,10 @@
     title: 'Setup & docs',
     subtitle: 'Campaign setup, documentation and who to ask.'
   });
+
+  document.getElementById('camps-tip-host').innerHTML =
+    A.tip('Each campaign is set up on its own — open one to see its status, tracking link '
+          + 'and pixel.');
 
   /* ---- campaign list -----------------------------------------------------
      Every campaign — in-setup first, then live — linking into its own
