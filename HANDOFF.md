@@ -546,6 +546,87 @@ plus a pointer to Targeting. It reads as one question again: how did I do in thi
 
 ---
 
+## AUDIT — can this score actually tell a good campaign from a bad one?
+
+Run Aug 19 against the loaded book: every campaign scored through the live engine, then compared
+with its own actual matured Priority/Hot conversion. **The honest headline is that the book is far
+too thin to validate the score, and what evidence there is does not yet support it.**
+
+### What the numbers say
+
+| Check | Result |
+|---|---|
+| Campaigns with enough matured volume to score non-provisionally | **4 of 23** |
+| Accounts with enough matured volume | **2 of 8** |
+| Spearman(campaign score, actual P/H conversion), all 12 campaigns with any matured leads | 0.64 |
+| …restricted to the 6 with ≥25 matured | 0.37 |
+| …restricted to the 4 with ≥100 matured | **−0.20** |
+| Spearman(campaign score, matured lead count) | **−0.44** |
+| Mean score, campaigns with **zero** matured leads (n=11) | **59.3** (range 51–73) |
+| Mean score, campaigns with matured leads (n=12) | **53.2** |
+
+At n=4 and n=6 those correlations are not measurements, and nobody should read −0.20 as "the score
+is inverted". The defensible statement is narrower and still serious: **the relationship between
+the score and reality gets weaker the more evidence we have, and the strongest correlation comes
+from the campaigns with the least data.**
+
+### The mechanism — absence of evidence is being scored as evidence of quality
+
+The highest-scoring campaign in the entire book is **ObtilabX Life Leads: one lead, zero matured,
+score 73.** Its inputs:
+
+| Input | Score | Earned from |
+|---|---|---|
+| Contact-validation rejects | **100** | zero rejects out of one lead |
+| Duplicate rate | **100** | zero duplicates out of one lead |
+| Acceptance rate (banded) | **95** | one lead accepted |
+| Share of sales in the top tiers | **94** | zero completed sales |
+| Median sales cycle | **88** | zero completed sales |
+
+Every "bad thing did not happen" metric sits at the 100th percentile, because a rate of 0/1 is
+arithmetically identical to a rate of 0/10,000. Those inputs are 35.7% of the quality pillar.
+A campaign that has demonstrated nothing scores better than one that has demonstrated something
+imperfect.
+
+**The score's resting state is "above average."** That is backwards for a tool whose job is to
+find weak traffic.
+
+### Three other things the audit surfaced
+
+1. **The class pools are too shallow to calibrate against.** `aged` contains **one** campaign, so
+   Heritage's aged campaign is percentile-ranked against itself and lands at ~50 by construction.
+   `life` has 4, `fresh` has 18. The "measured against our whole partner book" fairness claim on
+   the scorecard is largely not operating yet.
+2. **15% of the designed weight is parked** — the entire Compliance pillar, which also disarms the
+   critical-failure gate — plus bad-contact (20.4% of quality) and hour-of-day timing.
+3. **Provisional fires correctly on all 19 thin campaigns, but it is a caption, not a brake.**
+   Seven of them still render 60+ (Healthy or better), three of those on zero matured leads.
+   The number is what gets read and quoted.
+
+### The one encouraging signal
+
+On the **only two accounts with real evidence**, the score separates them in the right direction:
+OptiLabX scores 54 against 26.8% actual P/H conversion, Heritage 47 against 0.3%. The engine's
+shape is not obviously wrong — it is starved, not broken.
+
+### What would fix it, in order
+
+1. **Do not score what has not been demonstrated.** Park a metric below a minimum denominator
+   rather than shrinking it to the class median or letting 0/1 read as perfect. Sample-size guards,
+   not just null guards — `topTier` scored 94 off a single sale because the value was non-null.
+2. **Suppress the campaign score entirely below a floor** (100 matured is already the Provisional
+   line) and render "Not enough data yet" in place of the number, the same treatment the Targeting
+   cards use for thin buckets. A caption beside a confident 73 does not stop the 73 being read.
+3. **Deepen the pools or say they are uncalibrated.** A one-campaign class pool is self-reference,
+   not a benchmark.
+4. **Fix A12 first.** Heritage's aged campaign is 36,016 of the book's matured leads, so it
+   dominates every pool, and its timing components currently score our import schedule.
+
+None of this is implemented — it is a change to how partners are judged and it needs Logan's and
+Michael's sign-off before it moves.
+
+---
+
 ## Top conversion windows — derived per affiliate, NEEDS AN ADMIN OVERRIDE
 
 Changed Aug 18. The Targeting card used to show every affiliate the same two hours and the same
