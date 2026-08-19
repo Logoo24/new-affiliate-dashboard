@@ -248,6 +248,29 @@ Implementation notes for the dev team:
 
 ---
 
+## 1b. Who to ask, by subject — the team contact list
+
+Added Aug 19. `TEAM_CONTACTS` in `data.js`, rendered by the **Have questions?** card on Setup &
+docs. One registry, so the same person is described the same way everywhere — the account manager,
+the compliance contact and the billing contacts were each defined separately before this and could
+drift apart.
+
+| Subject | Person | Email on file? |
+|---|---|---|
+| Anything about your account or campaigns | Logan Randall | Yes |
+| Operations and the call center | Courtney Barrett | **No — NEEDS ADDING** |
+| Billing, invoices and payment status | Cassie Jensen | Yes |
+| Creatives and compliance review | Jefanie Genilla | Yes |
+| Agent and location distribution | Marc Heberling | **No — NEEDS ADDING** |
+
+**The subject leads, not the job title.** A partner with a call-centre question does not know to
+look for "Operations"; they know what they want to ask. The name is the answer, not the question.
+
+**An entry with no address routes to the account manager and says so** — `email: null` renders
+*"via Logan Randall"* with a hover explaining he routes it the same day. **No address is invented.**
+A wrong mailto is worse than one extra hop, because the partner never learns the mail went nowhere.
+Fill in the two missing addresses and those cards become direct links with no other change.
+
 ## 2c. Priority & Hot by month — the long view
 
 Added Aug 19, from the team's existing month-over-month workbook so the two reconcile.

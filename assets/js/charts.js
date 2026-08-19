@@ -548,7 +548,13 @@
 
     host.innerHTML =
       '<div class="gauge-wrap">' +
-      '<svg width="' + W + '" height="' + HGT + '" viewBox="0 0 ' + W + ' ' + HGT + '" role="img" ' +
+      /* WIDTH IS FLUID, the viewBox does the scaling. The dial used to render
+         at a fixed 224px whatever it was dropped into, which left it looking
+         shrunken in the Partnership summary card — a small drawing floating
+         in a lot of empty card. It now fills the card up to a sensible cap,
+         so the same component reads right at both sizes. */
+      '<svg viewBox="0 0 ' + W + ' ' + HGT + '" role="img" ' +
+        'style="width:100%;max-width:' + W + 'px;height:auto" ' +
         'aria-label="Health score ' + cfg.score + ' out of 100, ' + cfg.tier.label + '">' + svg + '</svg>' +
       '<div style="display:flex;align-items:baseline;gap:10px;margin-top:10px">' +
         '<span class="gauge-value">' + cfg.score + '</span>' +

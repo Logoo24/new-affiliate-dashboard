@@ -1080,8 +1080,8 @@ body.is-col-resizing { cursor: col-resize; user-select: none; }
    obeys the same rules as the linear meters. */
 .gauge-card { display: block; text-decoration: none; color: inherit; }
 .gauge-card:hover { background: var(--surface-2); }
-.gauge-wrap { display: flex; flex-direction: column; align-items: center; padding: 4px 0 2px; }
-.gauge-wrap svg { display: block; }
+.gauge-wrap { display: flex; flex-direction: column; align-items: center; padding: 6px 0 2px; }
+.gauge-wrap svg { display: block; margin: 0 auto; }
 .gauge-value {
   font-size: 34px; font-weight: 650; letter-spacing: -0.02em;
   line-height: 1;
@@ -1268,6 +1268,25 @@ a.user-card:hover, button.user-card:hover {
 }
 .feedback-line a { color: var(--ink-2); }
 .feedback-line a:hover { color: var(--brand-coral); }
+
+/* Who to ask, by subject. The subject leads because that is what a partner
+   arrives with; the name is the answer, not the question. */
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.team-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: var(--surface-1);
+}
+.team-card.is-primary { border-color: var(--brand-coral); }
+.team-what { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 7px; }
+.team-who { font-size: 14px; color: var(--ink); }
+.team-role { font-size: 12px; color: var(--ink-muted); margin-top: 1px; }
+.team-mail { font-size: 12.5px; margin-top: 6px; word-break: break-word; }
 
 /* --------------------------------------------------------------------------
    Notices

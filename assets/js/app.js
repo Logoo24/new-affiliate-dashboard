@@ -845,6 +845,31 @@
     return { refresh: render };
   }
 
+  /**
+   * The team, by subject. Shared so the Setup page and anywhere else that
+   * needs it stay identical.
+   *
+   * An entry with no email on file routes to the account manager rather than
+   * printing an address we made up — a wrong mailto is worse than one more
+   * hop, because the partner never learns the mail went nowhere.
+   */
+  function teamContacts() {
+    var am = D.ACCOUNT_MANAGER;
+    return '<div class="team-grid">' + D.TEAM_CONTACTS.map(function (c) {
+      var mail = c.email
+        ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>'
+        : '<span style="color:var(--ink-muted)">via ' + esc(am.name) + '</span>' +
+          tip('We do not have a direct address on file for ' + c.name + ' yet. Send it to ' +
+              am.name + ' and it gets there \u2014 he routes it the same day.');
+      return '<div class="team-card' + (c.primary ? ' is-primary' : '') + '">' +
+        '<div class="team-what">' + esc(c.what) + '</div>' +
+        '<div class="team-who">' + esc(c.name) + '</div>' +
+        '<div class="team-role">' + esc(c.title) + '</div>' +
+        '<div class="team-mail">' + mail + '</div>' +
+        '</div>';
+    }).join('') + '</div>';
+  }
+
   function infoButton(host, opts) {
     if (!host) return;
     var b = document.createElement('button');
@@ -976,6 +1001,7 @@
     params: params,
     shell: shell,
     accountManagerBlock: accountManagerBlock,
+    teamContacts: teamContacts,
     filterBar: filterBar,
     linkTo: linkTo,
     isoDate: isoDate,

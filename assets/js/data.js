@@ -428,6 +428,32 @@
        partner straight into a DM — see ADMIN-MAPPING.md. */
     chatUrl: 'https://chat.google.com/'
   };
+  /* WHO TO ASK, BY SUBJECT. One registry so the same person is described the
+     same way everywhere — the account manager, the compliance contact and the
+     billing contacts were each defined separately before this and could drift.
+
+     `what` is the subject line a partner would recognise, not an internal job
+     title: someone with a call-centre question does not know to look for
+     "Operations". Ordered by how often a partner needs them, account manager
+     first.
+
+     Emails other than the ones already published in this file are NOT
+     invented — where an address is not on file the entry carries `email:
+     null` and the UI routes to the account manager instead of printing a
+     guess. ADMIN-MAPPING §1b. */
+  var TEAM_CONTACTS = [
+    { key: 'am',        name: 'Logan Randall',  what: 'Anything about your account or campaigns',
+      title: 'Affiliate Performance Manager', email: 'logan@financialize.com', primary: true },
+    { key: 'ops',       name: 'Courtney Barrett', what: 'Operations and the call center',
+      title: 'Operations', email: null },
+    { key: 'billing',   name: 'Cassie Jensen',  what: 'Billing, invoices and payment status',
+      title: 'AP / Controller', email: 'accounting@financialize.com' },
+    { key: 'creatives', name: 'Jefanie Genilla', what: 'Creatives and compliance review',
+      title: 'Compliance review', email: 'jgenilla@financialize.com' },
+    { key: 'dist',      name: 'Marc Heberling', what: 'Agent and location distribution',
+      title: 'Distribution', email: null }
+  ];
+
   var BILLING_CONTACTS = [
     { name: 'Cassie Jensen',    title: 'AP / Controller', email: 'accounting@financialize.com',
       note: 'Billing questions and payment status' },
@@ -3535,6 +3561,7 @@
 
     ACCOUNT_MANAGER: ACCOUNT_MANAGER,
     BILLING_CONTACTS: BILLING_CONTACTS,
+    TEAM_CONTACTS: TEAM_CONTACTS,
     usersFor: usersFor,
     saveUsers: saveUsers,
     primaryContact: primaryContact,

@@ -198,6 +198,10 @@
       score: hs.score,
       tier: hs.tier,
       sevSuffix: sevSuffix,
+      /* Drawn larger than the default so the dial carries the card rather
+         than sitting in the middle of it. The SVG is fluid, so this is the
+         cap it fills up to, not a fixed size. */
+      scale: 1.35,
       hint: 'See the full breakdown →'
     });
     /* The scorecard flags a thin sample; the summary must too. A brand-new

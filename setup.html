@@ -51,6 +51,7 @@
         <div class="card-head">
           <div>
             <h2>Have questions?</h2>
+            <p class="sub">Who should you ask about what?</p>
           </div>
         </div>
         <div class="card-body" id="contact"></div>
@@ -179,7 +180,11 @@
   /* ---- contact ------------------------------------------------------------
      The same shared block the Partnership summary shows — one design for
      the same person everywhere. */
-  document.getElementById('contact').innerHTML = A.accountManagerBlock();
+  /* The whole team by subject, not just the account manager. A partner with
+     a call-centre question should not have to work out that it goes through
+     their AM — and if it does, the card says so rather than leaving them
+     guessing. */
+  document.getElementById('contact').innerHTML = A.teamContacts();
 
   if (window.FZTable) FZTable.enhanceAll();
 
