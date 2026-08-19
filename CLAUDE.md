@@ -378,6 +378,36 @@ per-request. Compliance inputs come through `D.complianceFor()` — all null in 
 purpose (real affiliate names; nothing is fabricated against them), which parks the pillar
 and disarms the gate.
 
+## The handoff surfaces — which is which
+
+Five things point at the dev team, and they answer different questions. Adding a rule to the wrong
+one is how it gets missed.
+
+| Surface | Question it answers |
+|---|---|
+| `ADMIN-MAPPING.md` | *What connects to what.* The specification: every dashboard element → the field or setting behind it, and the storage it needs. **The connection list at the top is cut by who supplies a value — automatic / admin setting / auto+override — because that is how the work divides.** The A/B numbers are kept as IDs since code comments cite them |
+| `HANDOFF.md` | *Why it is like this.* Decisions, what was rejected, and the reasoning behind rules that look arbitrary |
+| `data-source.html` | *Where does each value come from, and is it wired yet.* Renders the FIELDS half of the registry |
+| `admin-preview.html` | *What must a human be able to change.* Renders the SETTINGS half. It is the build spec for the admin screen Financialize still needs to build |
+| `CLAUDE.md` | Rules an agent editing this repo must not break |
+
+`assets/js/handoff.js` is the single registry both internal pages read, so the two cannot drift.
+Delete all three before shipping.
+
+**The classification that matters at integration time is `kind`, not `status`.** `status` says
+whether a value exists; `kind` says who supplies it:
+
+- **`auto`** — the system knows this or could. It must flow from a query and never be typed. If a
+  human has to keep it current it will go stale. *Campaign active/inactive is the clearest case: a
+  manual flip today that should never have been one.*
+- **`human`** — a decision no query can derive. Needs a field on a screen.
+- **`derived`** — computed by default with a manual override as a failsafe. Both halves get built.
+
+FIELDS default to `auto` and SETTINGS to `human`; **the exceptions are marked and are the
+interesting part.** Seven entries on the Admin settings page are classified `auto` — an admin
+screen quietly growing a text box for something automatic is the most common way it accumulates
+work nobody wanted.
+
 ## Things flagged as open, not done
 
 - **Sale-tier point values need Michael's sign-off.** Live transfer (14) and Appointment (12) are a

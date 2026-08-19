@@ -27,6 +27,43 @@
 (function (global) {
   'use strict';
 
+  /* ======================================================================
+     THE AXIS THAT MATTERS AT INTEGRATION TIME
+     ----------------------------------------------------------------------
+     `status` says whether a value EXISTS yet. `kind` says WHO SUPPLIES IT,
+     which is the split the team actually divides work along: one person
+     wires up queries, another builds a screen someone can type into.
+
+       auto    — the system knows this, or could. It must flow automatically
+                 and never be typed by a person. If a human has to keep it
+                 current, it will go stale.
+       human   — a decision no query can derive: a negotiated rate, a signed
+                 agreement, a planning target. Needs a field on a screen.
+       derived — computed by default, with a human override as a failsafe.
+                 Both halves have to be built. Rare, and deliberate where it
+                 appears — the override exists because the derivation can be
+                 wrong on thin data, not because someone prefers typing.
+
+     DEFAULTS: entries in FIELDS are `auto` and entries in SETTINGS are
+     `human` unless they say otherwise. The exceptions are the interesting
+     part and are marked explicitly — a setting that should have been
+     automatic is the most common way an admin screen grows work nobody
+     wanted.
+
+     `system` is where the value will live once we know: the warehouse, the
+     application database, or a third party. NULL everywhere today because
+     nobody has told us yet, and guessing would be worse than a blank. It is
+     the first column to fill in with Sagar and Zakira.
+     ====================================================================== */
+  var KIND = {
+    auto:    { label: 'Automatic',      badge: 'badge-good',
+               hint: 'Flows from the system. No screen, no typing.' },
+    human:   { label: 'Admin setting',  badge: 'badge-info',
+               hint: 'Someone on our team sets this. Needs a field on the admin screen.' },
+    derived: { label: 'Auto + override', badge: 'badge-warn',
+               hint: 'Computed by default, with a manual override as a failsafe. Build both.' }
+  };
+
   var STATUS = {
     have:    { label: 'Have it',        badge: 'badge-good' },
     partial: { label: 'Unusable as-is', badge: 'badge-warn' },
@@ -82,7 +119,7 @@
            'has 2,917 distinct values and cannot be grouped as-is.' },
     { group: 'Lead record', name: 'State', source: 'State', status: 'have',
       where: 'Coverage, state demand matching.', how: 'Straight read.' },
-    { group: 'Lead record', name: 'Investable assets', source: 'Investable Assets', status: 'partial',
+    { group: 'Lead record', name: 'Investable assets', kind: 'auto', source: 'Investable Assets', status: 'partial',
       where: 'Asset-band breakdown, the highest-leverage targeting widget.',
       how: 'Free text with many unparsed variants. Needs normalising to bands at ingest.' },
     { group: 'Lead record', name: 'Date of birth / age', source: 'DOB', status: 'partial',
@@ -164,11 +201,11 @@
       how: 'Boolean per affiliate: opt-out links live and correct. False = score capped.' },
 
     /* ---- relationship --------------------------------------------------- */
-    { group: 'Relationship', name: 'Partner since', source: '—', status: 'missing',
+    { group: 'Relationship', name: 'Partner since', kind: 'human', source: '—', status: 'missing',
       where: 'Partnership summary.',
       how: 'Not derivable — the earliest row is the start of the export window, not of the ' +
            'relationship. Needs a real field on the partner record.' },
-    { group: 'Relationship', name: 'Billing terms & next payment date', source: '—', status: 'missing',
+    { group: 'Relationship', name: 'Billing terms & next payment date', kind: 'human', source: '—', status: 'missing',
       where: 'Partnership summary billing widget.',
       how: 'Net terms per partner. The payment date is computed as 3 business days after ' +
            'month end, but the TERMS themselves need storing.' },
@@ -190,7 +227,7 @@
                'CPL campaign, and locked columns cannot be switched off.',
       risk: 'This is the setting that decides what leaves the building. It needs an audit trail.' },
 
-    { group: 'Visibility', name: 'Comp model, per campaign', status: 'build',
+    { group: 'Visibility', name: 'Comp model, per campaign', kind: 'auto', status: 'build',
       controls: 'The entire column projection for every row on that campaign.',
       today: 'Parsed out of the campaign name.',
       storage: 'A real enum column on the campaign record.',
@@ -223,7 +260,7 @@
       storage: 'partner_dow_weights (partner_id, dow, weight), falling back to a global default.',
       risk: 'Sunday defaults to 0% because the call floor is closed. It must stay overridable.' },
 
-    { group: 'Commercial terms', name: 'Revenue share %, per campaign', status: 'build',
+    { group: 'Commercial terms', name: 'Revenue share %, per campaign', kind: 'auto', status: 'build',
       controls: 'The partner-share column on revenue-share rows.',
       today: 'Read from the export but not editable.',
       storage: 'Per-campaign field.' },
@@ -242,7 +279,7 @@
       storage: 'Global list of windows, consumer local time. Displays to every affiliate, so ' +
                'one edit must propagate everywhere.' },
 
-    { group: 'Operational', name: 'States with most budget', status: 'build',
+    { group: 'Operational', name: 'States with most budget', kind: 'auto', status: 'build',
       controls: 'The top-10 state list on Targeting.',
       today: 'STATE_DEMAND constant.',
       storage: 'Ranked list of states, admin-ordered. CHANGES OFTEN — this needs to be easy to ' +
@@ -256,7 +293,7 @@
       storage: 'documents (key, label, description, url, scope, sort_order, featured). Must ' +
                'support ADDING documents without a deploy.' },
 
-    { group: 'Campaigns', name: 'Campaign setup tracker', status: 'build',
+    { group: 'Campaigns', name: 'Campaign setup tracker', kind: 'derived', status: 'build',
       controls: 'The per-campaign onboarding tracker (campaign-setup.html): step states, ' +
                 'integration method, traffic source, tracking/test URLs, and the affiliate\'s ' +
                 'pixel URL.',
@@ -269,7 +306,7 @@
             'trail, and a post-go-live change must notify Logan and be re-verified with a test ' +
             'lead before taking effect.' },
 
-    { group: 'Health score', name: 'Compliance system (inputs + gate)', status: 'build',
+    { group: 'Health score', name: 'Compliance system (inputs + gate)', kind: 'auto', status: 'build',
       controls: 'The Compliance & trust pillar and the score cap. Four inputs: consent-cert ' +
                 'coverage, complaint incident log, creative-review flag, unsub flag.',
       today: 'complianceFor() in data.js returns all nulls — pillar parked, gate unarmed. ' +
@@ -281,7 +318,7 @@
             'launderable by good acceptance. Manual admin entry first — do not wait for ' +
             'automation to start enforcing.' },
 
-    { group: 'Health score', name: 'Score calibration table', status: 'build',
+    { group: 'Health score', name: 'Score calibration table', kind: 'auto', status: 'build',
       controls: 'The percentile pools every metric scores against, per campaign class ' +
                 '(fresh annuity / aged annuity / life).',
       today: 'Computed live from the dataset on page load (buildPools() in health.js).',
@@ -330,7 +367,7 @@
 
     /* The duplicate-lookup rate-limiting entry that used to sit here went with
        the lookup itself on Aug 19 — there is no query endpoint to contain. */
-    { group: 'Suppression', name: 'Per-affiliate suppression file', status: 'build',
+    { group: 'Suppression', name: 'Per-affiliate suppression file', kind: 'auto', status: 'build',
       controls: 'The one card on the duplicates page.',
       today: 'Not connected — the card renders its not-connected state.',
       storage: 'A file location on each affiliate record. One file per affiliate, not one ' +
@@ -365,14 +402,27 @@
       impact: 'Lead tier mix undercounts. Blocks the North Star metric being exact.' }
   ];
 
+  /* Default by list, override per entry — see the KIND note above. */
+  function kindOf(entry, listDefault) { return entry.kind || listDefault; }
+
   global.FZHandoff = {
     STATUS: STATUS,
+    KIND: KIND,
+    kindOf: kindOf,
     FIELDS: FIELDS,
     SETTINGS: SETTINGS,
     BLOCKERS: BLOCKERS,
     counts: function (list) {
       var c = {};
       list.forEach(function (f) { c[f.status] = (c[f.status] || 0) + 1; });
+      return c;
+    },
+    kindCounts: function (list, listDefault) {
+      var c = {};
+      list.forEach(function (f) {
+        var k = kindOf(f, listDefault);
+        c[k] = (c[k] || 0) + 1;
+      });
       return c;
     }
   };

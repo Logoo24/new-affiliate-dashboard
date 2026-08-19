@@ -735,6 +735,39 @@ Two things the mock settled that are worth keeping:
 
 ---
 
+## Reading the connection list — automatic vs admin setting
+
+Re-cut Aug 19. The list in ADMIN-MAPPING used to be organised as *"missing from the lead export"*
+vs *"does not exist anywhere"*. That mattered while the prototype read an export. It is the wrong
+question now: this dashboard is replacing a live one against a real system, and the two questions
+an integrator actually arrives with are
+
+1. **What do I point at a table or a query?**
+2. **What needs a screen someone can type into?**
+
+So the list is cut that way now — **Automatic**, **Admin setting**, **Auto + override** — with the
+old A/B numbers kept as IDs because code comments and this document cite them.
+
+**The test, when something is ambiguous:** *could the system work this out on its own, reliably,
+today or after a reasonable fix?* If yes it is automatic, **even if a person is doing it by hand
+right now**. Campaign active/inactive is the clearest example: a manual flip today, and it should
+never have been one.
+
+**Seven things currently sitting on the admin-settings preview are classified automatic**, meaning
+they should not be on that screen at all: comp model per campaign, revenue share % per campaign,
+per-state budget, the campaign setup tracker, the compliance inputs, the score calibration table,
+and the per-affiliate suppression file. The Admin settings page has a **"Should be automatic"**
+filter that lists exactly those. An admin screen quietly growing a text box for something the
+system could supply is the most common way it accumulates work nobody wanted.
+
+**On storage:** every entry specifies what a value is and what shape it needs, never which store it
+comes from — nobody has told us yet. Realistically it splits, leads and outcomes from the warehouse
+and settings from an application database. There is a `system` slot on every registry entry waiting
+for that. **Settle one thing early:** is the reporting data queryable live, or only in batch? Several
+cards assume a fresh read per page load, and a nightly job changes what "trailing 30 days" means.
+
+---
+
 ## Gating data dependencies — for Zakira
 
 Nothing below is a nice-to-have; each one blocks a specific thing already drawn in the mock-up.

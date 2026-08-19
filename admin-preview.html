@@ -207,6 +207,18 @@
   'use strict';
   var D = FZData, A = FZApp, HO = FZHandoff;
 
+  /* Six of the entries on this page are NOT admin settings — they are values
+     the system should supply on its own and that a person is keeping current
+     by hand today. They are marked, because the fastest way for an admin
+     screen to grow work nobody wanted is for automatic things to quietly get
+     a text box. See the KIND note in handoff.js and the connection list in
+     ADMIN-MAPPING. */
+  function kindBadge(entry) {
+    var k = HO.KIND[HO.kindOf(entry, 'human')];
+    return '<span class="badge ' + k.badge + '"><span class="dot"></span>' + k.label + '</span>' +
+      A.tip(k.hint);
+  }
+
   var state = A.params();
 
   A.shell(state, {
@@ -227,10 +239,16 @@
       '<div class="view-toggle">' +
         '<button type="button" class="is-on" data-sf="all">All</button>' +
         '<button type="button" data-sf="risk">Has a risk note</button>' +
+        '<button type="button" data-sf="auto">Should be automatic</button>' +
       '</div>';
 
     function render() {
-      var rows = HO.SETTINGS.filter(function (s) { return filter === 'risk' ? !!s.risk : true; });
+      var rows = HO.SETTINGS.filter(function (s) {
+        if (filter === 'risk') return !!s.risk;
+        /* The rows that should NOT be on an admin screen at all. */
+        if (filter === 'auto') return HO.kindOf(s, 'human') !== 'human';
+        return true;
+      });
       var lastGroup = null, html = '';
       rows.forEach(function (s) {
         if (s.group !== lastGroup) {
@@ -241,7 +259,8 @@
         }
         html += '<tr>' +
           '<td><strong>' + A.esc(s.name) + '</strong><div style="font-size:12.5px;' +
-            'color:var(--ink-2);margin-top:3px">' + A.esc(s.controls) + '</div></td>' +
+            'color:var(--ink-2);margin-top:3px">' + A.esc(s.controls) + '</div>' +
+            '<div style="margin-top:5px">' + kindBadge(s) + '</div></td>' +
           '<td style="font-size:12.5px;color:var(--ink-2)">' + A.esc(s.today) + '</td>' +
           '<td style="font-size:12.5px">' + A.esc(s.storage) + '</td>' +
           '<td style="font-size:12.5px">' + (s.risk

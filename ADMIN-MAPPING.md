@@ -37,58 +37,108 @@ internal **Data source** page, so it is reviewable rather than buried here.
 
 ## ⚑ THE CONNECTION LIST — what the dev team needs to wire up
 
-**This is the hand-off list.** Everything the dashboard needs that the current lead export
-cannot supply, in priority order. Each row is a thing that must be added to the export, fixed
-at source, or created as an admin-editable field. Detail for each is in the numbered sections
-below; this is the summary to work from.
+**This is the hand-off list**, and it is cut along the axis you will actually divide work on:
 
-> **The same list is browsable in the prototype.** `assets/js/handoff.js` holds it as data, and
-> two internal pages render from it: **Data connections** (`data-source.html`) for the field
-> side, **Admin settings** (`admin-preview.html`) for the settings side. They read one registry
-> so the two halves cannot drift apart. Delete all three before shipping.
+| | |
+|---|---|
+| **AUTOMATIC** | The system knows this, or could. It must flow from a query and never be typed by a person. If a human has to keep it current, it will go stale. |
+| **ADMIN SETTING** | A decision no query can derive — a negotiated rate, a signed agreement, a planning target. Needs a field on a screen. |
+| **AUTO + OVERRIDE** | Computed by default with a manual override as a failsafe. Both halves get built. Rare and deliberate: the override exists because the derivation can be wrong on thin data, not because someone prefers typing. |
 
-### A. Fields missing from the lead export
+**The test, when something is ambiguous:** *could the system work this out on its own, reliably,
+today or after a reasonable fix?* If yes it is automatic, even if a person is doing it by hand
+right now. Campaign active/inactive is the clearest case — it is a manual flip today and should
+never have been one.
 
-| # | Field | Blocks | Status |
+> **This list is browsable in the prototype.** `assets/js/handoff.js` holds it as data and two
+> internal pages render it: **Data connections** (`data-source.html`) and **Admin settings**
+> (`admin-preview.html`). One registry, so the two cannot drift apart. Delete all three before
+> shipping.
+
+**A note on where this data lives.** Everything below specifies *what* a value is and what shape
+it needs, never *which* store it comes from — because nobody has told us yet. Realistically it
+splits: leads and outcomes from the warehouse (BigQuery or equivalent), settings and agreements
+from an application database. **That mapping is the first thing to fill in**, and there is a
+`system` slot on every registry entry waiting for it.
+
+**One question to settle early:** is the reporting data queryable **live**, or only in batch? Several
+cards assume a fresh read per page load. If it is a nightly warehouse job, that is a caching
+decision, and it changes what "trailing 30 days" means on a page opened at 9am.
+
+---
+
+### 1. AUTOMATIC — wire these to a query. No screen.
+
+The original A-numbers are kept because the code comments and HANDOFF cite them.
+
+| # | Field | Blocks | Status today |
 |---|---|---|---|
-| A1 | **Time of day on `Created On`** (or populate `TimeStamp`) | Every hour-of-day feature: arrival-window analysis, the ideal-send-window comparison, the window component of the health score | **MISSING.** `TimeStamp` is empty on all 71,725 rows; `Created On` is date-only |
-| A2 | **`sub_id` on the lead post** | Per-publisher scoring, sub-ID drilldown, per-source pricing | **0.4% fill.** Madrivo 99%, Heritage and OptiLabX **0%** |
-| A3 | **`speed_to_lead`** — valid seconds | Operations pillar (60% of it) | **BROKEN.** Populated but values run −113,426,741 to 4,109,200, median 0 |
-| A4 | **Rev-share % per campaign** | Correct comp-model inference and Your-share maths | **PARTIAL.** Column holds 40 / 0 / 4 / 1.75%. annuity.org's **85% is absent**, so they wrongly read as CPL |
-| A5 | **Controlled `reject_reason` vocabulary** | The whole rejection breakdown, the reason filter on the lead table, every drill-down link | **BROKEN — and now specified.** 2,917 distinct values; the tail is raw XML filter responses. `REJECT_REASONS` in `data.js` is the proposed target vocabulary — see §3a. **The affiliate-facing list must become the internal list, exactly**, so a reason added or renamed internally needs no translation layer here |
-| A10 | **Split `IPQS` into the check that actually failed** — phone / email / other | The largest single reason on the book being actionable at all | **MISSING.** IPQS is one undifferentiated bucket carrying **12,178 of 23,430 rejections (52%)**. IPQS returns the specific failing check and we discard it on ingest. Three keys are already in the registry (`ipqs_phone`, `ipqs_email`, `ipqs_other`) rendering at zero until this lands |
-| A12 | **A true consumer-submission timestamp, distinct from the import/`Created On` date** | The three Delivery timing components in Delivered quality, and the Top conversion windows card | **BROKEN — and it currently scores US.** On bulk-imported aged leads `Created On` is the date WE loaded the file, not when the consumer submitted. Heritage campaign 600 is **55,481 of that account's 56,309 leads in the trailing cohort and lands 0/0/0/30/59/12/0 across Sun–Sat, 100% in the last third of the month.** That is our import schedule, not their delivery behaviour. Fresh drip traffic reads normally by comparison — OptiLabX 0/17/17/23/21/15/6, phases 39/31/30 — which is how we know the metric itself is sound. **Two fixes needed:** carry the real submission timestamp, and flag bulk-imported rows so timing scoring can exclude them |
-| A11 | **A distinct reason for blank / null required fields** | Telling "nothing was posted" apart from "a value was posted and failed a check" | **MISSING.** `missing_fields` is in the registry at zero. The two have different fixes — one is a required-field rule at the form, the other is validation — so collapsing them makes the fix column wrong |
-| A6 | **`lead_cost` = $0 on rev-share** | Any margin metric | **BROKEN.** All 41,627 accepted rows bill $1.00 — the phantom COGS, confirmed live |
-| A7 | **Normalised `assets` band** | Asset-band targeting widget | **PARTIAL.** 29 free-text variants; 81.6% collapse into one band |
-| A8 | **`sold_type` on the 16 Sold rows missing it** | Tier metrics completeness | **PARTIAL** |
-| A9 | **Unfire feed** — unfire date, affiliate-safe reason code, amount credited *(Sagar)* | Pixel unfire report on the Compensation page | **MISSING.** The export carries only the `returned` flag. Related: the `filter_error` rows in A5 are manual pixel unfires and belong on this feed, not in the rejection list |
+| **B14** | **Comp model as a real campaign column** | The entire column projection — which SELECT list every row is built from | **PARSED FROM THE CAMPAIGN NAME.** The most load-bearing value in the system is being inferred from a string, and it fails toward over-disclosure. Fix this first |
+| **A5** | **Controlled `reject_reason` vocabulary** | The rejection breakdown, the lead-table reason filter, every drill-down | **BROKEN.** 2,917 distinct values; the tail is raw XML. Target vocabulary specified in §3a — the affiliate-facing list must *be* the internal list |
+| **A10** | **Split `IPQS` into the failing check** — phone / email / other | The largest single reason on the book being actionable at all | **MISSING.** 12,178 of 23,430 rejections (52%) sit in one unactionable bucket. IPQS returns the specific check; we discard it on ingest |
+| **A11** | **A distinct reason for blank / null required fields** | Telling "nothing was posted" from "a value was posted and failed" | **MISSING.** Different fixes, so collapsing them makes the advice wrong |
+| **A12** | **True consumer-submission timestamp**, separate from the import date | Delivery timing in the health score, Top conversion windows | **BROKEN — and it currently scores US.** On bulk aged imports `Created On` is our load date. Heritage campaign 600 is 55,481 of 56,309 cohort leads on three weekdays, 100% in the last third of the month. Also flag bulk-imported rows so timing can exclude them |
+| **A1** | **Time of day on `Created On`** (or populate `TimeStamp`) | Every hour-of-day feature | **MISSING.** Empty on all 71,725 rows |
+| **A4** | **Rev-share % per campaign** | Comp-model inference, Your-share maths | **PARTIAL.** annuity.org's 85% is absent, so they wrongly read as CPL |
+| **A2** | **`sub_id`** (+ `click_id`, `utm_campaign`, `utm_medium`) | Sub-ID drilldown, publisher-level scoring | **0.4% fill.** Madrivo 99%, Heritage and OptiLabX 0% |
+| **A9** | **Unfire feed** — unfire date, affiliate-safe reason, amount credited | Pixel unfire report | **MISSING.** Only a `returned` flag today. The `filter_error` rows in A5 belong here, not in the rejection list |
+| **A6** | **`lead_cost` = $0 on rev-share** | Any margin metric | **BROKEN.** All 41,627 accepted rows bill $1.00 — the phantom COGS |
+| **A7** | **Normalised `assets` band** | Asset-band targeting | **PARTIAL.** 29 free-text variants; 81.6% collapse into one band |
+| **A8** | **`sold_type` on the 16 Sold rows missing it** | Tier completeness | **PARTIAL** |
+| **A3** | **`speed_to_lead`** — valid seconds | Internal ops only (Module F), not affiliate-facing | **BROKEN.** Values run −113,426,741 to 4,109,200 |
+| **B5** | **Campaign active/inactive lifecycle** | Active-campaign list, inactive count | **MANUAL FLIP TODAY — should never have been.** Auto-active while leads arrive, auto-inactive after 6 months idle. Keep a manual override for hard pauses only |
+| **B6** | **Per-state buyer budget / demand** | The States card | **NEEDS BUILDING.** `ADMIN_STATE_DEMAND` is the stand-in. A state with no record renders blank, never "covered" |
+| **B8** | **Account-manager join** | Account manager block | Exists in the CRM, not joined to the portal |
+| **B10** | **Per-user table preferences** | Column choices, widths, sort | Stored per user, not per session. §1a |
+| **§6** | **Score calibration table** | Every percentile in the health score | **NEEDS BUILDING.** Recomputed quarterly as a stored table, never per request |
+| **§6a** | **Compliance inputs** — consent coverage, complaints, creative currency, unsubscribe | The Compliance pillar and its gate | **NEEDS BUILDING.** All four null today, so the pillar is parked and the gate disarmed |
+| **§8** | **Creative store** — per affiliate, per campaign, effective-dated | The creatives upload, and lead→creative attribution | **NEEDS BUILDING.** Keep superseded versions; a lead resolves to the set live on its date |
+| **§7** | **Per-affiliate suppression file location** | The Duplicates page | **NEEDS BUILDING.** One file per affiliate, not one shared file |
 
-### B. Fields that do not exist anywhere yet
+### 2. ADMIN SETTING — these need a screen someone can type into
 
-| # | Field | Drives | Notes |
+**This section is the build spec for the new admin page.** Everything here is a human decision;
+nothing here can be derived. `admin-preview.html` is a visual preview of it.
+
+| # | Setting | Who changes it | Status |
 |---|---|---|---|
-| B1 | **`partner_since`** | "Partner since" on the Partnership summary | Not derivable from leads — the earliest row is the export window, not the relationship. Backfill from contract date |
-| B2 | **`affiliate_users` table** | The whole Account & users page | Full spec in §1a. Multi-user login, primary contact, titles, avatars, away flag |
-| B3 | **`billing_period` / `billing_basis`** | Billing details card | Net 7 / 15 / 30, and received vs sold date |
-| B4 | **`partner_targets`** | Targets card, target line on Leads by day | Volume and/or spend, per partner per month. §4 |
-| B5 | **Campaign `active` lifecycle** | Active-campaign list, inactive count | Today a manual flip. Wanted: auto-active on lead flow, auto-inactive after 6 months idle. §2 |
-| B6 | **Per-state demand / budget** | The states-we-need widget | §5a |
-| B7 | **Call-centre hours & ideal windows as config** | Targeting page | Currently constants in `data.js`. §5b, §5c |
-| B8 | **Account-manager join** | Account manager block | Exists in the CRM, not joined to the portal |
-| B9 | **Google Chat deep link** | Chat button on Partnership summary | Currently a generic chat.google.com link |
-| B10 | **Per-user table preferences** | Which columns a user shows/hides, column widths, and their chosen sort | Every table is sortable, resizable and column-configurable. The mock persists this to `sessionStorage`, so it survives paging but dies with the tab. In production it should be a **stored user preference** on `affiliate_users` (see §1a) — a media buyer who hides six columns expects them to stay hidden next login |
-| B11 | **`documents` table** | The Helpful documents section on Setup & docs | Must support adding and re-linking documents **without a deploy**. §7c |
-| B12 | **Per-affiliate agreement URL** | The "Your agreement" card | A Google Drive URL on the affiliate record, different for every partner, pasted by the admin when the agreement is signed. An affiliate with none set renders "not linked yet", never a dead button. **Restricted sharing — the Drive share list, not the link, is the access control.** Workflow and rules in §7c |
-| B13 | **Per-affiliate lead criteria** | Every criteria line on Targeting, and the age wording in rejection labels | The OptiLabX 45–79 band already proves criteria are negotiated per account. **Any** criteria value may differ, not just age. §1 |
-| B14 | **Comp model as a real campaign column** | The entire column projection | Currently parsed out of the campaign *name*. This is the most load-bearing value in the system and it is being inferred from a string. §2 |
-| B15 | **Monthly lead-statement URL per affiliate** | Lead statements on the Compensation page | A Google Sheet URL per affiliate per month, pasted by the admin after the statement is generated (first business day after month close, give or take). A month with none renders "Not linked yet", never a dead button. §7e |
+| **B12** | **Per-affiliate agreement URL** | Whoever countersigns | **NEEDS BUILDING.** A Drive URL per affiliate, pasted on signature. Restricted sharing — the Drive share list is the access control, not the link. §7c |
+| **B15** | **Monthly lead-statement URL** per affiliate per month | Whoever generates statements | **NEEDS BUILDING.** Pasted after month close. A month with none reads "Not linked yet", never a dead button. §7e |
+| **B13** | **Lead criteria, per affiliate** | Logan / Michael | **NEEDS BUILDING.** OptiLabX's 45–79 band proves *any* criteria value can be negotiated, not just age. §1 |
+| **B3** | **Billing period & basis** | Logan | Net 7/15/30, received vs sold date |
+| **B4** | **Spend & volume targets** — CPL only | Logan, weekly | **NEEDS BUILDING.** Rev share gets no target, ever. A null target must not render and must not count as missed. §4 |
+| **B1** | **`partner_since`** | Onboarding | Not derivable — the earliest lead is the export window, not the relationship. Backfill from the contract |
+| **B7** | **Call-centre hours & ideal windows** | Courtney | Config, not code. Changing staffing must change the dashboard. §5b/§5c |
+| **B11** | **Document library** | Anyone on the team | **NEEDS BUILDING.** Add and re-link documents without a deploy. §7c |
+| **B2** | **`affiliate_users`** — the whole table | Partly self-service, partly admin | **NEEDS BUILDING.** Multi-user login, primary contact, titles, away flag. §1a |
+| **§3** | **Lead column visibility, per comp model** | Logan / Michael | **NEEDS BUILDING, WITH AN AUDIT TRAIL.** This is the setting that decides what leaves the building. The code registry stays a hard constraint: no revenue column on a CPL campaign, locked columns cannot be switched off |
+| **§8** | **Creative review queue** — approve / request changes | Jefanie | **NEEDS BUILDING.** Affiliates must never be able to approve their own creative |
+| **§1b** | **Team contact emails** | Admin | Courtney and Marc have no address on file; those cards route via the account manager until they do |
+| **§9** | **Feedback form URL** | Admin | One field. Set it and the link goes live |
+| **B9** | **Google Chat deep link** per affiliate | Admin | Currently a generic chat.google.com link |
 
-### C. Confirmed present — no work needed
+### 3. AUTO + OVERRIDE — build both halves
 
-`sold_type` (priority / hot_lead / auction / marketplace, prices confirm the tiers),
-`call_attempts`, `campaign_id` / CID, `state`, `revenue`, `revenue_share_amount`,
-`return_reason`, `affiliate_id`.
+| # | Thing | Derivation | Why an override exists |
+|---|---|---|---|
+| **§5b-i** | **Top conversion windows** | Each affiliate's own trailing 30-day matured cohort | Thin or unusual months produce wrong answers, and an account manager who knows better needs to pin them without a deploy. Per grain — the common case is pinning hours while days derive |
+| **§7d** | **Campaign setup tracker** | Steps advance from real events: pixel received, creatives approved, test lead seen | Some steps are ours to confirm manually. The affiliate-editable pixel URL is the one field they own |
+
+### 4. Confirmed present — no work needed
+
+`sold_type` (priority / hot_lead / auction / marketplace), `call_attempts`, `campaign_id` / CID,
+`state`, `revenue`, `revenue_share_amount`, `return_reason`, `affiliate_id`.
+
+### 5. Data-quality blockers — fix before trusting any metric
+
+These corrupt numbers regardless of what gets built. Full detail in §7b.
+
+| Problem | Effect |
+|---|---|
+| **$1 phantom COGS** on all 41,627 accepted rows | Margin on rev-share is fabricated; the margin input is excluded from the score |
+| **Placeholder birth years** on the aged-lead import | Every age metric and age-rejection count is wrong |
+| **Import date standing in for submission time** (A12) | Delivery timing scores our load schedule, not their delivery |
+| **XML payloads in `reject_reason`** — 2,713 rows | Those rows cannot show an exact value and fall back to a bucket label |
 
 ---
 

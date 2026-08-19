@@ -128,14 +128,28 @@
     return '<span class="badge ' + s.badge + '"><span class="dot"></span>' + s.label + '</span>';
   }
 
+  /* WHO SUPPLIES IT, which is the axis the work divides on. `status` says
+     whether a value exists; this says whether wiring it is a query job or an
+     admin-screen job. See the KIND note in handoff.js. */
+  function kindBadge(entry, listDefault) {
+    var k = HO.KIND[HO.kindOf(entry, listDefault)];
+    return '<span class="badge ' + k.badge + '"><span class="dot"></span>' + k.label + '</span>' +
+      A.tip(k.hint);
+  }
+
   /* ---- summary tiles ---------------------------------------------------- */
   (function () {
     var c = HO.counts(HO.FIELDS);
+    var k = HO.kindCounts(HO.FIELDS, 'auto');
     var tiles = [
       { label: 'Fields tracked', value: HO.FIELDS.length, sub: 'every live value on the portal' },
       { label: 'Ready to wire', value: c.have || 0, sub: 'exists today, nothing to build' },
       { label: 'Unusable as-is', value: c.partial || 0, sub: 'exists but the values are wrong' },
-      { label: 'Missing entirely', value: c.missing || 0, sub: 'must be added to the system' }
+      { label: 'Missing entirely', value: c.missing || 0, sub: 'must be added to the system' },
+      /* The split that decides who picks the work up. */
+      { label: 'Automatic', value: k.auto || 0, sub: 'a query, no screen' },
+      { label: 'Needs an admin field', value: (k.human || 0) + (k.derived || 0),
+        sub: 'someone types this' }
     ];
     document.getElementById('summary').innerHTML = tiles.map(function (t) {
       return '<div class="tile"><div class="tile-label">' + A.esc(t.label) + '</div>' +
@@ -171,7 +185,8 @@
             A.esc(f.group) + '</td></tr>';
         }
         html += '<tr>' +
-          '<td><strong>' + A.esc(f.name) + '</strong></td>' +
+          '<td><strong>' + A.esc(f.name) + '</strong>' +
+            '<div style="margin-top:4px">' + kindBadge(f, 'auto') + '</div></td>' +
           '<td class="lead-id">' + A.esc(f.source) + '</td>' +
           '<td>' + badge(f.status) + '</td>' +
           '<td style="color:var(--ink-2);font-size:12.5px">' + A.esc(f.where) + '</td>' +
