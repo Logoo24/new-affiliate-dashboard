@@ -127,10 +127,15 @@
   var scoreNameLower = A.healthScoreLabel(state, { lower: true });
   document.getElementById('score-label').textContent = scoreName;
 
-  /* One builder for the full explanation, used by BOTH the info-button modal
-     and the collapsible section below, so the two can never disagree. The
-     pillar list and weights are read from the live engine rather than written
-     out as prose, so this cannot drift away from the scoring that runs. */
+  /* ONE COPY OF THE EXPLANATION, AND IT LIVES AT THE BOTTOM OF THE PAGE.
+     The info button beside the score used to open a modal containing this
+     same text — the same words in two places, which is how one of them goes
+     stale. The button now opens the "How the score is built" section and
+     scrolls to it instead.
+
+     The pillar list and weights are read from the live engine rather than
+     written out as prose, so this cannot drift away from the scoring that
+     actually runs. */
   function explainHtml() {
     var live = result.pillars.filter(function (p) { return !p.parked; });
     var parked = result.pillars.filter(function (p) { return p.parked; });
@@ -188,9 +193,8 @@
   }
 
   A.infoButton(document.getElementById('score-label'), {
-    title: 'How your ' + scoreNameLower + ' works',
-    ariaLabel: 'How your ' + scoreNameLower + ' works',
-    html: explainHtml
+    ariaLabel: 'How your ' + scoreNameLower + ' works — opens the full explanation below',
+    action: function () { A.revealAndScroll(document.getElementById('how-built')); }
   });
 
   /* ---- the dial ---------------------------------------------------------- */

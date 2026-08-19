@@ -24,12 +24,12 @@
         <section class="card">
           <div class="card-head">
             <div>
-              <h2>Earned this period</h2>
+              <h2>Projected compensation<span id="proj-tip-host"></span></h2>
               <p class="sub" id="earned-sub"></p>
             </div>
           </div>
           <div class="card-body">
-            <div class="tile-label" style="margin-top:2px" id="earned-label">Total compensation</div>
+            <div class="tile-label" style="margin-top:2px" id="earned-label">Estimated total</div>
             <div class="tile-value" id="earned-total" style="font-size:34px">—</div>
             <div class="tile-sub" id="earned-basis"></div>
             <div class="tile-sub" id="earned-caveat" style="margin-top:8px;line-height:1.5"></div>
@@ -51,7 +51,7 @@
             </div>
           </div>
           <div class="card-body">
-            <div class="tile-label" style="margin-top:2px">Next payment</div>
+            <div class="tile-label" style="margin-top:2px">Expected next payment<span id="nextpay-tip-host"></span></div>
             <div class="tile-value" id="billing-next" style="font-size:24px">—</div>
             <div class="tile-sub" id="billing-terms"></div>
             <div class="tile-sub" id="billing-cadence" style="margin-top:8px;line-height:1.5"></div>
@@ -124,17 +124,31 @@
     revshare: 'Revenue share is paid on the date a lead sells, so this window counts every sale that closed inside it — including sales of leads submitted earlier, and your share of any sale of a lead we declined.',
     cpl: 'CPL is billed on acceptance, so this window counts every lead accepted inside it. Whether it later sells does not change what you are owed.'
   };
-  var AUDIT_TIP = 'This figure is provisional until the monthly statement closes. We audit accepted leads weekly; any lead that should not have been accepted is removed and never billed — removals appear in the Pixel unfire report below.';
+  /* EVERY MONEY FIGURE ON THIS PAGE IS AN ESTIMATE until the month closes,
+     the report goes out and the invoice is issued. That is not a hedge, it is
+     how the billing actually works: weekly audits remove wrongly accepted
+     leads, rev-share sales keep landing against leads already sent, and rates
+     are applied at invoice time. A partner who reads any of these as final
+     will reconcile against a different number and open a support ticket.
+
+     So the word "estimated" or "projected" rides on every one of them rather
+     than sitting once in a footnote. */
+  var ESTIMATE_TIP = 'An estimate, not a bill. It moves until the month closes and your ' +
+    'statement is issued: we audit accepted leads weekly and remove any that should not have ' +
+    'been accepted, and revenue-share sales keep landing against leads you have already sent. ' +
+    'Your monthly statement is the final figure and the invoice follows it.';
+  var AUDIT_TIP = ESTIMATE_TIP;
 
   /* ---- earned this period ------------------------------------------------ */
   (function () {
     var pay = D.payoutForWindow({ partnerId: state.partnerId,
                                   from: state.range.from, to: state.range.to });
 
+    document.getElementById('proj-tip-host').innerHTML = A.tip(ESTIMATE_TIP);
     document.getElementById('earned-sub').textContent =
-      'On the basis your invoice uses.';
+      'Estimated, on the basis your invoice uses. Final on your monthly statement.';
     document.getElementById('earned-label').innerHTML =
-      'Total compensation' + A.tip(AUDIT_TIP);
+      'Estimated total' + A.tip(ESTIMATE_TIP);
     document.getElementById('earned-total').textContent =
       pay.known || pay.total ? A.fmtMoney(pay.total) : '—';
 
@@ -144,15 +158,16 @@
     document.getElementById('earned-basis').textContent =
       bits.join(' · ') || 'Nothing billable in this window.';
     document.getElementById('earned-caveat').innerHTML =
-      '<strong>Subject to change.</strong> We run weekly audits to make sure no ' +
-      'incorrectly accepted leads slipped through — your statement is the final figure.';
+      '<strong>These are estimates.</strong> Every figure on this page moves until the month ' +
+      'closes and your statement is issued — that is the final number, and the invoice ' +
+      'follows it. Weekly audits remove any leads that should not have been accepted.';
 
     /* Effective CPL — moved here from Performance. CPL only, and only when
        every CPL campaign in scope has a rate on file. */
     if (pay.effectiveCpl != null) {
       document.getElementById('earned-extra').innerHTML =
         '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
-          '<div class="tile-label">Effective cost per lead' +
+          '<div class="tile-label">Estimated effective cost per lead' +
             A.tip('Your CPL spend in this window divided by every lead you submitted — accepted or not. Rejected leads cost you nothing, so this reads below your rate card; the gap between the two is your acceptance rate at work.') +
           '</div>' +
           '<div class="tile-value" style="font-size:24px">' + A.fmtMoney(pay.effectiveCpl) + '</div>' +
@@ -166,7 +181,8 @@
     }
 
     var head = '<thead><tr><th>Campaign</th><th>Model</th><th>Basis</th>' +
-      '<th style="text-align:right">Leads</th><th style="text-align:right">Amount</th></tr></thead>';
+      '<th style="text-align:right">Leads</th>' +
+      '<th style="text-align:right">Estimated amount</th></tr></thead>';
     var body = pay.campaigns.map(function (c) {
       var basis = c.comp === 'revshare' ? 'Sold date' : 'Received date';
       return '<tr>' +
@@ -184,13 +200,18 @@
       '</tbody>';
 
     document.getElementById('earned-foot').innerHTML =
-      'Revenue share counts every sale inside the window — including your share of sales ' +
-      'of leads we declined. CPL counts leads on acceptance; a rejected lead is never billed.';
+      'Estimated until your monthly statement. Revenue share counts every sale inside the ' +
+      'window — including your share of sales of leads we declined. CPL counts leads on ' +
+      'acceptance; a rejected lead is never billed.';
   })();
 
   /* ---- billing details (same source as the Partnership summary) ---------- */
   (function () {
     var pay = D.nextPaymentDate();
+    document.getElementById('nextpay-tip-host').innerHTML =
+      A.tip('The date we expect your payment to land, based on your billing terms. It follows ' +
+            'the monthly statement rather than setting it — if the month closes late, this ' +
+            'moves with it.');
     document.getElementById('billing-next').textContent =
       A.fmtDate(pay.date) + (pay.isToday ? ' — today' : '');
     document.getElementById('billing-terms').textContent =

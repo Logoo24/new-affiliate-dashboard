@@ -2805,9 +2805,22 @@
         state: (live || s.integrationReady) ? 'done' : 'action' });
     }
 
-    steps.push({ key: 'creatives', owner: 'you',
-      label: 'Send your creatives for compliance review',
-      state: (live || s.creativesSent) ? 'done' : 'todo' });
+    /* Creatives are uploaded in the portal now, not emailed. The step
+       mirrors the submission's own status so the tracker and the creatives
+       card can never disagree: nothing uploaded is a to-do, uploaded is
+       waiting on us, approved is done. */
+    var cre = creativesFor(pid, c.id);
+    steps.push({ key: 'creatives', owner: cre.status === 'pending' ? 'us' : 'you',
+      /* The label follows the state. On a live campaign this section is not a
+         task any more, it is where the approved set lives, and calling it
+         "Upload your creatives for approval" there reads as unfinished work. */
+      label: cre.status === 'approved' ? 'Creatives — approved'
+           : cre.status === 'pending' ? 'Creatives — pending review'
+           : 'Upload your creatives for approval',
+      creatives: cre,
+      state: (live || cre.status === 'approved') ? 'done'
+           : cre.status === 'pending' ? 'waiting'
+           : 'todo' });
 
     steps.push({ key: 'test', owner: 'both',
       label: 'Send a test lead',
@@ -2888,6 +2901,114 @@
   /* Creative resources for the Targeting page. Admin-set URLs under the same
      rule as the document library: null means NOT LINKED YET and must render
      as such, never as a dead button. See ADMIN-MAPPING §7c. */
+  /* ======================================================================
+     CREATIVES — upload, approval, and the record it leaves
+     ----------------------------------------------------------------------
+     PROCESS CHANGE, Aug 19 (Logan with Michael). Creatives no longer travel
+     by email. An affiliate uploads them through the portal, they sit
+     PENDING until someone here reviews them, and then they read APPROVED.
+     That applies twice over: when a campaign is being set up, and every time
+     an affiliate wants to change what they are running.
+
+     WHAT THE AFFILIATE IS TOLD: approval is a compliance review, and they
+     cannot run a creative until it clears. That is true and it is the whole
+     of the partner-facing story.
+
+     WHAT THIS ALSO BUYS US, AND IS NOT PARTNER-FACING: a per-campaign record
+     of which creatives were live and when, which is what lets us attribute a
+     lead back to the creative that produced it. That is an internal
+     analytics capability. It is specified in ADMIN-MAPPING and HANDOFF for
+     the build; it must not be described on any partner screen, and no
+     partner-facing copy may imply we retain or analyse their creative beyond
+     the approval itself.
+
+     THE UPLOAD IS THE BIGGEST NEW CONNECTION POINT IN THE PORTAL. Nothing
+     here stores a file — `submitCreatives()` writes to sessionStorage so the
+     three states can be walked through in review. Production needs real file
+     storage, a review queue, and a status webhook. ADMIN-MAPPING §8.
+     ====================================================================== */
+
+  var CREATIVE_STATUS = {
+    none:     { key: 'none',     label: 'None uploaded',   badge: 'badge' },
+    pending:  { key: 'pending',  label: 'Pending review',  badge: 'badge-warn' },
+    approved: { key: 'approved', label: 'Approved',        badge: 'badge-good' },
+    changes:  { key: 'changes',  label: 'Changes needed',  badge: 'badge-crit' }
+  };
+
+  /* Per campaign, because approval is per campaign — a creative cleared for
+     an annuity campaign is not automatically cleared for a life one. */
+  function creativeKey(pid, campaignId) {
+    return 'fz_creatives_' + pid + '_' + campaignId;
+  }
+
+  /**
+   * What has been submitted for one campaign.
+   * Returns { status, statusLabel, badge, files:[{name,size,uploadedAt}],
+   *           submittedAt, reviewedAt, note }.
+   *
+   * NOT CONNECTED YET in production terms — see the header. The mock reads
+   * sessionStorage so a reviewer can walk none -> pending -> approved.
+   */
+  function creativesFor(partnerId, campaignId) {
+    var pid = resolvePartnerId(partnerId);
+    var raw = null;
+    try { raw = sessionStorage.getItem(creativeKey(pid, campaignId)); } catch (e) {}
+    var st = raw ? JSON.parse(raw) : null;
+    if (st && st.submittedAt) st.submittedAt = new Date(st.submittedAt);
+    if (st && st.reviewedAt) st.reviewedAt = new Date(st.reviewedAt);
+    var status = (st && st.status) || 'none';
+    var cfg = CREATIVE_STATUS[status] || CREATIVE_STATUS.none;
+    return {
+      partnerId: pid,
+      campaignId: campaignId,
+      status: status,
+      statusLabel: cfg.label,
+      badge: cfg.badge,
+      files: (st && st.files) || [],
+      submittedAt: (st && st.submittedAt) || null,
+      reviewedAt: (st && st.reviewedAt) || null,
+      note: (st && st.note) || null
+    };
+  }
+
+  /**
+   * Record an upload. Always lands on PENDING — nothing an affiliate does
+   * can approve their own creative, and the UI must never let it look
+   * otherwise.
+   * @param files [{name, size}]
+   */
+  function submitCreatives(partnerId, campaignId, files) {
+    var pid = resolvePartnerId(partnerId);
+    var now = new Date();
+    var rec = {
+      status: 'pending',
+      submittedAt: now.toISOString(),
+      reviewedAt: null,
+      files: (files || []).map(function (f) {
+        return { name: f.name, size: f.size, uploadedAt: now.toISOString() };
+      })
+    };
+    try { sessionStorage.setItem(creativeKey(pid, campaignId), JSON.stringify(rec)); } catch (e) {}
+    return creativesFor(pid, campaignId);
+  }
+
+  /* Review outcome. In production this is OUR side writing back — it is here
+     only so the approved state can be demonstrated. */
+  function _reviewCreatives(partnerId, campaignId, outcome, note) {
+    var pid = resolvePartnerId(partnerId);
+    var cur = creativesFor(pid, campaignId);
+    if (cur.status === 'none') return cur;
+    var rec = {
+      status: outcome === 'approved' ? 'approved' : 'changes',
+      submittedAt: cur.submittedAt ? cur.submittedAt.toISOString() : null,
+      reviewedAt: new Date().toISOString(),
+      files: cur.files,
+      note: note || null
+    };
+    try { sessionStorage.setItem(creativeKey(pid, campaignId), JSON.stringify(rec)); } catch (e) {}
+    return creativesFor(pid, campaignId);
+  }
+
   var CREATIVE_LINKS = [
     { key: 'annuity_examples', label: 'See example annuity creatives', url: null },
     { key: 'life_examples', label: 'See example life creatives', url: null },
@@ -3346,6 +3467,10 @@
     savePartnerDocUrl: savePartnerDocUrl,
     CRITERIA_DOC_URL: CRITERIA_DOC_URL,
     CREATIVE_LINKS: CREATIVE_LINKS,
+    CREATIVE_STATUS: CREATIVE_STATUS,
+    creativesFor: creativesFor,
+    submitCreatives: submitCreatives,
+    _reviewCreatives: _reviewCreatives,
     COMPLIANCE_CONTACT: COMPLIANCE_CONTACT,
     UNSUB_LINKS: UNSUB_LINKS,
     API_SPECS: API_SPECS,

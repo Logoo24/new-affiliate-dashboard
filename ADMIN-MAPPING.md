@@ -975,6 +975,54 @@ than four speculative ones. Removed in the rewrite: the single-number lookup, th
 its rate-limit quota, the "what this returns and what it does not" boundary card, and the internal
 open-questions card. `checkDuplicate()` went with them and is recoverable from git history.
 
+## 8. Creatives — upload, approval, and the record it leaves
+
+**PROCESS CHANGE, Aug 19 (Logan with Michael). This is the largest new connection point in the
+portal.** Creatives no longer travel by email. An affiliate uploads them through the portal, they
+sit **Pending review** until someone here reviews them, and then they read **Approved**. That
+applies twice over: when a campaign is being set up, and every time an affiliate wants to change
+what they are running.
+
+### Two purposes, and only one of them is partner-facing
+
+| | |
+|---|---|
+| **Told to the affiliate** | Approval is a compliance review. A creative cannot run until it clears. That is the whole partner-facing story, and it is true. |
+| **NOT told to the affiliate** | The per-campaign creative record is also what lets us attribute a lead back to the creative that produced it, and gives us a running record of what each affiliate is actually putting in market. This is internal analytics. **No partner screen may describe it**, and no partner-facing copy may imply we retain or analyse their creative beyond the approval itself. |
+
+The second is the reason the record must be **per campaign and time-stamped** rather than a single
+"latest creatives" blob per affiliate. A lead that arrived on 3 August has to resolve to the
+creative set that was approved and live on 3 August.
+
+### What needs building
+
+| Piece | Drives | Status |
+|---|---|---|
+| **File storage** — per affiliate, per campaign, versioned | the upload button | **NEEDS BUILDING.** Nothing here stores a file; `submitCreatives()` writes to sessionStorage so the three states can be walked through in review |
+| **Review queue** — our side, with approve / request-changes | the Pending → Approved transition | **NEEDS BUILDING.** Affiliates must never be able to approve their own creative: `submitCreatives()` always lands on `pending` |
+| **Status write-back** | the badge on both screens | **NEEDS BUILDING** |
+| **Effective-dated history** per campaign | lead → creative attribution (internal) | **NEEDS BUILDING.** Keep superseded versions; do not overwrite |
+| **File preview / download** of an approved creative | the "View" link | **NEEDS BUILDING** — currently says preview opens once storage is connected |
+
+Accepted upload types in the prototype: images, PDF, HTML, ZIP. Confirm the real list, a size cap,
+and virus scanning before this ships — it is an authenticated file upload from an external party.
+
+### States
+
+`CREATIVE_STATUS` in `data.js`: `none` → `pending` → `approved`, plus `changes` (changes needed).
+An affiliate can only ever cause `none → pending`.
+
+### Where it renders
+
+| Surface | Behaviour |
+|---|---|
+| **Targeting → Creatives** | Campaign picker (approval is per campaign) + the upload panel. This is the "I want to change my ads" route |
+| **Campaign setup → Creatives step** | Same panel inside the setup tracker. The step's own state follows the submission: nothing uploaded = to-do, uploaded = waiting on us, approved = done |
+| **A live campaign's page** | The creatives section defaults **open** and the step is relabelled *Creatives — approved*, because by then it is a record rather than a task and it is the one section a partner returns to |
+
+The email route to compliance was **removed from both screens**, not left alongside. Two routes
+means an inbox that bypasses the approval record, and a per-campaign history with holes in it.
+
 ## 7a. Partnership summary metrics & Targeting page
 
 Added August 6. All derived or config — nothing here needs a new admin-editable field beyond

@@ -111,9 +111,9 @@
     : 'Work them top to bottom — each step says whose move it is.';
 
   /* ---- step bodies -------------------------------------------------------- */
-  var mailCreatives = 'mailto:' + D.COMPLIANCE_CONTACT.email +
-    '?cc=logan@financialize.com&subject=' +
-    encodeURIComponent('Creatives for review — ' + c.name + ' (CID ' + c.id + ')');
+  /* The mailto that used to send creatives to compliance went with the upload
+     panel — offering both would leave an inbox route that bypasses the
+     approval record. */
 
   function mono(txt) {
     return '<div style="font-family:ui-monospace,monospace;font-size:12px;padding:9px 12px;' +
@@ -297,26 +297,25 @@
         '<button type="button" class="btn btn-primary" id="integrate-ready">My integration is ready</button>');
   }
 
+  /* Creatives are UPLOADED here now, not emailed (process change Aug 19).
+     The panel is the same component the Targeting page uses, so a partner
+     changing creatives later meets the identical control. The mail route is
+     gone rather than offered alongside — two routes means a stale inbox and
+     an approval record with holes in it. */
   function bodyCreatives() {
-    return '<p style="margin-top:0">We\'re flexible on creative: build your own, iterate as you ' +
-      'see fit. Two things we hold to — every creative gets a compliance review before it runs, ' +
-      'and <strong>whenever you change creatives, send the current set again</strong> so what\'s ' +
-      'on file always matches what\'s live.</p>' +
+    return '<p style="margin-top:0">Build your own and iterate as you see fit. The one thing we ' +
+      'hold to is that <strong>every creative gets a compliance review before it runs</strong> \u2014 ' +
+      'upload what you plan to use and we will come back to you, usually within two business ' +
+      'days.</p>' +
       '<ul class="checklist">' +
-      '<li><span class="mark">✓</span><span>Educational framing: financial security, income ' +
+      '<li><span class="mark">\u2713</span><span>Educational framing: financial security, income ' +
         'protection, retirement stability.</span></li>' +
-      '<li><span class="mark">✕</span><span>No fear tactics, urgency pressure, or guaranteed-' +
+      '<li><span class="mark">\u2715</span><span>No fear tactics, urgency pressure, or guaranteed-' +
         'returns claims.</span></li></ul>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
-      '<a class="btn btn-primary" href="' + mailCreatives + '">Email creatives to compliance</a>' +
-      (su.live || D.campaignSetup(state.partnerId, c.id).steps.filter(function (s) { return s.key === 'creatives'; })[0].state === 'done'
-        ? '' : '<button type="button" class="btn btn-sm" id="creatives-sent">I\'ve sent them</button>') +
-      '</div>' +
-      /* The button relies on a mail handler being registered; plenty of
-         browsers have none, so the addresses are quietly spelled out. */
-      '<p style="font-size:12.5px;color:var(--ink-muted);margin:8px 0 0">If the button ' +
-      'doesn\'t work, send the creatives to ' + A.esc(D.COMPLIANCE_CONTACT.name) + ' (' +
-      A.esc(D.COMPLIANCE_CONTACT.email) + ') and Logan (logan@financialize.com).</p>';
+      '<div id="creatives-panel" style="margin-top:12px"></div>' +
+      '<p style="font-size:12.5px;color:var(--ink-muted);margin:10px 0 0">Questions about a ' +
+      'creative go to ' + A.esc(D.COMPLIANCE_CONTACT.name) + ' (' +
+      A.esc(D.COMPLIANCE_CONTACT.email) + ').</p>';
   }
 
   function bodyTest() {
@@ -391,7 +390,13 @@
         (su.doneCount + 1) + ' of ' + su.steps.length + '</span>';
 
     document.getElementById('steps').innerHTML = su.steps.map(function (s, i) {
-      var open = !su.complete && su.current && su.current.key === s.key;
+      /* Normally the CURRENT step is the open one. Creatives is the
+         exception on a live campaign: the steps are a record by then, and
+         this is the one section a partner still comes back to — to see what
+         is approved, or to send a new version. Leaving it collapsed behind a
+         done-tick hides the thing they came for. */
+      var open = (!su.complete && su.current && su.current.key === s.key) ||
+                 (su.complete && s.key === 'creatives');
       return '<details class="setup-step"' + (open ? ' open' : '') + '>' +
         '<summary>' +
           '<span class="step-n' + (s.state === 'done' ? ' is-done' : '') + '">' +
@@ -452,9 +457,12 @@
     if (ir) ir.addEventListener('click', function () {
       D.saveSetupState(state.partnerId, c.id, { integrationReady: true }); render();
     });
-    var cs = document.getElementById('creatives-sent');
-    if (cs) cs.addEventListener('click', function () {
-      D.saveSetupState(state.partnerId, c.id, { creativesSent: true }); render();
+    /* The panel writes the submission itself; re-render so the step's own
+       state (todo -> waiting -> done) follows it. */
+    var cp = document.getElementById('creatives-panel');
+    if (cp) A.creativesPanel(cp, {
+      partnerId: state.partnerId, campaignId: c.id,
+      onChange: function () { render(); }
     });
     var ts = document.getElementById('test-sent');
     if (ts) ts.addEventListener('click', function () {

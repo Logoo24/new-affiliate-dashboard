@@ -72,12 +72,16 @@
         <div class="card-head">
           <div>
             <h2>Creatives</h2>
-            <p class="sub">Example ads that convert on each product, and the rules yours need to follow.</p>
+            <p class="sub">Upload what you plan to run, and see what is approved.</p>
           </div>
         </div>
         <div class="card-body">
-          <div id="creative-btns" style="display:flex;gap:10px;flex-wrap:wrap"></div>
-          <p id="creative-policy" style="font-size:13px;color:var(--ink-2);margin:14px 0 0"></p>
+          <div class="tile-label" style="margin-top:2px">Your creatives<span id="cre-scope-tip"></span></div>
+          <div id="cre-campaign-pick" style="margin:8px 0 12px"></div>
+          <div id="creatives-panel"></div>
+          <p id="creative-policy" style="font-size:13px;color:var(--ink-2);margin:16px 0 0;
+             padding-top:14px;border-top:1px solid var(--border)"></p>
+          <div id="creative-btns" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"></div>
         </div>
       </section>
 
@@ -827,10 +831,57 @@
   })();
 
   /* ---- creatives ----------------------------------------------------------
-     Example creatives and the guidelines doc. URLs are admin-set, same rule
-     as the document library: an unset link says so instead of dead-ending.
-     See ADMIN-MAPPING §7c. */
+     PROCESS CHANGE Aug 19: creatives are uploaded here and approved by us,
+     rather than emailed. Approval is PER CAMPAIGN — a creative cleared for an
+     annuity campaign is not automatically cleared for a life one — so the
+     panel is scoped by a campaign picker when the page filter is not already
+     narrowed to one.
+
+     Reference material (guidelines, example folders) sits below the upload
+     now rather than above it: the thing a partner came here to DO leads. */
   (function () {
+    var camps = D.activeCampaignsFor(state.partnerId)
+      .concat(D.setupCampaignsFor(state.partnerId));
+
+    document.getElementById('cre-scope-tip').innerHTML =
+      A.tip('Creatives are approved per campaign, so pick the campaign these belong to. ' +
+            'Approval is a compliance review — a creative cannot run until it clears.');
+
+    if (!camps.length) {
+      document.getElementById('cre-campaign-pick').innerHTML =
+        '<span style="color:var(--ink-muted);font-size:13.5px">' +
+        'Creative upload opens once you have a campaign set up.</span>';
+    } else {
+      var chosen = (state.campaignId !== 'all' &&
+        camps.filter(function (c) { return String(c.id) === String(state.campaignId); })[0])
+        || camps[0];
+
+      /* One campaign needs no picker — a select with a single option is a
+         control that cannot be used. */
+      if (camps.length > 1) {
+        document.getElementById('cre-campaign-pick').innerHTML =
+          '<label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;' +
+          'color:var(--ink-2)">Campaign <select id="cre-camp" class="field-select">' +
+          camps.map(function (c) {
+            return '<option value="' + A.esc(String(c.id)) + '"' +
+              (String(c.id) === String(chosen.id) ? ' selected' : '') + '>' +
+              A.esc(c.name) + '</option>';
+          }).join('') + '</select></label>';
+      } else {
+        document.getElementById('cre-campaign-pick').innerHTML =
+          '<span style="font-size:13px;color:var(--ink-2)">' + A.esc(chosen.name) + '</span>';
+      }
+
+      function mount(cid) {
+        A.creativesPanel(document.getElementById('creatives-panel'),
+          { partnerId: state.partnerId, campaignId: cid });
+      }
+      mount(chosen.id);
+
+      var sel = document.getElementById('cre-camp');
+      if (sel) sel.addEventListener('change', function () { mount(sel.value); });
+    }
+
     document.getElementById('creative-btns').innerHTML = D.CREATIVE_LINKS.map(function (c, i) {
       if (c.url) {
         return '<a class="btn' + (i === 0 ? ' btn-primary' : '') + '" href="' + A.esc(c.url) +
@@ -841,14 +892,15 @@
     }).join('');
 
     /* The policy, in the flexible register Logan set: iterate freely, but
-       compliance always has the current set. */
+       nothing runs until it has cleared review. The old copy asked partners
+       to email the current set to compliance; the upload above replaces that,
+       so pointing at both would leave two competing routes and a stale inbox. */
     document.getElementById('creative-policy').innerHTML =
-      'We\'re flexible on creative — build your own and iterate as you see fit. Every creative ' +
-      'gets a compliance review before it runs, and whenever you change creatives, send the ' +
-      'current set to <a href="mailto:' + D.COMPLIANCE_CONTACT.email +
-      '?cc=logan@financialize.com&subject=' + encodeURIComponent('Creatives for review') + '">' +
-      A.esc(D.COMPLIANCE_CONTACT.name) + '</a> (copying Logan) so what\'s on file always ' +
-      'matches what\'s live.';
+      '<strong>Build your own and iterate as you like.</strong> Every creative gets a ' +
+      'compliance review before it runs, so upload a new version here whenever you change ' +
+      'what you are running and we will turn it around. Anything not yet approved should not ' +
+      'be live. Questions go to <a href="mailto:' + D.COMPLIANCE_CONTACT.email + '">' +
+      A.esc(D.COMPLIANCE_CONTACT.name) + '</a>.';
 
     document.querySelectorAll('[data-creative]').forEach(function (b) {
       b.addEventListener('click', function () {

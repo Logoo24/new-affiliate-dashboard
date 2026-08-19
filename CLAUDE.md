@@ -260,6 +260,21 @@ Printing every input under every bar turned the card into a wall and buried the 
 partner reads. Parked inputs are still named in the list — knowing a thing is coming beats it
 silently not being there.
 
+### 5d. Creatives are uploaded and approved in the portal, never emailed
+
+Process change Aug 19. `FZApp.creativesPanel()` renders on the Targeting page (change your ads) and
+in the campaign setup tracker (get a new campaign approved) — one component, because it is one act.
+States are `none → pending → approved` (`CREATIVE_STATUS`), and **`submitCreatives()` always lands
+on `pending`**: nothing an affiliate does may approve their own creative.
+
+**Approval is per campaign**, so the record is keyed per campaign and must be effective-dated in
+production — a lead resolves to the creative set that was live on its date. That attribution is
+**internal**: partner-facing copy says compliance review and nothing else, and must never imply we
+retain or analyse their creative beyond the approval. ADMIN-MAPPING §8.
+
+The mailto route to compliance was removed from both screens rather than kept alongside — a second
+route means an inbox that bypasses the approval record.
+
 ### 6. Rejection reasons are one vocabulary, ours and theirs
 
 `REJECT_REASONS` in `data.js` is the affiliate-facing catalogue **and** the proposed internal

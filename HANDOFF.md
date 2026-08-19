@@ -546,6 +546,50 @@ plus a pointer to Targeting. It reads as one question again: how did I do in thi
 
 ---
 
+## Creatives move into the portal — NEW PROCESS, BIGGEST NEW CONNECTION POINT
+
+Decided Aug 19, Logan with Michael. **Creatives are no longer emailed. They are uploaded in the
+portal, reviewed by us, and marked approved before they can run.** That applies both when a
+campaign is being set up and every time an affiliate changes what they are running.
+
+To the affiliate this is one button — **Upload creatives for approval** — then a badge that reads
+**Pending review** until someone here approves it, and **Approved** after. Nothing an affiliate
+does can approve their own creative.
+
+### Why we are doing it, and what we say about it
+
+The partner-facing reason is compliance review, and it is genuine: nothing runs until it clears.
+
+**The second reason is internal and stays internal.** A per-campaign, time-stamped creative record
+is what lets us attribute a lead back to the creative that produced it, and gives us a running
+record of what each affiliate actually has in market. That is why the store has to be
+**effective-dated per campaign** rather than a single "latest creatives" folder per affiliate — a
+lead from 3 August must resolve to the set that was live on 3 August, so superseded versions are
+kept, never overwritten.
+
+**None of that appears on a partner screen, and no partner-facing copy may imply we retain or
+analyse their creative beyond the approval.** If that ever changes it is a legal and contractual
+question, not a copy question.
+
+### What has to be built
+
+Real file storage per affiliate per campaign with versioning; a review queue on our side with
+approve / request-changes; a status write-back to the portal; effective-dated history; and file
+preview or download for an approved creative. The prototype stores nothing — `submitCreatives()`
+writes to sessionStorage purely so the three states can be walked through in review.
+
+It is an **authenticated file upload from an external party**, so confirm the accepted types, a
+size cap and virus scanning before it ships. Full spec in ADMIN-MAPPING §8.
+
+### One thing that was removed, deliberately
+
+The mailto route to compliance is gone from both the Targeting page and the setup tracker rather
+than left running alongside the upload. Two routes means an inbox that bypasses the approval
+record and a per-campaign history with holes in it — which would defeat the attribution the record
+exists for.
+
+---
+
 ## AUDIT — can this score actually tell a good campaign from a bad one?
 
 Run Aug 19 against the loaded book: every campaign scored through the live engine, then compared

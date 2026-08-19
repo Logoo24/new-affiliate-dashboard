@@ -704,6 +704,145 @@
   }
 
   /** Small circular "i" that opens a modal. Appended to `host`. */
+  /**
+   * Scroll to a target and, if it is a <details>, open it first.
+   *
+   * SMOOTH SCROLLING IS NOT UNIVERSALLY HONOURED — some engines and some
+   * embedded viewers accept the call and never move. A navigation affordance
+   * that silently does nothing is worse than an abrupt jump, so if nothing
+   * has shifted shortly after, jump. Same fallback the Performance overview's
+   * Acceptance-rate tile uses.
+   */
+  function revealAndScroll(target) {
+    if (!target) return;
+    if (target.tagName === 'DETAILS') target.open = true;
+
+    /* Focus BEFORE scrolling, with preventScroll, so a keyboard user lands on
+       the section rather than watching it slide past. */
+    target.setAttribute('tabindex', '-1');
+    target.focus({ preventScroll: true });
+
+    var reduce = global.matchMedia &&
+      global.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) { target.scrollIntoView({ block: 'start' }); return; }
+
+    var before = global.pageYOffset;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(function () {
+      if (Math.abs(global.pageYOffset - before) < 2 &&
+          Math.abs(target.getBoundingClientRect().top) > 4) {
+        target.scrollIntoView({ block: 'start' });
+      }
+    }, 350);
+  }
+
+  /**
+   * @param opts.action  fn() — replaces the default modal. Use when the
+   *   explanation already lives somewhere on the page: two copies of the same
+   *   text drift apart, and the one in the modal is the one nobody updates.
+   */
+  /* ======================================================================
+     CREATIVES UPLOAD — one widget, two homes
+     ----------------------------------------------------------------------
+     Rendered on the Targeting page (change what you are running) and on the
+     per-campaign setup tracker (get a new campaign approved). Same component
+     both places, because it is the same act and a partner should not have to
+     learn it twice.
+
+     THREE STATES, and the affiliate can only ever cause the first transition:
+
+       none      -> "Upload creatives for approval"
+       pending   -> "Pending review", upload button becomes "Upload a new version"
+       approved  -> "Approved", the files are listed and viewable
+
+     NOTHING AN AFFILIATE DOES CAN APPROVE THEIR OWN CREATIVE. submit() always
+     lands on pending; approval is written by our side.
+
+     PARTNER-FACING COPY IS ABOUT COMPLIANCE REVIEW AND NOTHING ELSE. The
+     per-campaign creative record is also what lets us attribute leads back to
+     the creative that produced them, but that is internal (ADMIN-MAPPING §8)
+     and must not appear here in any form.
+     ====================================================================== */
+  function creativesPanel(host, opts) {
+    if (!host) return;
+    var partnerId = opts.partnerId, campaignId = opts.campaignId;
+
+    function render() {
+      var c = D.creativesFor(partnerId, campaignId);
+      var isNone = c.status === 'none';
+
+      var files = c.files.length
+        ? '<div style="margin-top:12px">' +
+            '<div class="tile-label">' + (c.status === 'approved' ? 'Approved creatives' : 'Submitted') +
+            '</div>' +
+            '<ul style="margin:6px 0 0;padding-left:18px;font-size:13.5px">' +
+            c.files.map(function (f) {
+              return '<li style="margin:3px 0">' + esc(f.name) +
+                (c.status === 'approved'
+                  ? ' <a href="#" data-cre-view="' + esc(f.name) + '">View</a>'
+                  : '') + '</li>';
+            }).join('') +
+            '</ul></div>'
+        : '';
+
+      var when = c.status === 'approved' && c.reviewedAt
+        ? 'Approved ' + fmtDate(c.reviewedAt) + '.'
+        : c.status === 'pending' && c.submittedAt
+        ? 'Uploaded ' + fmtDate(c.submittedAt) + '. Most reviews come back within two business days.'
+        : '';
+
+      host.innerHTML =
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+          '<button type="button" class="btn btn-primary" data-cre-upload>' +
+            (isNone ? 'Upload creatives for approval' : 'Upload a new version') +
+          '</button>' +
+          '<span class="badge ' + c.badge + '"><span class="dot"></span>' +
+            esc(c.statusLabel) + '</span>' +
+          (c.status === 'pending'
+            ? tip('We review every creative for compliance before it can run. You will see this ' +
+                  'switch to Approved here, and your account manager will let you know if ' +
+                  'anything needs changing.')
+            : '') +
+        '</div>' +
+        (when ? '<div class="tile-sub" style="margin-top:8px">' + when + '</div>' : '') +
+        (isNone
+          ? '<div class="tile-sub" style="margin-top:8px">Every creative gets a compliance ' +
+            'review before it runs. Upload what you plan to use and we will come back to you.</div>'
+          : '') +
+        files +
+        '<input type="file" multiple accept="image/*,.pdf,.html,.zip" ' +
+          'data-cre-file style="display:none">';
+
+      var fileInput = host.querySelector('[data-cre-file]');
+      host.querySelector('[data-cre-upload]').addEventListener('click', function () {
+        fileInput.click();
+      });
+      fileInput.addEventListener('change', function () {
+        var picked = Array.prototype.slice.call(fileInput.files || []);
+        if (!picked.length) return;
+        D.submitCreatives(partnerId, campaignId, picked);
+        render();
+        if (opts.onChange) opts.onChange();
+      });
+
+      host.querySelectorAll('[data-cre-view]').forEach(function (a2) {
+        a2.addEventListener('click', function (e) {
+          e.preventDefault();
+          openModal({
+            title: a2.dataset.creView,
+            html: '<div class="notice notice-info"><span class="ico">\u25c6</span><div>' +
+              'Preview opens here once creative storage is connected. Your account manager can ' +
+              'send you the approved file in the meantime.</div></div>',
+            returnFocusTo: a2
+          });
+        });
+      });
+    }
+
+    render();
+    return { refresh: render };
+  }
+
   function infoButton(host, opts) {
     if (!host) return;
     var b = document.createElement('button');
@@ -713,6 +852,7 @@
     b.setAttribute('aria-label', opts.ariaLabel || ('About ' + (opts.title || 'this')));
     b.title = opts.ariaLabel || ('About ' + (opts.title || 'this'));
     b.addEventListener('click', function () {
+      if (opts.action) { opts.action(); return; }
       openModal({
         title: opts.title,
         html: typeof opts.html === 'function' ? opts.html() : opts.html,
@@ -859,6 +999,8 @@
     tip: tip,
     tipHtml: tipHtml,
     infoButton: infoButton,
+    revealAndScroll: revealAndScroll,
+    creativesPanel: creativesPanel,
     viewToggle: viewToggle
   };
 

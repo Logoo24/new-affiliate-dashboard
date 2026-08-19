@@ -397,7 +397,10 @@ h3 { font-size: 15px; }
   color: var(--ink-muted);
   font-weight: 650;
 }
+/* .field-select gets the same treatment outside a filter row — used by the
+   creatives campaign picker, which is a control inside a card body. */
 .field select,
+.field-select,
 .field input[type="date"],
 .field input[type="text"],
 .field input[type="search"] {
