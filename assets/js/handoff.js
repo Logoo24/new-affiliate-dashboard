@@ -328,22 +328,17 @@
       today: 'Placeholder modals pointing at Logan.',
       storage: 'Not yet specified — Logan to define the flow before anything is built.' },
 
-    { group: 'Security', name: 'Duplicate lookup rate limiting', status: 'build',
-      controls: 'The daily cap on the duplicates page.',
-      today: 'A sessionStorage counter, purely so the affordance is visible.',
-      storage: 'Server-side, per partner, per day, with every query logged against the partner ' +
-               'ID.',
-      risk: 'This is a suppression-list API in disguise. A partner who can query without limit ' +
-            'can enumerate the database one number at a time. The containment must be in the ' +
-            'design, not the UI.' },
-
-    { group: 'Security', name: 'Suppression file delivery', status: 'build',
-      controls: 'The download on the duplicates page.',
-      today: 'Downloads a fabricated sample.',
-      storage: 'Authenticated, per-affiliate, rate-limited, HMAC keyed per partner.',
-      risk: 'CONFIRM WITH SAGAR FIRST — we already run an automatic suppression file and its ' +
-            'actual behaviour is unknown. The affiliate-facing version has to match it rather ' +
-            'than compete with it.' }
+    /* The duplicate-lookup rate-limiting entry that used to sit here went with
+       the lookup itself on Aug 19 — there is no query endpoint to contain. */
+    { group: 'Suppression', name: 'Per-affiliate suppression file', status: 'build',
+      controls: 'The one card on the duplicates page.',
+      today: 'Not connected — the card renders its not-connected state.',
+      storage: 'A file location on each affiliate record. One file per affiliate, not one ' +
+               'shared file. Last-updated and record count are optional extras.',
+      risk: 'Scope was cut back hard on Aug 19: it is a suppression file per affiliate and ' +
+            'nothing more. No lookup endpoint, no bulk tool, no HMAC keying, no manifest. Do ' +
+            'not restate format, cadence or hashing on the partner page unless someone has ' +
+            'confirmed it against the file that actually ships.' }
   ];
 
   /* Data-quality findings that block metrics regardless of what gets built. */

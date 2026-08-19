@@ -261,7 +261,7 @@
       label: 'Duplicate', group: 'duplicate', live: true,
       desc: 'This phone number already sold as a Priority or Hot lead within the last 365 ' +
             'days, so it is inside the exclusivity window and cannot be paid again.',
-      fix: 'Screen the number in Duplicate Check before you pay to acquire it.'
+      fix: 'Screen your list against your suppression file before you pay to acquire it.'
     },
 
     /* ---- NOT A REJECTION ------------------------------------------------
@@ -2472,26 +2472,11 @@
   /* Duplicate self-check                                                   */
   /* ---------------------------------------------------------------------- */
 
-  /* Returns a BOOLEAN and at most the month it last sold. No buyer, no price,
-     no lead id, no name. This is a suppression-list API in disguise, so the
-     response shape is the containment. */
-  function checkDuplicate(phoneRaw) {
-    var digits = String(phoneRaw || '').replace(/\D/g, '');
-    if (digits.length === 11 && digits.charAt(0) === '1') digits = digits.slice(1);
-    if (digits.length !== 10) return { ok: false, error: 'Enter a 10-digit US phone number.' };
+  /* checkDuplicate() and the bulk screening companion were removed Aug 19.
+     They implemented a single-number lookup endpoint that does not exist and
+     is not planned — see the suppression-file block below. Recoverable from
+     git history if that changes. */
 
-    var h = 0;
-    for (var i = 0; i < digits.length; i++) h = (h * 31 + digits.charCodeAt(i)) >>> 0;
-
-    var isDupe = (h % 100) < 22;
-    var result = { ok: true, phone: formatPhone(digits), duplicate: isDupe };
-    if (isDupe) {
-      var monthsAgo = h % 12;
-      var d = new Date(TODAY.getFullYear(), TODAY.getMonth() - monthsAgo, 1);
-      result.lastSoldMonth = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    }
-    return result;
-  }
 
   function formatPhone(d) {
     return '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6);
@@ -2763,28 +2748,6 @@
   }
 
   /* ---------------------------------------------------------------------- */
-  /* Suppression file                                                       */
-  /* ---------------------------------------------------------------------- */
-
-  /* WE ALREADY HAVE AN AUTOMATIC SUPPRESSION FILE. What is below is the shape
-     I am PROPOSING for how it is exposed to affiliates — every value here needs
-     confirming against what actually runs today. See ADMIN-MAPPING.md §7 and
-     the open-questions list on duplicate-check.html.
-
-     The bulk companion to checkDuplicate(): the whole exclusivity window as a
-     file, so an affiliate can screen a list before spending rather than one
-     number at a time.
-
-     ON HASHING — the part that is easy to get wrong. A plain SHA-256 of a
-     phone number is NOT meaningfully protected. The keyspace is about 10^10
-     and realistically far smaller, so every valid NANP number can be hashed
-     and rainbow-tabled in hours. If the file is meant to be unusable as a
-     marketing list, it has to be keyed: HMAC-SHA-256 under a per-affiliate
-     secret. The affiliate can still hash their own numbers and match, but the
-     file is worthless to anyone else, cannot be cross-referenced against
-     another affiliate's copy, and a leak is attributable to whoever it was
-     issued to. */
-  /* ---------------------------------------------------------------------- */
   /* Documents                                                              */
   /* ---------------------------------------------------------------------- */
   /* STANDS IN FOR AN ADMIN-MANAGED DOCUMENT LIBRARY. In production this is a
@@ -2862,58 +2825,60 @@
     });
   }
 
-  var SUPPRESSION = {
-    identifier: 'Phone number',
-    algorithm: 'HMAC-SHA-256, per-affiliate key',
-    normalization: '10-digit NANP · digits only · leading 1 stripped · no formatting',
-    windowDays: 365,
-    cadence: 'Rebuilt daily at 03:00 ET',
-    /* Entries must AGE OUT at 365 days. A file that only ever grows
-       over-suppresses, and the affiliate silently loses volume they were
-       entitled to send. */
-    expiry: 'Entries drop off automatically 365 days after the sale',
-    scope: 'Every number sold as Priority or Hot, across all sources',
-    recordCount: 1284739,
-    fileSizeLabel: '~41 MB gzipped',
-    sampleRows: 200
+  /* ======================================================================
+     SUPPRESSION FILE — one per affiliate, and that is all it is
+     ----------------------------------------------------------------------
+     REWRITTEN Aug 19 after Logan checked what actually runs. The earlier
+     version of this module proposed a whole apparatus — a single-number
+     lookup endpoint, a bulk screening tool, HMAC-SHA-256 digests under a
+     per-affiliate key, a nightly rebuild, a published manifest. None of that
+     exists and none of it is planned right now.
+
+     WHAT IT ACTUALLY IS: a suppression file, one per affiliate, that helps
+     them keep duplicates out of their own campaigns. That is the whole
+     feature. It is a CONNECTION POINT — the file lives on the affiliate's
+     record and this page surfaces it — so until that connection is wired
+     there is nothing to show and the page says exactly that.
+
+     DO NOT re-add format, cadence, hashing or record-count claims here
+     unless someone has confirmed them against the file that really ships. It
+     is easy to describe a file into existence and much harder to walk it
+     back once a partner has read it.
+
+     The 365-day Priority/Hot exclusivity window IS confirmed — it is a
+     commercial term already on the partner record and in REJECT_REASONS — so
+     that much can be stated plainly. */
+
+  /* Per-affiliate file. HARDCODED STAND-IN FOR AN ADMIN FIELD: in production
+     each affiliate's record carries the location of their own file. Absent or
+     null means not connected yet, which is the state everyone is in today. */
+  var ADMIN_SUPPRESSION_FILES = {
+    /* Uncomment to preview the connected state:
+       annuityherit: { url: 'https://example.com/file.csv',
+                       updatedAt: new Date(2026, 7, 19), recordCount: 184203 } */
   };
 
-  /* A deterministic sample of the file, so the FORMAT is reviewable without
-     shipping anything real. Its own PRNG so it cannot disturb lead generation.
-     These digests are fabricated — they are not hashes of real numbers. */
-  function suppressionSample(n) {
-    n = n || SUPPRESSION.sampleRows;
-    var r = mulberry32(778201);
-    var hex = '0123456789abcdef';
-    var out = [];
-    for (var i = 0; i < n; i++) {
-      var s = '';
-      for (var c = 0; c < 64; c++) s += hex.charAt(Math.floor(r() * 16));
-      out.push(s);
-    }
-    return out;
-  }
-
-  /* The header an affiliate needs in order to trust the file: when it was cut,
-     how many rows to expect, and the exact normalization both sides must agree
-     on. Row count is the cheap integrity check against a truncated download. */
-  function suppressionManifest(partnerId) {
-    var p = partner(partnerId);
+  /**
+   * This affiliate's suppression file, or the honest absence of one.
+   * Everything is null until the field is connected — no invented row count,
+   * no placeholder date, no sample download.
+   */
+  function suppressionFileFor(partnerId) {
+    var pid = resolvePartnerId(partnerId);
+    var cfg = ADMIN_SUPPRESSION_FILES[pid] || null;
     return {
-      generatedAt: new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate(), 3, 0, 0),
-      partner: p.name,
-      recordCount: SUPPRESSION.recordCount,
-      algorithm: SUPPRESSION.algorithm,
-      normalization: SUPPRESSION.normalization,
-      windowDays: SUPPRESSION.windowDays,
-      cadence: SUPPRESSION.cadence,
-      expiry: SUPPRESSION.expiry,
-      scope: SUPPRESSION.scope,
-      fileSizeLabel: SUPPRESSION.fileSizeLabel
+      partnerId: pid,
+      connected: !!(cfg && cfg.url),
+      url: (cfg && cfg.url) || null,
+      updatedAt: (cfg && cfg.updatedAt) || null,
+      recordCount: (cfg && cfg.recordCount != null) ? cfg.recordCount : null,
+      /* Confirmed commercial term, safe to state. */
+      windowDays: 365
     };
   }
 
   /* ======================================================================
+     COMPENSATION — earnings, statements, pixel unfires  /* ======================================================================
      COMPENSATION — earnings, statements, pixel unfires
      ----------------------------------------------------------------------
      Everything on the Compensation page. Three rules carried from the rest
@@ -3363,10 +3328,8 @@
     queryUnfires: queryUnfires,
     leadStatementsFor: leadStatementsFor,
     saveStatementUrl: saveStatementUrl,
-    checkDuplicate: checkDuplicate,
-    SUPPRESSION: SUPPRESSION,
-    suppressionSample: suppressionSample,
-    suppressionManifest: suppressionManifest,
+    suppressionFileFor: suppressionFileFor,
+    ADMIN_SUPPRESSION_FILES: ADMIN_SUPPRESSION_FILES,
     isMature: isMature,
     median: median,
 

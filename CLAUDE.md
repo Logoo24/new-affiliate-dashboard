@@ -52,7 +52,7 @@ at the bottom of each HTML file.
 | `compensation.html` | — | Compensation — earnings for the window, billing terms, monthly statements, pixel unfire report |
 | `performance.html` | A | Performance overview |
 | `leads.html` | B | Lead table + CSV export |
-| `duplicate-check.html` | C | 365-day phone lookup |
+| `duplicate-check.html` | C | Duplicates & suppression — one card, the affiliate's own suppression file |
 | `health.html` | D | Health scorecard |
 | `setup.html` | E | Setup & docs hub — campaign list with setup status, document library, contact |
 | `campaign-setup.html` | E2 | Per-campaign setup tracker (onboarding steps 6–10, LP vs API paths). The pixel URL here is the only affiliate-editable field in the portal |

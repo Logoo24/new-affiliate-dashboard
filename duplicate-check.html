@@ -8,6 +8,19 @@
 </head>
 <body>
 
+<!--
+  ONE CARD, ON PURPOSE.
+
+  Rewritten Aug 19. This page previously carried a single-number lookup, a
+  bulk screening tool with a rate-limit quota, a "what this returns" boundary
+  card, and an internal open-questions card — all of it built around an API
+  that does not exist and is not planned. Logan checked what actually runs:
+  it is a suppression file, one per affiliate, and that is the whole feature.
+
+  The page is deliberately thin. It gets built out later; until then it says
+  one true thing rather than four speculative ones.
+-->
+
 <div class="app">
   <aside class="sidebar" data-shell="sidebar"></aside>
 
@@ -16,242 +29,27 @@
 
     <div class="content">
 
-      <div class="notice notice-info">
-        <span class="ico">◆</span>
-        <div>
-          Everything here checks against numbers sold as <strong>Priority or Hot in the last
-          365 days</strong> — the exclusivity window for those two tiers.
-        </div>
-      </div>
-
-      <!-- The file leads the page: it is the bulk tool that prevents
-           duplicates before money is spent; the lookups below are the
-           one-at-a-time companion. -->
       <section class="card">
         <div class="card-head">
           <div>
-            <h2>Suppression file<span id="supp-tip-host"></span></h2>
-            <p class="sub">Every suppressed number as one file, rebuilt nightly. Match your list against it before you buy.</p>
+            <h2>Your suppression file<span id="supp-tip-host"></span></h2>
+            <p class="sub">Screen your lists against it before you buy.</p>
           </div>
         </div>
+
         <div class="card-body">
-          <div style="display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center">
-            <div id="supp-download"></div>
-            <div id="supp-chips" style="display:flex;gap:8px;flex-wrap:wrap"></div>
-          </div>
-          <div style="padding-top:10px" id="supp-toast"></div>
+          <p style="margin:0 0 14px;max-width:70ch">
+            Your suppression file is a list of phone numbers that are already inside their
+            exclusivity window on your account — numbers we cannot pay for again yet. Matching
+            your lists against it before you buy is the cheapest way to keep duplicates out of
+            your campaigns: a duplicate costs you the acquisition and earns nothing, and it is
+            consistently one of the largest rejection reasons on the account.
+          </p>
 
-          <div class="grid-2" style="margin-top:16px">
-            <div>
-              <h3 style="margin-bottom:8px">How to use it</h3>
-              <ul class="checklist">
-                <li><span class="mark">1</span><span><strong>Normalize</strong> your numbers the
-                  same way we do<span id="tip-norm"></span></span></li>
-                <li><span class="mark">2</span><span><strong>Hash</strong> them with your account
-                  key<span id="tip-hash"></span></span></li>
-                <li><span class="mark">3</span><span><strong>Suppress every match</strong> — do
-                  not acquire, do not post</span></li>
-                <li><span class="mark">4</span><span><strong>Re-pull daily</strong><span id="tip-repull"></span></span></li>
-              </ul>
-            </div>
-            <div>
-              <h3 style="margin-bottom:8px">File details</h3>
-              <div class="table-wrap">
-                <table class="data" id="supp-manifest"></table>
-              </div>
-            </div>
-          </div>
-
-          <div class="mocknote">
-            <strong>Mock-up.</strong> The download returns a small <strong>sample</strong> with
-            fabricated digests so the format is reviewable. The real file is
-            <span id="supp-size"></span> and must be served authenticated, per affiliate, and
-            rate-limited like the lookup API.
-          </div>
+          <div id="supp-state"></div>
         </div>
+
         <div class="card-foot" id="supp-foot"></div>
-      </section>
-
-      <div class="grid-2">
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>Single lookup</h2>
-              <p class="sub">One number, one answer.</p>
-            </div>
-          </div>
-          <div class="card-body">
-            <form class="dupe-form" id="single-form">
-              <div class="field" style="flex:1">
-                <label for="phone">Phone number</label>
-                <input type="text" id="phone" name="phone" placeholder="(555) 213-4470"
-                       autocomplete="off" inputmode="tel" style="min-width:220px">
-              </div>
-              <button type="submit" class="btn btn-primary">Check</button>
-            </form>
-            <div id="single-result"></div>
-            <div class="mocknote">
-              Try a few — roughly one in five comes back as a duplicate in this mock-up.
-            </div>
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="card-head">
-            <div>
-              <h2>Bulk check</h2>
-              <p class="sub">Paste a list or upload a CSV. One number per line.</p>
-            </div>
-          </div>
-          <div class="card-body">
-            <div class="field" style="width:100%">
-              <label for="bulk">Numbers</label>
-              <textarea id="bulk" rows="5" style="width:100%;font-family:ui-monospace,monospace;
-                font-size:12px;padding:8px;border:1px solid var(--border-strong);
-                border-radius:6px;background:var(--surface-1);color:var(--ink)"
-                placeholder="5552134470&#10;555-889-1203&#10;(555) 442-9987"></textarea>
-            </div>
-            <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
-              <button class="btn btn-primary" id="bulk-run">Check list</button>
-              <label class="btn btn-sm" style="cursor:pointer;margin:0">
-                Upload CSV<input type="file" id="bulk-file" accept=".csv,.txt" style="display:none">
-              </label>
-              <button class="btn btn-sm" id="bulk-export" style="display:none">Export results</button>
-              <span class="spacer" style="flex:1"></span>
-              <span class="quota" id="quota"></span>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <section class="card" id="bulk-card" style="display:none">
-        <div class="card-head">
-          <div>
-            <h2>Bulk results</h2>
-            <p class="sub" id="bulk-sub"></p>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table class="data" id="bulk-table"></table>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <div>
-            <h2>What this returns, and what it does not</h2>
-            <p class="sub">Worth stating plainly, because the boundary is the point.</p>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="grid-2">
-            <div>
-              <h3 style="margin-bottom:8px;color:var(--good-text)">Returned</h3>
-              <ul class="checklist">
-                <li><span class="mark">✓</span><span>Yes or no — has this number sold as Priority or Hot in the last 365 days</span></li>
-                <li><span class="mark">✓</span><span>At most, the month it last sold</span></li>
-              </ul>
-            </div>
-            <div>
-              <h3 style="margin-bottom:8px;color:var(--critical-text)">Never returned</h3>
-              <ul class="checklist">
-                <li><span class="mark">✕</span><span>Buyer name, sale price, or lead ID</span></li>
-                <li><span class="mark">✕</span><span>Consumer name, address, or any other field</span></li>
-                <li><span class="mark">✕</span><span>Which affiliate originally sent the lead</span></li>
-                <li><span class="mark">✕</span><span>Anything at all for a number that has not sold</span></li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- INTERNAL. Reviewer-facing only, like every .notice-mock in this
-           prototype. Strip before a partner sees this screen. The
-           .is-internal treatment exists so no screenshot of this page can
-           pass the card off as partner content. -->
-      <section class="card is-internal">
-        <div class="card-head">
-          <div>
-            <h2>Open — suppression file needs Sagar</h2>
-            <p class="sub">Internal note, not partner-facing. Everything above is proposed shape, not confirmed behaviour.</p>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="notice notice-mock"><span class="ico">✎</span><div>
-            <strong>We already run an automatic suppression file. I do not yet know how it
-            actually works</strong> — cadence, format, scope, who can reach it, or whether
-            affiliates get it at all today. Everything in the card above is the shape I am
-            proposing. <strong>Confirm with Sagar before any of it is built</strong>, because if
-            the live file already differs, the affiliate-facing version has to match it rather
-            than compete with it.
-          </div></div>
-
-          <div class="notice notice-mock"><span class="ico">✎</span><div>
-            <strong>Containment is a design constraint, not a UI one.</strong> This is a
-            suppression-list API in disguise: return a boolean, rate-limit per partner per day,
-            log every query with the partner ID, and reject bulk jobs above the cap rather than
-            truncating them silently. A partner who can query without limit can enumerate the
-            database one number at a time. <em>Moved here from the partner-facing card above —
-            it is engineering direction, not partner copy.</em>
-          </div></div>
-
-          <h3 style="margin-bottom:8px">Questions for Sagar</h3>
-          <ul class="checklist">
-            <li><span class="mark">?</span><span><strong>What identifier does it key on</strong> —
-              phone only, or email too? Are both normalized, and how?</span></li>
-            <li><span class="mark">?</span><span><strong>Plaintext or hashed?</strong> If hashed,
-              which algorithm, and is it salted or keyed? A bare SHA-256 of a phone number is
-              brute-forceable — the keyspace is small enough to rainbow-table in hours, so an
-              unkeyed digest is not real protection.</span></li>
-            <li><span class="mark">?</span><span><strong>Global or per-affiliate?</strong> A shared
-              global file tells every affiliate what every other affiliate has sold. A per-affiliate
-              HMAC key fixes that and makes a leak attributable.</span></li>
-            <li><span class="mark">?</span><span><strong>Do entries expire at 365 days?</strong> If
-              the file only ever grows it over-suppresses, and affiliates quietly lose volume they
-              were entitled to send.</span></li>
-            <li><span class="mark">?</span><span><strong>How is it delivered and how often</strong>
-              — SFTP drop, signed URL, API? Full file or deltas? Full is self-healing; a missed
-              delta drifts silently.</span></li>
-            <li><span class="mark">?</span><span><strong>Is the file built from the same source as
-              the duplicate rejection rule?</strong> This is the one that matters most — see
-              below.</span></li>
-            <li><span class="mark">?</span><span><strong>Who can reach it today,</strong> and is
-              that access authenticated, logged and rate-limited?</span></li>
-          </ul>
-
-          <h3 style="margin:18px 0 8px">Proposal — close the loop on duplicate rejections</h3>
-          <p style="color:var(--ink-2);font-size:14px;margin-top:0">
-            When we reject a lead as a duplicate, that number should end up in the suppression
-            file. <strong>But it is worth being precise about why, because in the healthy case it
-            is already there.</strong> A duplicate rejection means the number is inside the
-            exclusivity window by definition — so if the file were complete, current, and correctly
-            matched, that lead should never have been sent. Every duplicate rejection is therefore
-            evidence of one of four things:
-          </p>
-          <ul class="checklist">
-            <li><span class="mark">1</span><span>The affiliate is not using the file at all.</span></li>
-            <li><span class="mark">2</span><span>They are matching against a stale copy.</span></li>
-            <li><span class="mark">3</span><span><strong>Normalization mismatch</strong> — leading 1s,
-              extensions, formatting. Their number and ours hash differently, so a real entry
-              silently fails to match. This is the most common cause and the least visible.</span></li>
-            <li><span class="mark">4</span><span><strong>The file does not cover everything the
-              rejection rule covers.</strong> Only this one is actually fixed by adding the number
-              — the other three are integration faults.</span></li>
-          </ul>
-          <p style="color:var(--ink-2);font-size:14px">
-            So the ask is: <strong>write it to the file, and record which of the four it was.</strong>
-            The write is cheap insurance; the classification is the valuable part, because it turns
-            every duplicate rejection into a free integrity test of the file. If an affiliate adopts
-            the file and their duplicate rate does not fall, something is broken — and today we
-            would have no way to tell which thing.
-          </p>
-          <div class="mocknote">
-            Worth measuring either way: <strong>duplicate rejection rate before and after an
-            affiliate starts consuming the file.</strong> That single number tells us whether the
-            file is doing its job, and it is currently the largest rejection reason on the Heritage
-            account.
-          </div>
-        </div>
       </section>
 
     </div>
@@ -270,221 +68,53 @@
   var D = FZData, A = FZApp;
 
   var state = A.params();
+
   A.shell(state, {
     active: 'duplicate-check.html',
     title: 'Duplicates & suppression',
-    subtitle: 'Screen numbers against the 365-day Priority/Hot exclusivity window.'
+    subtitle: 'Keep numbers you cannot be paid for out of your campaigns.'
   });
 
-  /* Rate limiting is mocked here with a session counter purely so the quota
-     affordance is visible. In production it is enforced server-side, per
-     partner, and it is the actual containment — not this. */
-  var DAILY_CAP = 500;
-  var used = parseInt(sessionStorage.getItem('fz_dupe_used') || '0', 10);
-
-  function paintQuota() {
-    document.getElementById('quota').textContent =
-      A.fmtInt(used) + ' / ' + A.fmtInt(DAILY_CAP) + ' lookups used today';
-  }
-  function spend(n) {
-    used = Math.min(DAILY_CAP, used + n);
-    sessionStorage.setItem('fz_dupe_used', String(used));
-    paintQuota();
-  }
-  paintQuota();
-
-  /* ---- single lookup --------------------------------------------------- */
-  document.getElementById('single-form').addEventListener('submit', function (e) {
-    e.preventDefault();
-    var host = document.getElementById('single-result');
-    var value = document.getElementById('phone').value;
-
-    if (used >= DAILY_CAP) {
-      host.innerHTML = '<div class="dupe-result"><span class="dupe-icon">▲</span><div>' +
-        '<div class="dupe-verdict">Daily lookup limit reached</div>' +
-        '<div class="dupe-meta">Resets at midnight ET. Contact your account manager to raise the cap.</div>' +
-        '</div></div>';
-      return;
-    }
-
-    var res = D.checkDuplicate(value);
-    if (!res.ok) {
-      host.innerHTML = '<div class="dupe-result"><span class="dupe-icon">▲</span><div>' +
-        '<div class="dupe-verdict">' + A.esc(res.error) + '</div></div></div>';
-      return;
-    }
-    spend(1);
-
-    host.innerHTML = res.duplicate
-      ? '<div class="dupe-result" style="border-color:var(--critical)">' +
-          '<span class="dupe-icon" style="color:var(--critical)">✕</span><div>' +
-          '<div class="dupe-verdict">Duplicate — do not acquire</div>' +
-          '<div class="dupe-meta">' + A.esc(res.phone) + ' sold as Priority or Hot in ' +
-            A.esc(res.lastSoldMonth) + '. It is inside the 365-day exclusivity window and ' +
-            'will be rejected at post.</div>' +
-          '</div></div>'
-      : '<div class="dupe-result" style="border-color:var(--good)">' +
-          '<span class="dupe-icon" style="color:var(--good)">✓</span><div>' +
-          '<div class="dupe-verdict">Clear</div>' +
-          '<div class="dupe-meta">' + A.esc(res.phone) + ' has not sold as Priority or Hot in the ' +
-            'last 365 days. Safe to acquire.</div>' +
-          '</div></div>';
-  });
-
-  /* ---- suppression file ------------------------------------------------- */
   (function () {
-    var man = D.suppressionManifest(state.partnerId);
+    var file = D.suppressionFileFor(state.partnerId);
 
     document.getElementById('supp-tip-host').innerHTML =
-      A.tip('A file of every number currently inside the 365-day Priority/Hot exclusivity ' +
-            'window. Match your list against it before you buy traffic and a duplicate never ' +
-            'costs you an acquisition.');
+      A.tip('This file is specific to your account — it covers the numbers that matter for your ' +
+            'campaigns, not everyone’s. A number stays on it for ' + file.windowDays +
+            ' days after it sold as Priority or Hot, then drops off on its own and can be sent ' +
+            'again.');
 
-    /* The three facts that decide whether to re-download, as chips beside the
-       button. The rest of the metadata stays in the details table. */
-    document.getElementById('supp-chips').innerHTML =
-      '<span class="badge badge-good"><span class="dot"></span>Updated ' +
-        A.esc(A.fmtDate(man.generatedAt)) + '</span>' +
-      '<span class="badge">' + A.fmtInt(man.recordCount) + ' numbers</span>' +
-      '<span class="badge">Rebuilt nightly</span>';
+    var host = document.getElementById('supp-state');
 
-    /* Manifest table — the metadata an affiliate needs to trust the file. */
-    var rows = [
-      ['Generated', A.fmtDateTime(man.generatedAt) + ' ET'],
-      ['Records', A.fmtInt(man.recordCount)],
-      ['Identifier', D.SUPPRESSION.identifier],
-      ['Hashing', man.algorithm],
-      ['Normalization', man.normalization],
-      ['Window', man.windowDays + ' days, entries age out automatically'],
-      ['Rebuilt', man.cadence],
-      ['Scope', man.scope]
-    ];
-    document.getElementById('supp-manifest').innerHTML = '<tbody>' + rows.map(function (r) {
-      return '<tr><th style="width:38%;text-align:left;font-weight:600">' + A.esc(r[0]) + '</th>' +
-        '<td style="font-size:12.5px">' + A.esc(r[1]) + '</td></tr>';
-    }).join('') + '</tbody>';
+    if (file.connected) {
+      /* Connected: the file is the whole point of the card, so it leads. */
+      host.innerHTML =
+        '<a class="btn btn-primary btn-lg" href="' + A.esc(file.url) + '">' +
+          '↓ Download your suppression file</a>' +
+        '<div style="margin-top:10px;color:var(--ink-2);font-size:13.5px">' +
+          (file.updatedAt ? 'Updated ' + A.fmtDate(file.updatedAt) : '') +
+          (file.updatedAt && file.recordCount != null ? ' · ' : '') +
+          (file.recordCount != null ? A.fmtInt(file.recordCount) + ' numbers' : '') +
+        '</div>';
+    } else {
+      /* NOT CONNECTED. Blank plus the reason, never a sample file or an
+         invented row count — see CLAUDE.md §4b. When the field is wired on
+         the affiliate record this card populates on its own. */
+      host.innerHTML =
+        '<div class="notice notice-info"><span class="ico">◆</span><div>' +
+          '<strong>Not connected yet.</strong> Your file is being set up. Once it is linked to ' +
+          'your account it will appear here to download, and you will be able to re-pull it ' +
+          'whenever you need a fresh copy. In the meantime your account manager can send you a ' +
+          'copy on request.' +
+        '</div></div>';
+    }
 
-    /* The detail behind each step lives in a hover box, not in the step. */
-    document.getElementById('tip-norm').innerHTML =
-      A.tip('10 digits, digits only, leading 1 stripped, no formatting. Most failed matches ' +
-            'are a normalization mismatch, not a missing entry.');
-    document.getElementById('tip-hash').innerHTML =
-      A.tip('Use the algorithm named in the file details and the key issued to your account.');
-    document.getElementById('tip-repull').innerHTML =
-      A.tip('Numbers sell continuously, so the file changes every night. Check the row count ' +
-            'against the file details — a short file is a truncated download, not a shrinking window.');
-
-    document.getElementById('supp-size').textContent = man.fileSizeLabel;
     document.getElementById('supp-foot').innerHTML =
-      'Issued to <strong>' + A.esc(man.partner) + '</strong> under your account key. ' +
-      'Do not redistribute — the file is watermarked per affiliate.';
-
-    /* Download — a SAMPLE with fabricated digests, so the format is
-       reviewable without anything real leaving the mock. */
-    document.getElementById('supp-download').innerHTML =
-      '<button type="button" class="btn btn-primary btn-lg" id="supp-btn">↓ Download suppression file</button>';
-    document.getElementById('supp-btn').addEventListener('click', function () {
-      var sample = D.suppressionSample();
-      var lines = [
-        '# Financialize suppression file — SAMPLE (' + sample.length + ' of ' +
-          A.fmtInt(man.recordCount) + ' records, digests fabricated)',
-        '# generated=' + A.isoDate(man.generatedAt) + 'T03:00:00-04:00',
-        '# partner=' + man.partner,
-        '# algorithm=' + man.algorithm,
-        '# normalization=' + man.normalization,
-        '# window_days=' + man.windowDays,
-        '# records=' + A.fmtInt(man.recordCount).replace(/,/g, ''),
-        'digest'
-      ].concat(sample);
-      var blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8;' });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = 'financialize_suppression_sample_' + A.isoDate(D.TODAY) + '.txt';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-      var host = document.getElementById('supp-toast');
-      host.innerHTML = '<div class="export-toast"><span>✓</span><span>Downloaded sample — ' +
-        sample.length + ' fabricated digests. The real file is ' + A.esc(man.fileSizeLabel) +
-        ' and served per affiliate. <span style="color:var(--ink-muted)">Mock-up.</span></span></div>';
-      setTimeout(function () { host.innerHTML = ''; }, 8000);
-    });
+      '<span>Duplicates are counted on the ' + file.windowDays +
+      '-day Priority/Hot exclusivity window. You can see how many of your leads were rejected ' +
+      'as duplicates on your <a href="' + A.linkTo('performance.html', state) +
+      '">Performance overview</a>.</span>';
   })();
-
-  /* ---- bulk ------------------------------------------------------------ */
-  var lastResults = [];
-
-  document.getElementById('bulk-file').addEventListener('change', function (e) {
-    var file = e.target.files[0];
-    if (!file) return;
-    var reader = new FileReader();
-    reader.onload = function () {
-      document.getElementById('bulk').value = String(reader.result);
-    };
-    reader.readAsText(file);
-  });
-
-  document.getElementById('bulk-run').addEventListener('click', function () {
-    var raw = document.getElementById('bulk').value || '';
-    /* Accept a bare list or a CSV — take the first field of each line. */
-    var lines = raw.split(/[\r\n]+/)
-      .map(function (l) { return l.split(',')[0].trim(); })
-      .filter(function (l) { return l.length; });
-
-    if (!lines.length) return;
-
-    var remaining = DAILY_CAP - used;
-    var capped = lines.length > remaining;
-    var batch = lines.slice(0, Math.max(0, remaining));
-
-    lastResults = batch.map(function (n) { return D.checkDuplicate(n); });
-    spend(batch.length);
-
-    var dupes = lastResults.filter(function (r) { return r.ok && r.duplicate; }).length;
-    var invalid = lastResults.filter(function (r) { return !r.ok; }).length;
-
-    document.getElementById('bulk-card').style.display = '';
-    document.getElementById('bulk-export').style.display = '';
-    document.getElementById('bulk-sub').innerHTML =
-      A.fmtInt(batch.length) + ' checked · <strong>' + A.fmtInt(dupes) + ' duplicates</strong> · ' +
-      A.fmtInt(batch.length - dupes - invalid) + ' clear' +
-      (invalid ? ' · ' + A.fmtInt(invalid) + ' unreadable' : '') +
-      (capped
-        ? ' · <span style="color:var(--critical-text)">' + A.fmtInt(lines.length - batch.length) +
-          ' not checked — daily cap reached</span>'
-        : '');
-
-    var head = '<thead><tr><th>Number</th><th>Result</th><th>Last sold</th></tr></thead>';
-    var body = lastResults.map(function (r, i) {
-      if (!r.ok) {
-        return '<tr><td class="lead-id">' + A.esc(batch[i]) + '</td>' +
-          '<td><span class="badge"><span class="dot"></span>Unreadable</span></td><td>—</td></tr>';
-      }
-      return '<tr><td class="lead-id">' + A.esc(r.phone) + '</td>' +
-        '<td>' + (r.duplicate
-          ? '<span class="badge badge-crit"><span class="dot"></span>Duplicate</span>'
-          : '<span class="badge badge-good"><span class="dot"></span>Clear</span>') + '</td>' +
-        '<td>' + (r.duplicate ? A.esc(r.lastSoldMonth) : '—') + '</td></tr>';
-    }).join('');
-
-    document.getElementById('bulk-table').innerHTML = head + '<tbody>' + body + '</tbody>';
-  });
-
-  document.getElementById('bulk-export').addEventListener('click', function () {
-    A.exportCsv(lastResults.filter(function (r) { return r.ok; }), [
-      { label: 'Phone', value: function (r) { return r.phone; } },
-      { label: 'Duplicate', value: function (r) { return r.duplicate ? 'YES' : 'NO'; } },
-      { label: 'Last sold', value: function (r) { return r.duplicate ? r.lastSoldMonth : ''; } }
-    ], 'duplicate-check-results.csv');
-  });
-
-
-  /* Sortable / resizable / configurable columns. Every table on this page
-     is fully rendered, so sorting the DOM sorts the whole dataset for the
-     selected window - not just the visible rows. */
-  if (window.FZTable) FZTable.enhanceAll();
 
 })();
 </script>

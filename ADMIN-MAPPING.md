@@ -912,24 +912,42 @@ launderable by any other pillar.
 
 ## 7. Suppression file
 
-**A suppression file already runs today — automatic, per Logan. Nothing in this section is
-confirmed against it yet.** The card on `duplicate-check.html` is the *proposed* affiliate-facing
-shape, and the open questions are listed on that page in the internal "needs Sagar" section.
-**Talk to Sagar before building any of this** — if the live file differs, the affiliate-facing
-version must match it, not compete with it.
+**Rewritten Aug 19, after Logan checked what actually runs. It is simpler than this document
+previously claimed.**
+
+It is **one suppression file per affiliate**, and that is the whole feature. It helps an affiliate
+keep duplicates out of their own campaigns. There is no lookup endpoint, no bulk screening tool,
+no per-affiliate HMAC key, no published manifest — the earlier version of this section specified
+all of that, and none of it exists or is planned right now.
+
+### What needs building
 
 | Piece | Drives | Status | Notes |
 |---|---|---|---|
-| The nightly build itself | everything | **EXISTS** (per Logan) | Mechanics unknown — cadence, format, scope, delivery all unconfirmed |
-| Per-affiliate access (auth, logging, rate limit) | the download button | **UNKNOWN** | Who can reach it today? |
-| Per-affiliate HMAC key | leak attribution + protection | **UNKNOWN / likely NEEDS BUILDING** | A bare SHA-256 of a phone number is rainbow-tableable in hours; only a keyed hash is real protection |
-| 365-day expiry of entries | not over-suppressing | **UNKNOWN** | A grow-only file silently costs affiliates volume they were entitled to send |
-| Manifest (generated-at, row count, normalization) | affiliate-side integrity check | **NEEDS BUILDING** | Row count is the cheap truncation check |
-| Duplicate-rejection → file write, with cause classification | closing the loop | **NEEDS BUILDING** | See the proposal on `duplicate-check.html`: a duplicate rejection should already be in the file, so each one is evidence of a gap — classify which (not using file / stale copy / normalization mismatch / coverage gap) |
-| Duplicate-rate before/after file adoption | measuring whether the file works | **NEEDS BUILDING** | Single most useful metric; duplicates are Heritage's largest rejection reason |
+| **A file location on each affiliate's record** | the whole card on `duplicate-check.html` | **NEEDS BUILDING** | This is the connection point. One file per affiliate, not one shared file. `ADMIN_SUPPRESSION_FILES[partnerId]` in `data.js` is the hardcoded stand-in |
+| Last-updated timestamp | "Updated 19 Aug" under the download | **NEEDS BUILDING** | Optional — the card renders without it |
+| Record count | integrity check against a truncated download | **NEEDS BUILDING** | Optional |
 
-In the mock: `SUPPRESSION`, `suppressionSample()`, `suppressionManifest()` in `data.js`. The
-download button serves a small sample with fabricated digests so the format is reviewable.
+`suppressionFileFor(partnerId)` returns all of these as **null until connected**, and the card
+renders a *"Not connected yet"* state rather than a sample file or an invented row count (§2b).
+When the field is wired the card populates on its own — no copy change.
+
+### What the page may state as fact
+
+Only the **365-day Priority/Hot exclusivity window**, because that is a confirmed commercial term
+already on the partner record and in `REJECT_REASONS`.
+
+**Do not re-add format, cadence, hashing or record-count claims** unless someone has confirmed
+them against the file that really ships. It is easy to describe a file into existence and much
+harder to walk it back once a partner has read it — that is exactly what happened to the previous
+version of this section.
+
+### The page is deliberately thin
+
+`duplicate-check.html` is one card. It gets built out later; for now it says one true thing rather
+than four speculative ones. Removed in the rewrite: the single-number lookup, the bulk check with
+its rate-limit quota, the "what this returns and what it does not" boundary card, and the internal
+open-questions card. `checkDuplicate()` went with them and is recoverable from git history.
 
 ## 7a. Partnership summary metrics & Targeting page
 
@@ -1095,7 +1113,6 @@ Things the dashboard shows or will show that have no home yet:
 
 | Item | Note |
 |---|---|
-| Duplicate-check rate limiting | Per partner per day, plus a query log with partner ID. This is a suppression-list API in disguise — a partner who can query without limit can enumerate the database one number at a time |
 | Google Drive export | Needs a Drive OAuth scope per partner, a service account, and a destination folder convention. **None of it exists**; the CSV path is the only real one |
 | Setup-flow scope | Needs confirming with Michael, and scoping against Marc Heberling's automated pixel-validation work — this should be the affiliate-facing front end to his backend, not a second implementation |
 | Module F — internal Lead Activation view | Courtney's screen: call attempts, dispositions, queue state, affiliate-submitted nurture leads. Phase 2 |

@@ -39,7 +39,7 @@ These are the minimum bar. Everything else is upside.
 | `partnership.html` | 0 | Partnership summary — who they are, active campaigns with CID and comp model, account terms, our operating hours. **The landing screen: the base URL routes here** (`index.html` is only a forwarding stub in the mock) |
 | `performance.html` | A | Performance overview — date range, headline tiles, daily charts, campaign and sub-ID breakdown, rejection reasons |
 | `leads.html` | B | Lead table — every column available to that affiliate, exact system values, CSV export |
-| `duplicate-check.html` | C | **Duplicates & suppression** — the suppression file leads the page, then the 365-day Priority/Hot lookup, single and bulk |
+| `duplicate-check.html` | C | **Duplicates & suppression** — one card: the affiliate's own suppression file. Deliberately thin, see below |
 | `health.html` | D | Health scorecard — the score dial as the hero, pillar breakdown, 90-day trend, and a collapsible "how the score is built" |
 | `targeting.html` | — | Call-centre hours, ideal send windows and day split, lead criteria, and the top-10 states we need |
 | `setup.html` | E | **Setup & docs** — a hub: the campaign list with per-campaign setup status, the document library, and who to contact |
@@ -736,12 +736,19 @@ free improvement this widget exists to surface.
   that works cleanly. The dashboard shows this as a caveat, but only to partners actually running
   western states.
 
-**Duplicate check.** Returns a boolean and at most the month it last sold. Nothing else. This is
-a suppression-list API in disguise, so the containment has to be in the design: rate-limit per
-partner per day, log every query with the partner ID, and reject oversized bulk jobs rather than
-truncating them silently. A partner who can query without limit can enumerate the database one
-number at a time. The 365-day window is the Priority/Hot exclusivity period, so the feature is
-internally consistent with the existing rules.
+**Duplicates & suppression — cut back to one card, Aug 19.** This page previously carried a
+single-number lookup, a bulk screening tool with a rate-limit quota, a boundary card, and an
+internal open-questions card, all built around an API that does not exist and is not planned.
+Logan checked what actually runs: **it is a suppression file, one per affiliate, and that is the
+whole feature.** It helps them keep duplicates out of their own campaigns.
+
+The page is now one card and stays that way until there is something real to add. The only piece
+that needs building is **a file location on each affiliate's record** — the connection point. Until
+it is wired the card reads "Not connected yet" and populates on its own once it is. The 365-day
+Priority/Hot exclusivity window is the one thing the page states as fact, because it is a
+confirmed commercial term. Everything else the old spec asserted — nightly rebuilds, HMAC-keyed
+digests, manifests, normalization contracts — is gone and should not come back without someone
+confirming it against the file that really ships. ADMIN-MAPPING §7.
 
 **Health scorecard.** Tiers reconcile with the Scale / No-Scale scorecard: 45–59 "Watch"
 corresponds to yellow. One number, not two. Rolling 30-day window, refreshed weekly on the Monday

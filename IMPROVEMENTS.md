@@ -57,7 +57,7 @@ The duplicate check and suppression file are the start of a genuinely differenti
 
 | Improvement | What it looks like |
 |---|---|
-| **Pre-send validation API** | One endpoint an affiliate can call before acquiring a lead: duplicate status + criteria pass/fail (age band, state, assets threshold) against *their* account's terms. Returns pass/fail per rule, never internal data. Rate-limited and logged like the duplicate lookup. |
+| **Pre-send validation API** | One endpoint an affiliate can call before acquiring a lead: duplicate status + criteria pass/fail (age band, state, assets threshold) against *their* account's terms. Returns pass/fail per rule, never internal data. Would need rate limiting and per-partner query logging — it is a suppression list in disguise, which is why the one-number lookup was cut rather than built. |
 | **Criteria as machine-readable spec** | Their negotiated criteria (the Targeting page) exposed as JSON from the same admin-managed source, so their form validation can be generated from it and never drift from what we actually enforce. |
 | **Suppression adoption feedback** | A small card on Duplicates & suppression: *your duplicate rejection rate, 30d, vs the 30d before you started pulling the file.* The file's value, proven with their own number. (Same measurement proposed to Sagar internally.) |
 | **Pixel test tool** | A tool in Setup & docs that verifies the affiliate's tracking pixel fires correctly on their landing page. (A test-lead sandbox was tried here Aug 6–7 and removed — checking a hand-typed lead against acceptance criteria isn't an affiliate need; confirming their integration works is. Build as the front end to Marc Heberling's pixel-validation work.) |
