@@ -718,6 +718,204 @@
   }
 
   /* ---------------------------------------------------------------------- */
+  /* Multi-line — two or more series on one time axis                       */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * The existing line() draws one series. This draws several against a shared
+   * category axis, for the case where the comparison BETWEEN series is the
+   * point — Priority rate against Hot rate, month over month.
+   *
+   * Colours come from the validated two-series pair (--series-1 blue,
+   * --series-2 coral): the only combination in the palette that clears the
+   * colourblind gate. Every series also gets a legend entry and its own
+   * end-of-line value, so the colour is never the sole channel.
+   *
+   * A NULL POINT IS A GAP, NOT A ZERO. Months we hold no data for break the
+   * line rather than dropping it to the floor — drawing 0% for an unknown
+   * month invents a collapse that never happened.
+   *
+   * @param cfg.labels  ['Jun 2026', ...] one per x position
+   * @param cfg.series  [{key,label,colorVar,values:[n|null,...],dashFrom}]
+   *                    dashFrom = index from which the line is dashed, used
+   *                    to mark a month that is still settling
+   * @param cfg.fmt     value formatter for labels and tooltip
+   */
+  function multiLine(host, cfg) {
+    host.__cfg = cfg;
+    host.__kind = 'multiLine';
+    render();
+
+    function render() {
+      host.querySelectorAll('svg, .chart-table, .legend').forEach(function (n) { n.remove(); });
+
+      var labels = cfg.labels || [];
+      var series = cfg.series || [];
+      var fmt = cfg.fmt || function (v) { return String(v); };
+
+      var present = [];
+      labels.forEach(function (_, i) {
+        if (series.some(function (sr) { return sr.values[i] != null; })) present.push(i);
+      });
+      if (present.length === 0) {
+        host.innerHTML = '<div class="empty">Nothing to chart yet.</div>';
+        return;
+      }
+
+      var W = Math.max(320, host.clientWidth || 640);
+      var padL = 44, padR = 58, padT = 14, padB = 30;
+      var plotH = 180;
+      var H = plotH + padT + padB;
+      var plotW = W - padL - padR;
+
+      var gridColor = cssVar('--grid');
+      var axisColor = cssVar('--axis');
+      var muted = cssVar('--ink-muted');
+      var surface = cssVar('--surface-1');
+
+      /* Scale to the data, with headroom, rather than a fixed 0-100 — these
+         are single-digit percentages and a 0-100 axis would flatten them
+         into one indistinguishable line at the bottom. */
+      var maxV = 0;
+      series.forEach(function (sr) {
+        sr.values.forEach(function (v) { if (v != null && v > maxV) maxV = v; });
+      });
+      var yMax = cfg.yMax != null ? cfg.yMax : Math.max(1, Math.ceil(maxV * 1.25));
+      var yMin = 0;
+
+      var n = labels.length;
+      function x(i) { return padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW); }
+      function y(v) { return padT + plotH - ((v - yMin) / (yMax - yMin)) * plotH; }
+
+      var svg = el('svg', {
+        width: W, height: H, viewBox: '0 0 ' + W + ' ' + H,
+        role: 'img', 'aria-label': cfg.ariaLabel || 'Trend by month'
+      });
+
+      /* gridlines + y labels */
+      var TICKS = 4;
+      for (var t = 0; t <= TICKS; t++) {
+        var vv = yMin + (yMax - yMin) * (t / TICKS);
+        var yy = y(vv);
+        svg.appendChild(el('line', {
+          x1: padL, y1: yy, x2: padL + plotW, y2: yy,
+          stroke: gridColor, 'stroke-width': 1
+        }));
+        var lab = el('text', {
+          x: padL - 8, y: yy + 4, 'text-anchor': 'end',
+          'font-size': 11, fill: muted
+        });
+        lab.textContent = fmt(vv);
+        svg.appendChild(lab);
+      }
+
+      /* x labels — thinned so they never collide */
+      var step = Math.ceil(n / 7);
+      labels.forEach(function (l, i) {
+        if (i % step !== 0 && i !== n - 1) return;
+        var tx = el('text', {
+          x: x(i), y: padT + plotH + 18, 'text-anchor': 'middle',
+          'font-size': 11, fill: muted
+        });
+        tx.textContent = l;
+        svg.appendChild(tx);
+      });
+
+      svg.appendChild(el('line', {
+        x1: padL, y1: padT + plotH, x2: padL + plotW, y2: padT + plotH,
+        stroke: axisColor, 'stroke-width': 1
+      }));
+
+      series.forEach(function (sr) {
+        var color = cssVar(sr.colorVar || '--series-1');
+        /* Break the path at gaps rather than bridging them. */
+        var run = [], runs = [];
+        sr.values.forEach(function (v, i) {
+          if (v == null) { if (run.length) { runs.push(run); run = []; } return; }
+          run.push(i);
+        });
+        if (run.length) runs.push(run);
+
+        runs.forEach(function (r) {
+          if (r.length === 1) return;   /* a lone point is drawn as a dot below */
+          var solid = [], dashed = [];
+          r.forEach(function (i, k) {
+            var pt = x(i) + ',' + y(sr.values[i]);
+            if (sr.dashFrom != null && i >= sr.dashFrom) {
+              if (!dashed.length && k > 0) dashed.push(x(r[k - 1]) + ',' + y(sr.values[r[k - 1]]));
+              dashed.push(pt);
+            } else solid.push(pt);
+          });
+          if (solid.length > 1) svg.appendChild(el('path', {
+            d: 'M' + solid.join(' L'), fill: 'none', stroke: color,
+            'stroke-width': 2.5, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'
+          }));
+          if (dashed.length > 1) svg.appendChild(el('path', {
+            d: 'M' + dashed.join(' L'), fill: 'none', stroke: color,
+            'stroke-width': 2.5, 'stroke-dasharray': '5 4',
+            'stroke-linejoin': 'round', 'stroke-linecap': 'round'
+          }));
+        });
+
+        sr.values.forEach(function (v, i) {
+          if (v == null) return;
+          svg.appendChild(el('circle', {
+            cx: x(i), cy: y(v), r: 3.5, fill: color, stroke: surface, 'stroke-width': 1.5
+          }));
+        });
+
+        /* End-of-line value, so each series is readable without the legend. */
+        var last = null;
+        sr.values.forEach(function (v, i) { if (v != null) last = i; });
+        if (last != null) {
+          var vl = el('text', {
+            x: x(last) + 8, y: y(sr.values[last]) + 4,
+            'font-size': 12, 'font-weight': 650, fill: color
+          });
+          vl.textContent = fmt(sr.values[last]);
+          svg.appendChild(vl);
+        }
+      });
+
+      /* One hover band per month, reporting every series at once — the
+         comparison between them is the reason this chart exists. */
+      present.forEach(function (i) {
+        var bandW = plotW / Math.max(1, n - 1);
+        var hit = el('rect', {
+          x: x(i) - bandW / 2, y: padT, width: bandW, height: plotH,
+          fill: 'transparent'
+        });
+        hit.addEventListener('mouseenter', function () {
+          host.__tip.show(tooltipRows(labels[i], series.map(function (sr) {
+            return {
+              color: cssVar(sr.colorVar || '--series-1'),
+              label: sr.label,
+              value: sr.values[i] == null ? '—' : fmt(sr.values[i])
+            };
+          }).concat(cfg.note && cfg.note[i] ? [{ color: null, label: '', value: cfg.note[i] }] : [])),
+            x(i), padT);
+        });
+        hit.addEventListener('mouseleave', function () { host.__tip.hide(); });
+        svg.appendChild(hit);
+      });
+
+      host.appendChild(svg);
+
+      var legend = document.createElement('div');
+      legend.className = 'legend';
+      legend.innerHTML = series.map(function (sr) {
+        return '<span class="legend-item"><span class="legend-swatch" style="background:' +
+          cssVar(sr.colorVar || '--series-1') + '"></span>' + sr.label + '</span>';
+      }).join('') + (cfg.legendNote
+        ? '<span class="legend-item" style="color:var(--ink-muted)">' + cfg.legendNote + '</span>'
+        : '');
+      host.appendChild(legend);
+    }
+
+    host.__render = render;
+  }
+
+  /* ---------------------------------------------------------------------- */
   /* Pie — part-to-whole                                                    */
   /* ---------------------------------------------------------------------- */
 
@@ -946,6 +1144,7 @@
     if (kind === 'columns') columns(host, cfg);
     else if (kind === 'pie') pie(host, cfg);
     else if (kind === 'bars') bars(host, cfg);
+    else if (kind === 'multiLine') multiLine(host, cfg);
     else line(host, cfg);
     registerResize(host);
   }

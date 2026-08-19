@@ -248,6 +248,44 @@ Implementation notes for the dev team:
 
 ---
 
+## 2c. Priority & Hot by month — the long view
+
+Added Aug 19, from the team's existing month-over-month workbook so the two reconcile.
+
+**Twelve calendar months, always — this card ignores the date picker on purpose and says so in its
+own subtitle.** Every other rate on the Performance overview is bounded by the filter or by the
+fixed 30-day matured cohort; this one answers "is the account trending up or down", which needs a
+horizon no picker on that page offers. Campaign and sub-ID scope still apply. This is the one
+allowed exception to §5a — it works because the card names its own window rather than silently
+ignoring the filter.
+
+| Field | Source | Status |
+|---|---|---|
+| Leads per month | `receivedAt`, per calendar month | **EXISTS** |
+| Priority / Hot conversions per month | `sold_type` | **EXISTS** — but see the blocking dependency on distinct tier labels |
+| More than ~3 months of history | the backend | **NEEDS CONNECTING.** The test export spans 66 days, so the card renders what it has and says how much that is |
+
+### Three conventions the build must copy
+
+1. **Denominator is every lead received that month, accepted or not.** Deliberately the workbook's
+   definition, so the dashboard and the spreadsheet reconcile line for line. It is *not* the
+   matured-cohort basis the health score uses — different question.
+2. **Month-over-month change is in PERCENTAGE POINTS.** A rate moving 5.8% → 12.7% is
+   **+6.9 points**, never "+119%". The second is arithmetically true, unreadable, and explodes on
+   small denominators.
+3. **A month with no leads is absent, not zero.** Plotting 0% for a month we hold no data on draws
+   a collapse that never happened. Leading empty months are trimmed from the chart; gaps *between*
+   months with data are kept, because those are real.
+
+**The current month is marked "still in progress"** — drawn dashed, and given no month-over-month
+figure. It is still taking leads and its recent ones have not had time to sell, so its rate is a
+floor rather than a result.
+
+**Rates are the lines; change is a number.** Plotting the change itself would oscillate around zero
+and hide the level — you could not tell a good month from a bad one, only that it moved. The two
+rate lines carry the level and the slope between points *is* the change; the exact figure lives in
+the table view and the hover.
+
 ## 3a. Rejection reasons — the vocabulary, and who owns it
 
 Added Aug 18. Source of truth in the prototype: **`REJECT_REASONS` in `assets/js/data.js`**,

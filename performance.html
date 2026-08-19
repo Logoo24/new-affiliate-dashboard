@@ -82,6 +82,29 @@
         </section>
       </div>
 
+      <!-- THE LONG VIEW. Every other rate on this page is bounded by the date
+           picker above; this one is always the last 12 months, and it says so
+           in its own subtitle rather than silently ignoring the filter.
+           Different horizon, different question: the by-day charts show this
+           window, this shows whether the account is trending up or down. -->
+      <section class="card" id="mom-card">
+        <div class="card-head">
+          <div>
+            <h2>Priority &amp; Hot by month<span id="mom-tip-host"></span></h2>
+            <p class="sub" id="mom-sub"></p>
+          </div>
+          <div class="spacer"></div>
+          <div id="mom-toggle"></div>
+        </div>
+        <div class="card-body" id="mom-chart-wrap">
+          <div class="chart-wrap" id="mom-chart"></div>
+        </div>
+        <div class="table-wrap" id="mom-table-wrap" style="display:none">
+          <table class="data" id="mom-table"></table>
+        </div>
+        <div class="card-foot" id="mom-foot"></div>
+      </section>
+
       <!-- Rejections sit directly under the by-day charts: the volume chart
            splits accepted from rejected, and this is the immediate "why".
            Anchored so the Acceptance rate tile can scroll to it. -->
@@ -698,6 +721,165 @@
       toastHost: document.getElementById('export-toast')
     };
   });
+
+  /* ---- Priority & Hot by month -------------------------------------------
+     TWELVE MONTHS, NOT THE SELECTED WINDOW. The rest of this page answers
+     "how did this window go"; this answers "is the account getting better or
+     worse", which needs a horizon no date picker on this page offers. It is
+     labelled as its own window so it never reads as a card ignoring the
+     filter. Campaign and sub-ID scope still apply.
+
+     RATES ARE SHOWN AS LINES, CHANGE AS A NUMBER. Plotting month-over-month
+     change would oscillate around zero and hide the level entirely — you
+     could not tell a good month from a bad one, only that it moved. Two
+     rate lines carry the level, and the slope between points IS the change;
+     the exact figure lives in the table view and the hover.
+
+     Change is in PERCENTAGE POINTS. 5.8% -> 12.7% is "+6.9 points", never
+     "+119%" — the second is true, unreadable, and explodes on small
+     denominators. Same convention as the month-over-month workbook, so the
+     two reconcile. */
+  (function () {
+    var mom = D.monthlyTierRates({ partnerId: state.partnerId,
+                                   campaignId: state.campaignId, subid: state.subid });
+
+    document.getElementById('mom-tip-host').innerHTML =
+      A.tip('Priority and Hot sales as a share of every lead you sent that month, accepted or ' +
+            'not. Month-over-month change is in percentage points \u2014 a rate moving from ' +
+            '5.8% to 12.7% is up 6.9 points. This card always shows the last 12 months, so the ' +
+            'date filter above does not change it.');
+
+    var withData = mom.withData;
+    if (!withData.length) {
+      document.getElementById('mom-sub').textContent = 'How are your rates trending?';
+      document.getElementById('mom-chart').innerHTML =
+        '<div class="empty">No months with leads yet.</div>';
+      document.getElementById('mom-foot').innerHTML = '';
+      return;
+    }
+
+    document.getElementById('mom-sub').textContent = 'How are your rates trending?';
+
+    /* Drop the leading months we hold nothing for. The frame is twelve, but
+       plotting nine empty columns to the left of a three-point line makes the
+       card look broken rather than young — the foot says how much history
+       there is instead. Gaps BETWEEN months with data are kept, because those
+       are real gaps in delivery. */
+    var firstIdx = mom.months.findIndex
+      ? mom.months.findIndex(function (m) { return m.hasData; })
+      : (function () { for (var i = 0; i < mom.months.length; i++) {
+            if (mom.months[i].hasData) return i; } return -1; })();
+    var shown = firstIdx >= 0 ? mom.months.slice(firstIdx) : mom.months;
+
+    var labels = shown.map(function (m) { return m.shortLabel; });
+    var partialIdx = null;
+    shown.forEach(function (m, i) { if (m.partial && m.hasData) partialIdx = i; });
+
+    function pct1(v) { return v.toFixed(1) + '%'; }
+
+    /* ---- chart ---- */
+    function mountChart() {
+      C.mount(document.getElementById('mom-chart'), 'multiLine', {
+        labels: labels,
+        fmt: pct1,
+        series: [
+          { key: 'priority', label: 'Priority', colorVar: '--series-1',
+            values: shown.map(function (m) {
+              return m.hasData ? m.priorityRate * 100 : null; }),
+            dashFrom: partialIdx },
+          { key: 'hot', label: 'Hot', colorVar: '--series-2',
+            values: shown.map(function (m) {
+              return m.hasData ? m.hotRate * 100 : null; }),
+            dashFrom: partialIdx }
+        ],
+        note: shown.map(function (m) {
+          return m.partial && m.hasData ? 'Month still in progress' : null; }),
+        legendNote: partialIdx != null ? 'dashed = month still in progress' : '',
+        ariaLabel: 'Priority and Hot conversion rate by month, last 12 months'
+      });
+    }
+
+    /* ---- table ---- */
+    function mom_cell(v) {
+      if (v == null) return '<span style="color:var(--ink-muted)">\u2014</span>';
+      var up = v > 0.05, down = v < -0.05;
+      var tone = up ? 'var(--good-text)' : down ? 'var(--critical-text)' : 'var(--ink-2)';
+      return '<span style="color:' + tone + ';font-weight:600">' +
+        (v > 0 ? '+' : '') + v.toFixed(2) + '</span>';
+    }
+
+    function buildTable() {
+      var head = '<thead><tr><th>Month</th><th class="num">Leads</th>' +
+        '<th class="num">Priority</th><th class="num">Priority rate</th>' +
+        '<th class="num">MoM</th>' +
+        '<th class="num">Hot</th><th class="num">Hot rate</th>' +
+        '<th class="num">MoM</th></tr></thead>';
+
+      var body = withData.slice().reverse().map(function (m) {
+        return '<tr>' +
+          '<td style="white-space:nowrap"><strong>' + A.esc(m.label) + '</strong>' +
+            (m.partial
+              ? '<div style="font-size:11.5px;color:var(--ink-muted)">still in progress</div>'
+              : '') + '</td>' +
+          '<td class="num">' + A.fmtInt(m.raw) + '</td>' +
+          '<td class="num">' + A.fmtInt(m.priority) + '</td>' +
+          '<td class="num">' + A.fmtPct(m.priorityRate, 2) + '</td>' +
+          '<td class="num">' + mom_cell(m.priorityMoM) + '</td>' +
+          '<td class="num">' + A.fmtInt(m.hot) + '</td>' +
+          '<td class="num">' + A.fmtPct(m.hotRate, 2) + '</td>' +
+          '<td class="num">' + mom_cell(m.hotMoM) + '</td>' +
+          '</tr>';
+      }).join('');
+
+      var o = mom.overall;
+      var foot = '<tfoot><tr><td><strong>Overall</strong></td>' +
+        '<td class="num">' + A.fmtInt(o.raw) + '</td>' +
+        '<td class="num">' + A.fmtInt(o.priority) + '</td>' +
+        '<td class="num">' + A.fmtPct(o.priorityRate, 2) + '</td>' +
+        '<td class="num"></td>' +
+        '<td class="num">' + A.fmtInt(o.hot) + '</td>' +
+        '<td class="num">' + A.fmtPct(o.hotRate, 2) + '</td>' +
+        '<td class="num"></td></tr></tfoot>';
+
+      document.getElementById('mom-table').innerHTML = head + '<tbody>' + body + '</tbody>' + foot;
+    }
+
+    /* ---- toggle ---- */
+    var chartWrap = document.getElementById('mom-chart-wrap');
+    var tableWrap = document.getElementById('mom-table-wrap');
+    var built = false;
+    var toggle = document.getElementById('mom-toggle');
+    toggle.innerHTML =
+      '<div class="view-toggle">' +
+        '<button type="button" class="is-on" data-mv="chart">Chart</button>' +
+        '<button type="button" data-mv="table">Table</button>' +
+      '</div>';
+    toggle.querySelectorAll('[data-mv]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        toggle.querySelectorAll('[data-mv]').forEach(function (x) { x.classList.remove('is-on'); });
+        b.classList.add('is-on');
+        var wantTable = b.dataset.mv === 'table';
+        chartWrap.style.display = wantTable ? 'none' : '';
+        tableWrap.style.display = wantTable ? '' : 'none';
+        if (wantTable && !built) { built = true; buildTable(); if (window.FZTable) FZTable.enhanceAll(); }
+      });
+    });
+
+    mountChart();
+
+    /* How much history there is, said plainly. It fills in as months pass;
+       a 12-month frame with 3 months in it is not a fault to hide. */
+    var hist = mom.monthsOfHistory;
+    document.getElementById('mom-foot').innerHTML =
+      '<span>' +
+      (hist < mom.requested
+        ? '<strong>' + hist + '</strong> month' + (hist === 1 ? '' : 's') +
+          ' of history so far \u2014 this fills out to 12 as they pass. '
+        : 'Last 12 months. ') +
+      'Rates are Priority or Hot sales as a share of every lead you sent that month. ' +
+      'The current month is still in progress, so its rate is a floor rather than a result.' +
+      '</span>';
+  })();
 
   /* ---- rejection reasons -------------------------------------------------
      ONLY REASONS WITH LEADS IN THIS WINDOW, flat, biggest first. No group

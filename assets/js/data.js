@@ -2236,6 +2236,103 @@
     };
   }
 
+  /* ======================================================================
+     MONTH-OVER-MONTH PRIORITY & HOT RATES
+     ----------------------------------------------------------------------
+     The long view. Every other rate on the Performance overview is bounded
+     by the date picker or by the fixed 30-day matured cohort; this one is
+     twelve calendar months, which is the horizon you need to see a trend
+     rather than a fortnight of noise.
+
+     DENOMINATOR IS EVERY LEAD RECEIVED THAT MONTH, accepted or not. That is
+     deliberately the definition the team already tracks in the month-over-
+     month workbook, so the two reconcile line for line. It is NOT the
+     matured-cohort basis the health score uses — different question, and the
+     card says which months are still settling rather than quietly mixing
+     the two.
+
+     MONTH-OVER-MONTH CHANGE IS IN PERCENTAGE POINTS, not a percentage of a
+     percentage. A rate moving 5.8% -> 12.7% is "+6.9 points", never "+119%".
+     The second is technically true, unreadable, and swings wildly on small
+     denominators. Same convention as the workbook.
+
+     A MONTH WITH NO LEADS IS ABSENT, NOT ZERO. Plotting 0% for a month we
+     hold no data on would draw a collapse that never happened — the series
+     skips it and the card says how much history there is.
+     ====================================================================== */
+  function monthlyTierRates(opts) {
+    opts = opts || {};
+    var pid = resolvePartnerId(opts.partnerId);
+    var months = opts.months || 12;
+
+    /* Frame: the last N calendar months ending with TODAY's. */
+    var frame = [];
+    for (var i = months - 1; i >= 0; i--) {
+      var d = new Date(TODAY.getFullYear(), TODAY.getMonth() - i, 1);
+      frame.push({
+        key: d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'),
+        label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        shortLabel: d.toLocaleDateString('en-US', { month: 'short' }),
+        year: d.getFullYear(), month: d.getMonth(),
+        raw: 0, priority: 0, hot: 0
+      });
+    }
+    var byKey = {};
+    frame.forEach(function (m) { byKey[m.key] = m; });
+
+    for (var j = 0; j < ALL_LEADS.length; j++) {
+      var l = ALL_LEADS[j];
+      if (l.partnerId !== pid) continue;
+      if (opts.campaignId && opts.campaignId !== 'all' && l.campaignId !== opts.campaignId) continue;
+      if (opts.subid && opts.subid !== 'all' && l.subid !== opts.subid) continue;
+      var k = l.receivedAt.getFullYear() + '-' +
+              String(l.receivedAt.getMonth() + 1).padStart(2, '0');
+      var bucket = byKey[k];
+      if (!bucket) continue;
+      bucket.raw++;
+      if (l.soldType === 'priority') bucket.priority++;
+      else if (l.soldType === 'hot') bucket.hot++;
+    }
+
+    /* The current month is still taking leads AND its recent ones have not
+       had time to sell, so its rates are a floor rather than a result. It is
+       marked, drawn differently, and gets no month-over-month figure. */
+    var nowKey = TODAY.getFullYear() + '-' + String(TODAY.getMonth() + 1).padStart(2, '0');
+
+    var prev = null;
+    frame.forEach(function (m) {
+      m.hasData = m.raw > 0;
+      m.partial = (m.key === nowKey);
+      m.priorityRate = m.raw ? m.priority / m.raw : null;
+      m.hotRate = m.raw ? m.hot / m.raw : null;
+      /* Points, not percent-of-percent — and only against the previous month
+         that actually has data, so a gap in history does not manufacture a
+         swing. */
+      m.priorityMoM = (prev && m.hasData && !m.partial)
+        ? (m.priorityRate - prev.priorityRate) * 100 : null;
+      m.hotMoM = (prev && m.hasData && !m.partial)
+        ? (m.hotRate - prev.hotRate) * 100 : null;
+      if (m.hasData && !m.partial) prev = m;
+    });
+
+    var withData = frame.filter(function (m) { return m.hasData; });
+    var totalRaw = withData.reduce(function (a, m) { return a + m.raw; }, 0);
+    var totalP = withData.reduce(function (a, m) { return a + m.priority; }, 0);
+    var totalH = withData.reduce(function (a, m) { return a + m.hot; }, 0);
+
+    return {
+      months: frame,
+      withData: withData,
+      monthsOfHistory: withData.length,
+      requested: months,
+      overall: {
+        raw: totalRaw, priority: totalP, hot: totalH,
+        priorityRate: totalRaw ? totalP / totalRaw : null,
+        hotRate: totalRaw ? totalH / totalRaw : null
+      }
+    };
+  }
+
   function groupBy(rows, keyFn, opts) {
     var buckets = {};
     for (var i = 0; i < rows.length; i++) {
@@ -3561,6 +3658,7 @@
     windowSplit: windowSplit,
     dailySeries: dailySeries,
     groupBy: groupBy,
+    monthlyTierRates: monthlyTierRates,
     payoutForWindow: payoutForWindow,
     RETURN_REASONS: RETURN_REASONS,
     queryUnfires: queryUnfires,

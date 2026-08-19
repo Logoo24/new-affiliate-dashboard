@@ -236,6 +236,20 @@ working. It was first built as a two-series bar chart and that failed: each seri
 its own unshown maximum, so the bars carried nothing, and the numbers sat 800px from their labels
 in 12px type. Don't rebuild it as a chart.
 
+### 5a-i. Priority & Hot by month is the one card that names its own window
+
+`monthlyTierRates()` — 12 calendar months of Priority and Hot rates, on the Performance overview.
+It ignores the date picker, which §5a otherwise forbids; it works because the card **states its own
+window** rather than silently sitting still. Campaign and sub-ID scope still apply.
+
+- **Denominator is every lead received that month**, accepted or not — the definition the team's
+  month-over-month workbook uses, so the two reconcile.
+- **Change is in percentage points**, never percent-of-percent. 5.8% → 12.7% is +6.9 points.
+- **A month with no leads is absent, not zero.** Leading empty months are trimmed; gaps between
+  real months are kept.
+- The current month is **dashed and gets no MoM figure** — still taking leads, still maturing.
+- **Rates are the lines, change is a number.** Plotting change hides the level.
+
 ### 5b. Conversion cells say the comparison in words, not with a bar
 
 The **Converted to Priority/Hot** column on the States and Investable assets cards renders the
