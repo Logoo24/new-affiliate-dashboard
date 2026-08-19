@@ -1259,6 +1259,16 @@ a.user-card:hover, button.user-card:hover {
 .meter-parts span { font-variant-numeric: tabular-nums; }
 .meter.is-parked .meter-name { color: var(--ink-muted); }
 
+/* Quiet by design — it sits under the last card on the Account page and must
+   not compete with anything above it. */
+.feedback-line {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+.feedback-line a { color: var(--ink-2); }
+.feedback-line a:hover { color: var(--brand-coral); }
+
 /* --------------------------------------------------------------------------
    Notices
    -------------------------------------------------------------------------- */

@@ -68,6 +68,16 @@
         </div>
       </section>
 
+      <!-- FEEDBACK LIVES HERE AND NOWHERE ELSE. Deliberately one quiet line
+           at the foot of the Account page rather than a floating widget on
+           every screen: a persistent "feedback" button reads as a beta badge,
+           and a partner hunting for it looks under their account before they
+           look on a reporting page. -->
+      <p class="feedback-line">
+        Something not working, or an idea for us?
+        <a href="#" id="feedback-link">Give feedback</a>
+      </p>
+
       <!-- Reviewer-facing. `.mocknote` is the prototype's own scaffolding and
            is stripped before this goes in front of a partner; the storage spec
            it used to name lives in ADMIN-MAPPING §1a. -->
@@ -222,6 +232,35 @@
   document.getElementById('adduser-tip-host').innerHTML =
     A.tip('They receive an invitation email and set their own password. You can change or '
           + 'remove their access at any time.');
+
+  /* ---- feedback -----------------------------------------------------------
+     Points at a form that does not exist yet, so the link opens a short
+     explanation instead of dead-ending on a 404. When ADMIN_FEEDBACK_URL is
+     set it becomes an ordinary link and this branch stops running. */
+  (function () {
+    var fb = D.feedbackLink();
+    var el = document.getElementById('feedback-link');
+    if (fb.connected) {
+      el.href = fb.url;
+      el.target = '_blank';
+      el.rel = 'noopener';
+      return;
+    }
+    el.addEventListener('click', function (e) {
+      e.preventDefault();
+      A.openModal({
+        title: 'Give feedback',
+        html: '<div class="notice notice-info"><span class="ico">\u25c6</span><div>' +
+          '<strong>The feedback form is not connected yet.</strong> It will open from here ' +
+          'once it is set up. In the meantime your account manager is the fastest route \u2014 ' +
+          'anything you would put in a form, send to them and it reaches the same people.' +
+          '</div></div>' +
+          '<p style="color:var(--ink-2);font-size:14px;margin-bottom:0">' +
+          '<a href="mailto:logan@financialize.com">logan@financialize.com</a></p>',
+        returnFocusTo: el
+      });
+    });
+  })();
 
   /* ---- add user ---------------------------------------------------------- */
   document.getElementById('add-user').addEventListener('click', function () {

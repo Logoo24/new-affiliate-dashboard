@@ -1023,6 +1023,25 @@ An affiliate can only ever cause `none → pending`.
 The email route to compliance was **removed from both screens**, not left alongside. Two routes
 means an inbox that bypasses the approval record, and a per-campaign history with holes in it.
 
+## 9. Feedback link
+
+Added Aug 19. One quiet line at the foot of the **Account & users** page:
+*"Something not working, or an idea for us? Give feedback."*
+
+| Piece | Status |
+|---|---|
+| The form itself | **NEEDS BUILDING** |
+| `ADMIN_FEEDBACK.url` in `data.js` | **NEEDS BUILDING** — hardcoded stand-in for the setting |
+
+Until the URL is set the link opens a short explanation pointing at the account manager rather than
+dead-ending. **Set `ADMIN_FEEDBACK.url` and it becomes an ordinary external link** — no other
+change. It is an object rather than a bare string on purpose: exporting a scalar exports a copy, so
+assigning to it would change nothing.
+
+**It is deliberately on one page only.** A persistent feedback button on every screen reads as a
+beta badge, and a partner looking for one checks their account before a reporting page. If it ever
+needs to be more visible, that is a decision to take rather than a default to drift into.
+
 ## 7a. Partnership summary metrics & Targeting page
 
 Added August 6. All derived or config — nothing here needs a new admin-editable field beyond

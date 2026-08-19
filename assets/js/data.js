@@ -3009,6 +3009,20 @@
     return creativesFor(pid, campaignId);
   }
 
+  /* Where "Give feedback" points. HARDCODED STAND-IN for an admin setting —
+     null until the form exists, and the button says so rather than
+     dead-ending. Set it to the form's URL and the button becomes a real link
+     with no other change. ADMIN-MAPPING §9. */
+  /* An OBJECT, not a bare string, so it is actually settable from outside.
+     Exporting a scalar exports a copy — assigning to it changes nothing,
+     because feedbackLink() closes over the module-local variable. Every other
+     ADMIN_* stand-in in this file is an object for the same reason. */
+  var ADMIN_FEEDBACK = { url: null };
+
+  function feedbackLink() {
+    return { url: ADMIN_FEEDBACK.url || null, connected: !!ADMIN_FEEDBACK.url };
+  }
+
   var CREATIVE_LINKS = [
     { key: 'annuity_examples', label: 'See example annuity creatives', url: null },
     { key: 'life_examples', label: 'See example life creatives', url: null },
@@ -3466,6 +3480,8 @@
     documentsFor: documentsFor,
     savePartnerDocUrl: savePartnerDocUrl,
     CRITERIA_DOC_URL: CRITERIA_DOC_URL,
+    ADMIN_FEEDBACK: ADMIN_FEEDBACK,
+    feedbackLink: feedbackLink,
     CREATIVE_LINKS: CREATIVE_LINKS,
     CREATIVE_STATUS: CREATIVE_STATUS,
     creativesFor: creativesFor,
