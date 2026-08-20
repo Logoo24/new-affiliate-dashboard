@@ -149,8 +149,9 @@
       'What are you on track to be paid?';
     document.getElementById('earned-label').innerHTML =
       'Estimated total' + A.tip(ESTIMATE_TIP);
+    /* $0.00 is a statement about what we owe. Blank until there is data. */
     document.getElementById('earned-total').textContent =
-      pay.known || pay.total ? A.fmtMoney(pay.total) : '—';
+      (D.hasData() && (pay.known || pay.total)) ? A.fmtMoney(pay.total) : '—';
 
     var bits = [];
     if (pay.acceptedCount) bits.push(A.fmtInt(pay.acceptedCount) + ' accepted leads, billed on the received date');
@@ -215,7 +216,11 @@
     document.getElementById('billing-next').textContent =
       A.fmtDate(pay.date) + (pay.isToday ? ' — today' : '');
     document.getElementById('billing-terms').textContent =
-      p.billingPeriod + ' · ' + p.billingBasis.charAt(0).toLowerCase() + p.billingBasis.slice(1) +
+      /* Blank until the billing terms are connected (B3), rather than
+         crashing on a null basis. */
+      (p.billingPeriod && p.billingBasis
+        ? p.billingPeriod + ' · ' + p.billingBasis.charAt(0).toLowerCase() + p.billingBasis.slice(1)
+        : 'Your billing terms will show here') +
       ' · payment usually lands three business days after the month closes';
     document.getElementById('billing-cadence').innerHTML =
       'We send your lead report immediately after the month closes — ' +

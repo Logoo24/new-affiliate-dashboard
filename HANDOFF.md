@@ -12,6 +12,23 @@ Audited Aug 20. Everything below is deliberate scaffolding that must come out; n
 bug. The code is clean otherwise — no TODOs, no `console.log`, no dead links, no `NaN`/`undefined`
 reaching the screen across 54 page-and-partner combinations.
 
+### The portal ships empty — this is the intended state
+
+**All data was removed Aug 20.** No export, no fabricated affiliates or campaigns, and no
+generator. Open it today and every screen renders its empty state under one banner explaining it
+is waiting to be connected. That is deliberate: a spec artifact carrying 65,000 real leads is a
+data-handling problem, and one carrying invented leads is worse — somebody eventually quotes a
+fabricated number back as if it were real.
+
+**`assets/data/dataset.js` is the connection point.** It ships as `null` with the whole contract
+written in it: the shape, what each field means, and the two ways to wire it (server-render the
+object, or rewrite `loadDataset()` against your own endpoints). The redaction firewall sits above
+it either way and must not be bypassed.
+
+**Nothing renders a zero it cannot stand behind.** An unconnected figure is an em dash, not `0`;
+the health dial is replaced by the reason it is empty rather than showing 0 next to *"Lead quality
+issue"*. Verified across all twelve pages: no errors, and no fabricated figure anywhere.
+
 ### Must be deleted
 
 | | |
@@ -19,6 +36,7 @@ reaching the screen across 54 page-and-partner combinations.
 | `admin-preview.html`, `data-source.html`, `assets/js/handoff.js` | The three internal surfaces, plus the **`INTERNAL_NAV`** entry in `app.js` that puts them in the sidebar |
 | **"Viewing as" partner selector** in the topbar | A review affordance. In production the affiliate comes off the session and **cannot be chosen** — this is a data-isolation boundary, not a convenience control |
 | `.mocknote` on `account.html` | "Changes here are not saved yet." Goes when the page actually writes |
+| — | **The "Viewing as" selector is already gone.** Removed Aug 20 rather than left as a checklist item, because it is a data-isolation boundary rather than a convenience control |
 | The `is-internal` card on `duplicate-check.html` | The open-questions block for Sagar |
 
 ### Must be connected before a partner sees it

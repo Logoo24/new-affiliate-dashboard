@@ -88,7 +88,10 @@
 
     return {
       partnerId: partnerId,
-      partner: D.PARTNERS[partnerId],
+      /* Never undefined. With nothing connected D.partner() hands back an
+         empty shell of nulls rather than a missing object, so the shell and
+         every page render their not-connected states instead of throwing. */
+      partner: D.partner(partnerId),
       /* Comp models this partner is currently running. Length > 1 means a
          mixed account and the lead table will carry heterogeneous rows. */
       comps: D.compsFor(partnerId),
@@ -195,6 +198,16 @@
            partner running more than one. The whole block links to the Account
            page. */
         (function () {
+          /* NOTHING CONNECTED: the rail still renders, with the account block
+             showing what it is waiting for rather than a blank or a crash.
+             This is the state the whole portal sits in until the data is
+             wired, so it has to look deliberate. */
+          if (!D.hasData()) {
+            return '<div class="sidebar-foot">' +
+              '<strong style="color:var(--nav-ink-2)">No account connected</strong><br>' +
+              '<span style="color:var(--nav-ink-2)">Signs in from your session</span>' +
+              '</div>';
+          }
           var act = D.isPartnerActive(state.partnerId);
           return '<a class="sidebar-foot" href="' + linkTo('account.html', state) + '" ' +
             'style="display:block;text-decoration:none;color:inherit;cursor:pointer">' +
@@ -210,37 +223,45 @@
     }
 
     if (top) {
+      /* THE "VIEWING AS" SELECTOR IS GONE — removed Aug 20, deliberately and
+         permanently.
+
+         It let a reviewer switch between affiliates while the prototype ran
+         on a loaded export. In production the affiliate comes off the SESSION
+         and cannot be chosen: that is a data-isolation boundary, not a
+         convenience control, and a partner who can name another partner's id
+         in a query string is a breach.
+
+         `state.partnerId` still exists and still reads `?partner=` so the
+         query layer keeps one place to resolve identity — but the server must
+         supply it from the session and ignore the parameter entirely. See
+         ADMIN-MAPPING, Identity & routing. */
       top.innerHTML =
         '<div class="page-title">' +
           '<h1>' + esc(opts.title) + '</h1>' +
           (opts.subtitle ? '<p>' + opts.subtitle + '</p>' : '') +
         '</div>' +
-        /* Built from PARTNERS rather than hardcoded, so the names cannot
-           drift out of step with the data the way they previously did. */
-        /* Reviewer scaffolding: the whole control disappears in production,
-           where the partner comes off the session and cannot be chosen. The
-           projection detail it used to name lives in HANDOFF, not in a
-           tooltip. */
-        '<div class="ctx" title="Preview control — not part of the partner view. Your account is set by your login.">' +
-          '<span class="ctx-label">Viewing as</span>' +
-          '<select id="ctx-partner">' +
-            Object.keys(D.PARTNERS).map(function (k) {
-              return '<option value="' + k + '"' + (state.partnerId === k ? ' selected' : '') + '>' +
-                esc(D.PARTNERS[k].name) + '</option>';
-            }).join('') +
-          '</select>' +
-        '</div>';
+        (opts.topRight || '');
+    }
 
-      var sel = document.getElementById('ctx-partner');
-      if (sel) {
-        sel.addEventListener('change', function () {
-          try { sessionStorage.setItem('fz_partner', sel.value); } catch (e) {}
-          var q = new URLSearchParams(global.location.search);
-          q.set('partner', sel.value);
-          q.delete('p');
-          global.location.search = q.toString();
-        });
-      }
+    /* ONE BANNER, EVERY AFFILIATE-FACING PAGE, while nothing is connected.
+       Each card already renders its own empty state, but a dashboard of
+       fifteen empty cards with no explanation reads as broken software. This
+       says once, at the top, that it is waiting for data rather than failing
+       to find any. It disappears the moment a dataset loads — there is no
+       flag to unset. */
+    var content = document.querySelector('.content');
+    if (content && !D.hasData() && !/admin-preview|data-source/.test(location.pathname)) {
+      var b = document.createElement('div');
+      b.className = 'notice notice-info';
+      b.style.marginBottom = '18px';
+      b.innerHTML = '<span class="ico">◆</span><div>' +
+        '<strong>Not connected to any data yet.</strong> Every screen below is live and will ' +
+        'fill in on its own once the portal is wired to the system — nothing here needs ' +
+        'rebuilding. See <code>assets/data/dataset.js</code> for the connection point and ' +
+        '<code>ADMIN-MAPPING.md</code> for the field-by-field spec.' +
+        '</div>';
+      content.insertBefore(b, content.firstChild);
     }
   }
 

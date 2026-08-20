@@ -61,32 +61,12 @@
   /* Deterministic PRNG so every reviewer sees identical numbers            */
   /* ---------------------------------------------------------------------- */
 
-  function mulberry32(seed) {
-    return function () {
-      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
-      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
-  var rand = mulberry32(20260805);
-  function rnd() { return rand(); }
-  function pick(arr) { return arr[Math.floor(rnd() * arr.length)]; }
-  function between(lo, hi) { return lo + rnd() * (hi - lo); }
-  function intBetween(lo, hi) { return Math.floor(between(lo, hi + 1)); }
+  /* The seeded RNG and the weighted-pick helpers went with the generator on
+     Aug 20. Nothing in the portal randomises anything any more — every figure
+     on screen comes from connected data or renders empty. round2 stayed: it
+     is a plain money rounder the metrics still use. */
   function round2(n) { return Math.round(n * 100) / 100; }
 
-  function weighted(pairs) {
-    var total = 0, i;
-    for (i = 0; i < pairs.length; i++) total += pairs[i][1];
-    var r = rnd() * total;
-    for (i = 0; i < pairs.length; i++) {
-      r -= pairs[i][1];
-      if (r <= 0) return pairs[i][0];
-    }
-    return pairs[pairs.length - 1][0];
-  }
 
   /* ---------------------------------------------------------------------- */
   /* Reference data                                                         */
@@ -363,69 +343,29 @@
      model — both partners here happen to run a single comp model across all
      their campaigns, but the schema does not assume that and neither does the
      query layer. */
-  /* NOTE there is deliberately NO `status` field here any more. Active vs
-     inactive is DERIVED — at least one accepted lead in the trailing month —
-     via isPartnerActive(). A stored flag drifts; a derived one cannot.
+  /* ======================================================================
+     NO FABRICATED AFFILIATES OR CAMPAIGNS.
 
-     `sinceISO` must come off the partnership record in production. That date
-     may not exist in the admin centre today — see ADMIN-MAPPING.md §1. */
-  var PARTNERS = {
-    ahg: {
-      id: 'ahg',
-      name: 'Annuity Heritage Group',
-      shortName: 'Heritage',
-      /* The RATE CARD, not the comp model. Comp model is a property of the
-         campaign; this is only the commercial rate those campaigns bill at. */
-      rateCard: 'Revenue share — 40%',
-      revSharePct: 0.40,
-      ageBand: '45–75',
-      ageBandNote: 'Standard criteria.',
-      products: 'Annuity',
-      integration: 'Their funnel → our API',
-      integrationNote: 'Posts server-to-server. Pixel validated Jun 2026.',
-      sinceISO: '2026-02-11',
-      billingPeriod: 'Net 15',
-      billingBasis: 'Invoiced monthly on the sold date',
-      exclusivity: '365-day Priority/Hot exclusivity window',
-      /* Everyone at the affiliate who can log in. Financialize staff are NOT
-         users — admin access covers every account and lives outside this
-         table entirely. Exactly one user is primary at any time. */
-      users: [
-        { id: 'u-ahg-1', name: 'Jake Wolfe',     title: 'Co-founder',   email: 'jake@annuityheritage.example',    isPrimary: true,  away: false, avatar: null },
-        { id: 'u-ahg-2', name: 'Brayden Miller', title: 'Co-founder',   email: 'brayden@annuityheritage.example', isPrimary: false, away: false, avatar: null },
-        { id: 'u-ahg-3', name: 'Dana Ortiz',     title: 'Media buyer',  email: 'dana@annuityheritage.example',    isPrimary: false, away: true,  avatar: null }
-      ]
-    },
-    opx: {
-      id: 'opx',
-      name: 'OptiLabX Media',
-      shortName: 'OptiLabX',
-      rateCard: 'Tiered CPL — $102 / $90 / $27',
-      revSharePct: 0,
-      ageBand: '45–79',                 /* negotiated exception, not an error */
-      ageBandNote: 'Negotiated exception — wider than the standard 45–75.',
-      products: 'Annuity + Life',
-      integration: 'Our landing pages',
-      integrationNote: 'Traffic driven to Financialize-hosted LPs.',
-      sinceISO: '2025-11-03',
-      billingPeriod: 'Net 30',
-      billingBasis: 'Invoiced monthly on the received date',
-      exclusivity: '365-day Priority/Hot exclusivity window',
-      users: [
-        { id: 'u-opx-1', name: 'Alex Stark',   title: 'Founder',          email: 'alex@optilabx.example',   isPrimary: true,  away: false, avatar: null },
-        { id: 'u-opx-2', name: 'Priya Nair',   title: 'Head of media',    email: 'priya@optilabx.example',  isPrimary: false, away: false, avatar: null },
-        { id: 'u-opx-3', name: 'Sam Whitaker', title: 'Ops coordinator',  email: 'sam@optilabx.example',    isPrimary: false, away: false, avatar: null }
-      ]
-    }
-  };
+     Two hardcoded partners and their campaigns used to live here, feeding a
+     generator that produced roughly four months of invented leads. Both are
+     gone: this dashboard is built against the live system, and a fabricated
+     affiliate sitting in a spec artifact is something someone eventually
+     mistakes for a real one.
+
+     PARTNERS and CAMPAIGNS are now populated ONLY by loadDataset(), from
+     whatever assets/data/dataset.js supplies. Empty until connected — the
+     contract is documented in that file.
+     ====================================================================== */
+  var PARTNERS = {};
+  var CAMPAIGNS = [];
 
   /* Our side of the relationship. Fixed contacts, not per-partner data. */
   var ACCOUNT_MANAGER = {
     name: 'Logan Randall',
     title: 'Affiliate Performance Manager',
     email: 'logan@financialize.com',
-    /* Generic chat entry point in the mock. Production should deep-link the
-       partner straight into a DM — see ADMIN-MAPPING.md. */
+    /* Generic chat entry point. Production should deep-link the partner
+       straight into a DM — see ADMIN-MAPPING.md B9. */
     chatUrl: 'https://chat.google.com/'
   };
   /* WHO TO ASK, BY SUBJECT. One registry so the same person is described the
@@ -461,22 +401,46 @@
       note: 'Monthly invoice reports' }
   ];
 
+
   /* Accepts the current partner id, and still accepts the legacy 'revshare' /
      'cpl' values that used to double as partner ids so old bookmarks and
      query strings keep working. */
   var PARTNER_ALIASES = { revshare: 'ahg', cpl: 'opx' };
   /* Reassigned by the dataset loader — partner ids come from the data. */
-  var DEFAULT_PARTNER = 'ahg';
+  /* Reassigned by the loader to the first affiliate in the data. Null while
+     nothing is connected — there is no fabricated account to fall back to. */
+  var DEFAULT_PARTNER = null;
 
+  /* IN PRODUCTION THE AFFILIATE COMES OFF THE SESSION. The server resolves it
+     and must ignore `?partner=` entirely; leaving this reading a query
+     parameter would let one affiliate name another's id. It stays here only
+     so identity has a single resolution point in the query layer. */
   function resolvePartnerId(id) {
     if (PARTNERS[id]) return id;
     if (PARTNER_ALIASES[id] && PARTNERS[PARTNER_ALIASES[id]]) return PARTNER_ALIASES[id];
     return DEFAULT_PARTNER;
   }
 
+  /* NEVER RETURNS UNDEFINED. With nothing connected there is no affiliate
+     record, and forty call sites read `.name`, `.ageBand`, `.billingPeriod`
+     and so on straight off this. They get an empty shell whose fields are all
+     null, so the pages render their not-connected states instead of throwing
+     — see FZApp.notConnected(). */
+  var EMPTY_PARTNER = {
+    id: null, name: null, shortName: null, affiliateId: null,
+    products: null, integration: null, integrationNote: null,
+    sinceISO: null, billingPeriod: null, billingBasis: null,
+    exclusivity: null, ageBand: null, revSharePct: null,
+    users: [], _empty: true
+  };
+
   function partner(partnerId) {
-    return PARTNERS[resolvePartnerId(partnerId)];
+    return PARTNERS[resolvePartnerId(partnerId)] || EMPTY_PARTNER;
   }
+
+  /* Is anything connected at all? Pages use this to choose between a figure
+     and an empty state. */
+  function hasData() { return Object.keys(PARTNERS).length > 0; }
 
   /* ---------------------------------------------------------------------- */
   /* Affiliate users                                                        */
@@ -493,7 +457,11 @@
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     /* Deep copy so callers can mutate then save without touching the seed. */
-    return JSON.parse(JSON.stringify(PARTNERS[pid].users));
+    /* No affiliate connected means no user list — an empty array, which the
+       Account page already renders as its "no users on file yet" state. */
+    var rec = PARTNERS[pid];
+    if (!rec || !rec.users) return [];
+    return JSON.parse(JSON.stringify(rec.users));
   }
 
   function saveUsers(partnerId, users) {
@@ -501,10 +469,17 @@
     try { sessionStorage.setItem('fz_users_' + pid, JSON.stringify(users)); } catch (e) {}
   }
 
+  /* ALWAYS RETURNS A RECORD. With no users on file the callers still read
+     .placeholder, .name and .email off it, and every one of them already has
+     a designed empty state for the placeholder case — so hand them the
+     placeholder rather than a null they have to guard. */
   function primaryContact(partnerId) {
     var users = usersFor(partnerId);
     for (var i = 0; i < users.length; i++) if (users[i].isPrimary) return users[i];
-    return users[0] || null;
+    return users[0] || {
+      id: null, name: null, title: null, email: null,
+      isPrimary: true, away: false, avatar: null, placeholder: true
+    };
   }
 
   function setPrimaryContact(partnerId, userId) {
@@ -835,7 +810,7 @@
       Rates live behind "View details", not in the summary table. */
   function compLabelForCampaign(c) {
     if (c.comp === 'revshare') return 'Revenue share';
-    var card = PARTNERS[c.partnerId].rateCard || '';
+    var card = (PARTNERS[c.partnerId] && PARTNERS[c.partnerId].rateCard) || '';
     return card.indexOf('Tiered') === 0 ? 'Tiered CPL' : 'Flat CPL';
   }
   function campaignById(id) { return CAMPAIGN_BY_ID[id] || null; }
@@ -858,21 +833,15 @@
   /* Effective revenue-share rate for a campaign. Per-partner rather than a
      hardcoded 40% — annuity.org runs at 85%. */
   function revSharePctFor(camp) {
-    return camp.comp === 'revshare' ? PARTNERS[camp.partnerId].revSharePct : 0;
+    if (camp.comp !== 'revshare') return 0;
+    var rec = PARTNERS[camp.partnerId];
+    return rec ? rec.revSharePct : 0;
   }
 
   /* ---------------------------------------------------------------------- */
   /* Geography & demand                                                     */
   /* ---------------------------------------------------------------------- */
 
-  /* New York is a hard exclusion and is deliberately absent from supply here;
-     the few that arrive are generated as rejects. */
-  var STATES = [
-    ['TX', 14], ['FL', 13], ['OH', 8], ['PA', 8], ['NC', 7], ['GA', 7],
-    ['MI', 6], ['TN', 5], ['MO', 5], ['IN', 4], ['AZ', 4], ['CO', 3],
-    ['WA', 3], ['CA', 6], ['NV', 2], ['UT', 2], ['NM', 1], ['KS', 1],
-    ['NE', 1], ['SD', 1]
-  ];
 
   /* Per-state monthly demand. `budget` is what we have to spend there this
      month; `fillRate` is how much of it current supply is consuming. Unused
@@ -1424,166 +1393,10 @@
     return intBetween(r[0], r[1] - 1);
   }
 
-  function generate() {
-    var leads = [];
-    var counter = 41200;
-    var start = addDays(TODAY, -(HISTORY_DAYS - 1));
-
-    for (var dayIdx = 0; dayIdx < HISTORY_DAYS; dayIdx++) {
-      var day = addDays(start, dayIdx);
-      var dow = day.getDay();
-      /* Monday–Wednesday is the strongest revenue window, Wednesday biggest;
-         weekends run light and carry the worst COGS. Deliberately NOT matched
-         to IDEAL_DOW_SPLIT — the gap between what a partner sends and the
-         ideal split is the whole point of the daily-split widget. */
-      var dowFactor = [0.55, 1.06, 1.10, 1.14, 1.00, 0.92, 0.66][dow];
-      var drift = 0.86 + (dayIdx / HISTORY_DAYS) * 0.30;
-
-      for (var c = 0; c < CAMPAIGNS.length; c++) {
-        var camp = CAMPAIGNS[c];
-        var base = between(camp.perDay[0], camp.perDay[1]);
-        var count = Math.max(0, Math.round(base * dowFactor * drift));
-        for (var i = 0; i < count; i++) leads.push(makeLead(camp, day, ++counter));
-      }
-    }
-
-    leads.sort(function (a, b) { return a.receivedAt - b.receivedAt; });
-    return leads;
-  }
-
-  function makeLead(camp, day, seq) {
-    var sub = weighted(camp.subids.map(function (s) { return [s, s.share]; }));
-    var q = sub.quality;
-
-    var seg = weighted(HOUR_SEGMENTS);
-    var received = new Date(day.getFullYear(), day.getMonth(), day.getDate(),
-                            hourForSegment(seg), intBetween(0, 59), intBetween(0, 59));
-
-    var state = weighted(STATES);
-    var band = weighted(ASSET_BANDS.map(function (b) { return [b, b.weight]; }));
-
-    var lead = {
-      id: 'FZ-' + seq,
-      receivedAt: received,
-      partnerId: camp.partnerId,
-      comp: camp.comp,
-      campaignId: camp.id,
-      campaignName: camp.name,
-      campaignKind: camp.kind,
-      product: camp.product,
-      subid: sub.id,
-      subidLabel: sub.label,
-      state: state,
-      hourSegment: seg,
-      assetBand: band.key,
-      status: 'paid',
-      rejectReason: null,
-      soldType: null,
-      soldAt: null,
-      daysToSale: null,
-      saleAmount: 0,
-      partnerShare: 0,
-
-      /* ---- INTERNAL ONLY. Never leaves queryLeads(). ---------------- */
-      _leadCost: 0,
-      _margin: 0,
-      _buyerName: null,
-      _csrName: null,
-      _callResult: null,
-      _ipqsScore: Math.round(between(18, 96)),
-      _unfired: false,
-      _badContact: false
-    };
-
-    /* Under $25K investable never pays, under any comp model. */
-    var forcedReject = !band.payable;
-    var accept = Math.min(0.94, camp.acceptRate * (0.72 + 0.28 * q));
-    var isPaid = !forcedReject && rnd() < accept;
-
-    var pct = revSharePctFor(camp);
-
-    if (!isPaid) {
-      lead.status = 'free';
-      lead.rejectReason = forcedReject ? 'assets' : weighted(camp.rejectMix);
-
-      /* REJECTED-BUT-SOLD. A lead we declined can still find a buyer, and it
-         costs us nothing because we never paid for it.
-
-         Revenue-share campaigns SHOW these and are paid on them — confirmed by
-         Logan Aug 2026, overriding the blanket rule in the context doc. CPL
-         campaigns must never reveal they exist; see the row rule in
-         runQuery(). */
-      lead._leadCost = 0;
-      applyOutcome(lead, camp, received, rejectedSellRates(camp), q, band, seg, pct);
-      lead._badContact = rnd() < (0.11 / Math.max(0.5, q));
-      return lead;
-    }
-
-    lead._leadCost = round2(band.cpl * between(0.92, 1.08));
-    applyOutcome(lead, camp, received, camp.sold, q, band, seg, pct);
-
-    lead._csrName = pick(['D. Alvarez', 'M. Chen', 'R. Whitfield', 'T. Okafor', 'J. Reyes']);
-    lead._callResult = pick(['Contacted — qualified', 'Contacted — not qualified',
-                             'No answer', 'Voicemail', 'Callback scheduled']);
-    lead._badContact = rnd() < (0.07 / Math.max(0.5, q));
-    lead._unfired = lead.soldType ? rnd() < 0.035 : false;
-
-    return lead;
-  }
-
-  /* Leads we declined sell far less often at the top tiers — that is why we
-     declined them — but they still clear at auction and marketplace. */
-  function rejectedSellRates(camp) {
-    return {
-      priority:    camp.sold.priority * 0.16,
-      hot:         camp.sold.hot * 0.22,
-      auction:     camp.sold.auction * 0.55,
-      marketplace: camp.sold.marketplace * 0.70
-    };
-  }
-
-  function applyOutcome(lead, camp, received, rates, q, band, seg, revSharePct) {
-    /* Asset band and arrival window both move conversion. The $100K–$250K
-       band and the two ideal windows are the biggest levers a partner has. */
-    var lift = band.yield * (HOUR_YIELD[seg] || 1);
-
-    var r = rnd();
-    var pPriority = rates.priority * q * lift;
-    var pHot      = rates.hot * q * lift;
-    var pAuction  = rates.auction;
-    var pMarket   = rates.marketplace;
-
-    var soldType = null;
-    if (r < pPriority) soldType = 'priority';
-    else if (r < pPriority + pHot) soldType = 'hot';
-    else if (r < pPriority + pHot + pAuction) soldType = 'auction';
-    else if (r < pPriority + pHot + pAuction + pMarket) soldType = 'marketplace';
-    if (!soldType) return;
-
-    var cycle = Math.round(between(camp.cycle[0], camp.cycle[1]));
-    var soldAt = addDays(received, cycle);
-    /* A lead cannot have sold in the future. Leads inside the maturity buffer
-       are still cooking — that is not missing data. */
-    if (soldAt > TODAY) return;
-
-    /* Appointment booking and Live transfer launched Aug 2026. A small slice
-       of what would have been Priority now routes to them. */
-    if (soldType === 'priority' && soldAt >= NEW_PRODUCT_LAUNCH) {
-      var roll = rnd();
-      if (roll < 0.14) soldType = 'appointment';
-      else if (roll < 0.20) soldType = 'livetransfer';
-    }
-
-    var price = SOLD_TYPES[soldType].price;
-    lead.soldType = soldType;
-    lead.soldAt = soldAt;
-    lead.daysToSale = cycle;
-    lead.saleAmount = round2(between(price[0], price[1]));
-    lead.partnerShare = round2(lead.saleAmount * revSharePct);
-    lead._margin = round2(lead.saleAmount - lead._leadCost - lead.partnerShare);
-    lead._buyerName = pick(['Meridian Retirement', 'Crestline Financial', 'Oakhaven Advisors',
-                            'Summit Wealth Partners', 'Brightwater Group']);
-  }
+  /* generate(), makeLead() and applyOutcome() were removed Aug 20 with the
+     rest of the mock. There is deliberately NO fallback that fabricates
+     leads: if the dataset is empty the portal renders empty, which is the
+     honest state until it is wired to the system. */
 
   /* ======================================================================
      REAL DATA LOADER
@@ -1601,6 +1414,9 @@
 
   var DATASET = global.FZ_DATASET || null;
   var DATASET_NOTES = null;
+  /* True once a dataset has actually loaded. With the mock generator gone
+     this is simply "is the portal connected to anything" — the pages use it
+     only to decide between a real figure and an empty state. */
   var USING_REAL_DATA = false;
   var REKEY_TARGETS = null;
 
@@ -1775,7 +1591,13 @@
        seed — see the note above cplTargetsFor(). */
     REKEY_TARGETS = [firstRev, firstCpl];
   } else {
-    ALL_LEADS = generate();
+    /* NO DATA CONNECTED. Every screen renders its own empty state and every
+       figure populates the moment real data arrives. There is deliberately no
+       fallback that invents leads — that is how a fabricated number ends up
+       in front of a partner. */
+    ALL_LEADS = [];
+    TODAY = new Date();
+    TODAY = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate());
   }
 
   /* ====================================================================== */
@@ -2853,18 +2675,16 @@
     return (n % 2 === 0) ? 'lp' : 'api';
   }
 
-  /* Synthetic in-setup campaigns so reviewers can walk the flow mid-stream.
-     NOT in CAMPAIGNS: default queries, filters and metrics never see them.
-     One LP path (Heritage — needs a pixel: rev share) and one API path
-     (OptiLabX). Clearly fabricated; delete when real setup records exist. */
-  var SETUP_CAMPAIGNS = [
-    { id: '771', name: 'Heritage - Life [Non-email - Rev Share]', partnerId: 'annuityherit',
-      comp: 'revshare', revSharePct: 0.4, product: 'Life', method: 'lp',
-      active: false, inSetup: true },
-    { id: '772', name: 'OptiLabX - Annuity [Email]', partnerId: 'optilabxmedi',
-      comp: 'cpl', revSharePct: 0, product: 'Annuity', method: 'api',
-      active: false, inSetup: true }
-  ];
+  /* CAMPAIGNS THAT ARE MID-SETUP. Two fabricated ones used to live here so a
+     reviewer could walk the flow; they went with the rest of the test data on
+     Aug 20.
+
+     In production these are simply campaigns whose setup is not complete —
+     the same campaign record with `inSetup: true`, supplied by the loader
+     alongside every other campaign. They are kept OUT of CAMPAIGNS so default
+     queries, filters and metrics never count a campaign that is not live
+     yet. */
+  var SETUP_CAMPAIGNS = [];
 
   function setupCampaignsFor(partnerId) {
     var pid = resolvePartnerId(partnerId);
@@ -3203,9 +3023,8 @@
      each affiliate's record carries the location of their own file. Absent or
      null means not connected yet, which is the state everyone is in today. */
   var ADMIN_SUPPRESSION_FILES = {
-    /* Uncomment to preview the connected state:
-       annuityherit: { url: 'https://example.com/file.csv',
-                       updatedAt: new Date(2026, 7, 19), recordCount: 184203 } */
+    /* Shape when set:
+       '<affiliateId>': { url: '…', updatedAt: new Date(…), recordCount: 0 } */
   };
 
   /**
@@ -3341,20 +3160,6 @@
   };
   var RETURN_REASON_KEYS = ['criteria', 'duplicate', 'invalid_contact', 'consumer_request'];
 
-  /* Deterministic derivations for the MOCK ONLY. They deliberately use the
-     lead id rather than rnd() — an extra rnd() call mid-generation would
-     shift the PRNG stream and change every number quoted in HANDOFF.md. */
-  function idHash(id) {
-    var h = 0, s = String(id);
-    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100003;
-    return h;
-  }
-  function auditMondayAfter(d) {
-    var out = new Date(d.getTime());
-    do { out.setDate(out.getDate() + 1); } while (out.getDay() !== 1);
-    return out;
-  }
-
   /**
    * The Pixel unfire report — leads unfired in audit, affiliate-safe.
    *
@@ -3391,15 +3196,16 @@
       if (l.partnerId !== pid || !l._unfired) continue;
       if (opts.campaignId && opts.campaignId !== 'all' && l.campaignId !== opts.campaignId) continue;
 
+      /* The unfire DATE, REASON and CREDITED AMOUNT come from the unfire feed
+         (A9), which is not connected. They stay null and the card renders
+         blank columns with a not-connected note rather than inventing them —
+         the mock used to derive a plausible Monday and a plausible reason
+         here, which is exactly the kind of thing that gets quoted back at us
+         as if it were real. */
       var returnedAt = null, reason = null;
-      if (!USING_REAL_DATA) {
-        returnedAt = auditMondayAfter(l.soldAt || l.receivedAt);
-        if (returnedAt > TODAY) continue;              /* not audited yet */
-        reason = RETURN_REASON_KEYS[idHash(l.id) % RETURN_REASON_KEYS.length];
-      }
 
       /* Window on the unfire date when we have one; the received date is the
-         only anchor the live export offers until the feed lands. */
+         only anchor available until the feed lands. */
       var t = (returnedAt || l.receivedAt).getTime();
       if (t < fromMs || t > toMs) continue;
 
@@ -3455,7 +3261,9 @@
   }
   function leadStatementsFor(partnerId) {
     var pid = resolvePartnerId(partnerId);
-    var p = PARTNERS[pid];
+    var p = partner(partnerId);
+    /* No affiliate, no months to list. */
+    if (!PARTNERS[pid]) return [];
 
     /* Earliest month a statement could exist for: the partnership start when
        we know it, else the start of the export window. */
@@ -3581,6 +3389,7 @@
     PARTNERS: PARTNERS,
     partner: partner,
     resolvePartnerId: resolvePartnerId,
+    hasData: hasData,
 
     COMP_MODELS: COMP_MODELS,
     compModel: compModel,

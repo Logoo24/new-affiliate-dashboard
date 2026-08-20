@@ -1309,6 +1309,10 @@ a.user-card:hover, button.user-card:hover {
 .notice-info    { border-left: 3px solid var(--series-1); }
 .notice-warn    { border-left: 3px solid var(--warning); }
 .notice-mock    { border-left: 3px solid var(--muted-mark); background: var(--surface-2); }
+/* Loudest notice in the set. Used only for the delete-on-implementation
+   banners on the two internal pages. */
+.notice-crit    { border-left: 3px solid var(--critical); background: var(--surface-2); }
+.notice-crit .ico { color: var(--critical-text); }
 /* An internal-note card sitting on a PARTNER-FACING page. Dashed warn border
    and a standing badge so no screenshot ever mistakes it for partner
    content. (Wholly internal pages carry their own banner instead.) */

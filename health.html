@@ -197,7 +197,26 @@
     action: function () { A.revealAndScroll(document.getElementById('how-built')); }
   });
 
-  /* ---- the dial ---------------------------------------------------------- */
+  /* ---- the dial ----------------------------------------------------------
+     Same rule as the Partnership summary: with nothing connected there is no
+     score to draw and certainly no tier to name. The whole page is a verdict
+     on traffic we do not have. */
+  if (!D.hasData()) {
+    document.getElementById('score-label').textContent = scoreName;
+    document.getElementById('gauge').innerHTML =
+      '<div class="empty" style="padding:30px 0">Your score appears here once your leads are ' +
+      'connected.</div>';
+    document.getElementById('score-chips').innerHTML = '';
+    document.getElementById('window-note').innerHTML = '';
+    document.getElementById('pillars').innerHTML =
+      '<div class="empty">The breakdown fills in with your first matured leads.</div>';
+    var csc = document.getElementById('campaign-scores-card');
+    if (csc) csc.style.display = 'none';
+    var hb = document.getElementById('how-built');
+    if (hb) hb.style.display = '';
+    return;
+  }
+
   var sevSuffix = { '': '', 'is-warning': '-warning', 'is-serious': '-serious',
                     'is-critical': '-critical' }[H.meterClass(result.score)];
   C.gauge(document.getElementById('gauge'), {

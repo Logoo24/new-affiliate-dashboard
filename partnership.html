@@ -136,14 +136,20 @@
   });
 
   /* ---- hero: name + DERIVED status + since ------------------------------ */
-  document.getElementById('hero-name').textContent = p.name;
+  /* NOT CONNECTED IS NOT THE SAME AS INACTIVE. With no data the name is
+     blank and the status badge would read "Inactive", which is a claim about
+     an account we do not have. Say what is actually true instead. */
+  document.getElementById('hero-name').textContent = p.name || 'Your account';
 
   /* Active = at least one accepted lead in the trailing month. Derived from
      the lead table, never a stored flag — see ADMIN-MAPPING.md §1. */
   var act = D.isPartnerActive(state.partnerId);
   document.getElementById('hero-status').innerHTML =
-    '<span class="badge ' + (act.active ? 'badge-good' : 'badge-warn') + '" style="font-size:13px;padding:4px 12px">' +
-    '<span class="dot"></span>' + (act.active ? 'Active' : 'Inactive') + '</span>' +
+    (!D.hasData()
+      ? '<span class="badge" style="font-size:13px;padding:4px 12px">' +
+        '<span class="dot"></span>Not connected yet</span>'
+      : '<span class="badge ' + (act.active ? 'badge-good' : 'badge-warn') + '" style="font-size:13px;padding:4px 12px">' +
+        '<span class="dot"></span>' + (act.active ? 'Active' : 'Inactive') + '</span>') +
     (D.fmtSince(state.partnerId)
       ? '<div class="quota" style="margin-top:8px">Partner since ' + A.esc(D.fmtSince(state.partnerId)) + '</div>'
       : '<div class="quota" style="margin-top:8px">Partner since ' +
@@ -191,6 +197,15 @@
 
   var health = H.score({ partnerId: state.partnerId });
   (function () {
+    /* A SCORE OF 0 LABELLED "Lead quality issue" IS A VERDICT, and with
+       nothing connected we have no grounds for one. The dial is replaced by
+       the reason it is empty; it comes back the moment there are leads. */
+    if (!D.hasData()) {
+      document.getElementById('gauge').innerHTML =
+        '<div class="empty" style="padding:28px 0">Your score appears here once your leads ' +
+        'are connected.</div>';
+      return;
+    }
     var hs = health;
     var sevSuffix = { '': '', 'is-warning': '-warning', 'is-serious': '-serious',
                       'is-critical': '-critical' }[H.meterClass(hs.score)];
@@ -218,15 +233,22 @@
 
   /* ---- volume ------------------------------------------------------------- */
   (function () {
-    document.getElementById('vol-weekly').textContent = A.fmtInt(D.avgWeeklyVolume(state.partnerId));
+    /* Blank, not zero. "0 leads per week" is a statement about their
+       traffic; we do not have their traffic. */
+    document.getElementById('vol-weekly').innerHTML = D.hasData()
+      ? A.fmtInt(D.avgWeeklyVolume(state.partnerId))
+      : '<span style="color:var(--ink-muted)">—</span>';
     document.getElementById('vol-sub').innerHTML = 'leads per week, all campaigns' +
       A.tip('Averaged over the trailing four weeks, so a single quiet or heavy week does not ' +
             'swing it.');
 
     var coh = D.cohort({ partnerId: state.partnerId, rateBasis: state.rateBasis });
-    document.getElementById('vol-accepted').textContent = A.fmtInt(coh.metrics.paid);
-    document.getElementById('vol-accepted-sub').textContent =
-      A.fmtPct(coh.metrics.acceptanceRate, 1) + ' acceptance';
+    document.getElementById('vol-accepted').innerHTML = D.hasData()
+      ? A.fmtInt(coh.metrics.paid)
+      : '<span style="color:var(--ink-muted)">—</span>';
+    document.getElementById('vol-accepted-sub').textContent = D.hasData()
+      ? A.fmtPct(coh.metrics.acceptanceRate, 1) + ' acceptance'
+      : '';
   })();
 
   /* ---- billing ------------------------------------------------------------ */
@@ -252,7 +274,11 @@
     document.getElementById('billing-next').textContent =
       A.fmtDate(pay.date) + (pay.isToday ? ' — today' : '');
     document.getElementById('billing-terms').textContent =
-      p.billingPeriod + ' · ' + p.billingBasis.charAt(0).toLowerCase() + p.billingBasis.slice(1) +
+      /* Blank until the billing terms are connected (B3), rather than
+         crashing on a null basis. */
+      (p.billingPeriod && p.billingBasis
+        ? p.billingPeriod + ' · ' + p.billingBasis.charAt(0).toLowerCase() + p.billingBasis.slice(1)
+        : 'Your billing terms will show here') +
       ' · payment usually lands three business days after the month closes';
     document.getElementById('billing-cadence').innerHTML =
       'We send your lead report immediately after the month closes — ' +
@@ -398,11 +424,13 @@
        '<tr><td colspan="7" class="empty">There are no active campaigns on this account.</td></tr>') +
       '</tbody>';
 
-    document.getElementById('camp-sub').textContent =
-      camps.length + (camps.length === 1 ? ' campaign' : ' campaigns') + ' live right now' +
-      (inSetup.length ? ', ' + inSetup.length + ' in setup' : '') + '.';
+    document.getElementById('camp-sub').textContent = !D.hasData()
+      ? 'Your campaigns will be listed here.'
+      : camps.length + (camps.length === 1 ? ' campaign' : ' campaigns') + ' live right now' +
+        (inSetup.length ? ', ' + inSetup.length + ' in setup' : '') + '.';
 
     var inactive = D.inactiveCampaignsFor(state.partnerId).length;
+    if (!D.hasData()) { document.getElementById('camp-foot').innerHTML = ''; return; }
     document.getElementById('camp-foot').innerHTML =
       'This account has <strong>' + inactive + '</strong> campaign' + (inactive === 1 ? '' : 's') +
       ' marked as inactive.';

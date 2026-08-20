@@ -30,6 +30,22 @@
 
     <div class="content">
 
+      <!-- DELETE-ON-IMPLEMENTATION BANNER. Deliberately the first thing on
+           the page and deliberately loud: this page is scaffolding for the
+           handoff, and the failure mode is that it quietly survives into
+           production because it looks like part of the product. -->
+      <div class="notice notice-crit" style="margin-bottom:18px">
+        <span class="ico">✕</span>
+        <div>
+          <strong>DELETE THIS PAGE WHEN YOU IMPLEMENT.</strong>
+          It is a handoff artifact, not part of the affiliate portal. Remove
+          <code>admin-preview.html</code>, <code>data-source.html</code>,
+          <code>assets/js/handoff.js</code>, and the <code>INTERNAL_NAV</code> block in
+          <code>assets/js/app.js</code> that puts them in the sidebar.
+          <strong>What replaces it:</strong> nothing. Once the fields are wired this page has no job — it is a checklist for the integration, and the checklist is done when the portal stops rendering empty.
+        </div>
+      </div>
+
       <div class="notice notice-warn">
         <span class="ico">▲</span>
         <div>

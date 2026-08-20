@@ -269,7 +269,8 @@
         '<div style="font-size:12.5px;color:var(--ink-muted)">' + sub + '</div></div>';
     }
 
-    document.getElementById('hero-figure').textContent = A.fmtInt(sm.soldPriorityHot);
+    document.getElementById('hero-figure').textContent =
+    CONNECTED ? A.fmtInt(sm.soldPriorityHot) : '\u2014';
 
     document.getElementById('hero-detail').innerHTML =
       '<div style="font-size:16px;font-weight:600;margin-bottom:4px">' +
@@ -304,6 +305,12 @@
       '</div>';
   })();
 
+  /* NOTHING CONNECTED: no counts, no rates, no hero figure. A page of zeros
+     reads as "you sold nothing", which is a claim about traffic we do not
+     have. Everything below fills in on its own once leads arrive. */
+  var CONNECTED = D.hasData();
+  function fig(v) { return CONNECTED ? v : '\u2014'; }
+
   /* ---- tiles ----------------------------------------------------------- */
   /* Money tiles (Your earnings, Effective cost per lead) moved to the
      Compensation page — Performance answers "how is my traffic doing",
@@ -315,15 +322,16 @@
      on its label, which is where every other explanation on this dashboard
      already lives. */
   var tiles = [
-    { label: 'Leads submitted', value: A.fmtInt(m.raw),
+    { label: 'Leads submitted', value: fig(A.fmtInt(m.raw)),
       delta: A.deltaHtml(m.raw, pm.raw, {}) },
     /* The rejected-lead promise is PER COMP MODEL, so the sub-line follows
        the rate basis: pure rev share may hear "still earn if they sell",
        CPL must not, and a mixed account hears it only about its rev-share
        campaigns. Saying it account-wide to a mixed partner promises their
        CPL rejects can earn — the exact claim the row rule exists to kill. */
-    { label: state.rateBasis === 'paid' ? 'Accepted (paid)' : 'Accepted', value: A.fmtInt(m.paid),
-      sub: state.rateBasis === 'all'
+    { label: state.rateBasis === 'paid' ? 'Accepted (paid)' : 'Accepted', value: fig(A.fmtInt(m.paid)),
+      sub: !CONNECTED ? ''
+           : state.rateBasis === 'all'
              ? A.fmtInt(m.free) + ' not accepted — still earn if they sell'
            : state.rateBasis === 'mixed'
              ? A.fmtInt(m.free) + ' rejected — rev-share campaigns can still earn on theirs'
@@ -332,7 +340,7 @@
     /* Acceptance rate is the one tile with a single obvious follow-up
        question — "why were the others rejected?" — and the answer is a card
        on this same page, so it scrolls rather than navigates. */
-    { label: 'Acceptance rate', value: A.fmtPct(m.acceptanceRate, 1),
+    { label: 'Acceptance rate', value: fig(A.fmtPct(m.acceptanceRate, 1)),
       cls: 'tile-link', scrollTo: 'reject-card',
       tip: state.rateBasis === 'all'
              ? 'The share of what you sent that we accepted. A quality signal rather than a ' +
@@ -355,8 +363,13 @@
 
   var hs = H.score({ partnerId: state.partnerId, campaignId: state.campaignId, subid: state.subid });
   tiles.push({
-    label: A.healthScoreLabel(state), value: String(hs.score),
-    sub: '<span class="badge ' + hs.tier.badge + '"><span class="dot"></span>' + hs.tier.label + '</span>',
+    label: A.healthScoreLabel(state),
+    /* A 0 beside "Lead quality issue" is a verdict, and with nothing
+       connected there are no grounds for one. */
+    value: fig(String(hs.score)),
+    sub: CONNECTED
+      ? '<span class="badge ' + hs.tier.badge + '"><span class="dot"></span>' + hs.tier.label + '</span>'
+      : '',
     delta: '<div class="tile-delta delta-flat"><a href="' + A.linkTo('health.html', state) + '">See the breakdown →</a></div>'
   });
 

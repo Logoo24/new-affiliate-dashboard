@@ -443,6 +443,33 @@ work nobody wanted.
 
 Full detail and the remaining open questions are in `HANDOFF.md`.
 
+## The portal ships EMPTY
+
+Changed Aug 20. **There is no data in this repo and no code that invents any.** The lead export
+that the prototype used to run on is gone, and so are the two hardcoded affiliates, their
+campaigns, and the ~1,400-line deterministic generator that produced four months of fabricated
+leads. There is deliberately **no fallback**: if nothing is connected, the portal renders empty.
+
+- `assets/data/dataset.js` is the **connection point**, and it ships as `window.FZ_DATASET = null`
+  with the full contract documented in it. Populate it (server-rendered, scoped to the session's
+  affiliate) or rewrite `loadDataset()` to read your own endpoints — either is fine, the query
+  layer above it is unchanged.
+- **`D.hasData()`** is the test. Pages use it to choose between a figure and an empty state.
+- **`D.partner()` never returns undefined** — it hands back an empty shell of nulls, so the forty
+  call sites reading `.name` / `.ageBand` / `.billingPeriod` render not-connected states instead
+  of throwing. `primaryContact()` is the same: always a record, `placeholder: true` when empty.
+- **A ZERO IS A CLAIM.** "0 leads per week", "$0.00 owed", a health score of **0** labelled
+  *Lead quality issue* — each is a statement about traffic we do not have. Unconnected figures
+  render as an em dash, and the health dial is replaced by the reason it is empty. Do not
+  reintroduce a zero as a default.
+- The shell shows **one banner** on every affiliate-facing page while `hasData()` is false, and it
+  disappears on its own when data arrives — there is no flag to unset.
+
+**The "Viewing as" selector is gone permanently.** In production the affiliate comes off the
+session; `state.partnerId` still reads `?partner=` so identity has one resolution point, but the
+server must supply it from the session and **ignore the parameter** — otherwise one affiliate can
+name another's id.
+
 ## Conventions
 
 - **`TODAY` comes from the loaded dataset** — with the current export that is **Aug 6 2026**
