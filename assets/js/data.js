@@ -385,13 +385,13 @@
     { key: 'am',        name: 'Logan Randall',  what: 'Anything about your account or campaigns',
       title: 'Affiliate Performance Manager', email: 'logan@financialize.com', primary: true },
     { key: 'ops',       name: 'Courtney Barrett', what: 'Operations and the call center',
-      title: 'Operations', email: null },
+      title: 'Operations', email: 'cbarrett@financialize.com' },
     { key: 'billing',   name: 'Cassie Jensen',  what: 'Billing, invoices and payment status',
       title: 'AP / Controller', email: 'accounting@financialize.com' },
     { key: 'creatives', name: 'Jefanie Genilla', what: 'Creatives and compliance review',
       title: 'Compliance review', email: 'jgenilla@financialize.com' },
     { key: 'dist',      name: 'Marc Heberling', what: 'Agent and location distribution',
-      title: 'Distribution', email: null }
+      title: 'Distribution', email: 'marc@financialize.com' }
   ];
 
   var BILLING_CONTACTS = [
@@ -577,8 +577,15 @@
       age sentence carries THIS account's negotiated band. */
   function rejectDesc(key, partnerId) {
     if (key === 'age') {
-      return 'The consumer\'s age is outside the ' + partner(partnerId).ageBand +
-        ' band this account accepts.';
+      /* Names THIS account's band, which may be negotiated. Both products
+         when they differ, because a rejection does not carry the product. */
+      var annuityBand = ageBandFor(partnerId, 'annuity');
+      var lifeBand = ageBandFor(partnerId, 'life');
+      if (!annuityBand) return 'The consumer\'s age is outside the band this account accepts.';
+      return 'The consumer\'s age is outside the band this account accepts \u2014 ' +
+        (annuityBand === lifeBand
+          ? annuityBand
+          : annuityBand + ' on annuity, ' + lifeBand + ' on life') + '.';
     }
     return REJECT_REASONS[key] ? (REJECT_REASONS[key].desc || '') : '';
   }
@@ -1348,28 +1355,95 @@
      partner because the accepted band is a negotiated commercial term —
      OptiLabX runs 45–79 against the standard 45–75, and hardcoding the
      standard band has already cost a $5,194 invoice variance. */
+  /* ======================================================================
+     LEAD CRITERIA — the standard, and the per-affiliate overrides
+     ----------------------------------------------------------------------
+     Source of truth for the STANDARD: "Lead Criteria and Qualification
+     Requirements — Annuity and Life Insurance Lead Standards" (V5.22.26).
+     Every value below is transcribed from it. If that document changes, this
+     changes with it; nothing here is invented.
+
+     EVERY CRITERION IS OVERRIDABLE PER AFFILIATE. They are commercial terms,
+     not constants: OptiLabX runs a negotiated 45–79 age band against the
+     standard 45–75, and hardcoding the standard has already cost a $5,194
+     invoice variance. Any of them may be negotiated, not just age.
+
+     Precedence: admin override → standard. An affiliate with no override
+     gets the standard, which is the common case, and the card only marks a
+     value as negotiated when it actually DIFFERS from the standard. It used
+     to test `ageBand !== '45–75'`, which flagged an exception the moment the
+     field was null — a green star and the word "null" on the criteria card.
+
+     ADMIN_LEAD_CRITERIA is the hardcoded stand-in for the admin field. See
+     ADMIN-MAPPING §1, B13.
+     ====================================================================== */
+
+  /* Applies to both products — the "General Requirements" and "Conforming
+     Lead" sections of the standards document. */
+  var GENERAL_CRITERIA = [
+    { key: 'transmission', label: 'Lead transmission',
+      value: 'Real time, through your landing page or our authorized API' },
+    { key: 'phone',    label: 'Phone',    value: 'Valid, working US phone number' },
+    { key: 'email',    label: 'Email',    value: 'Valid, working email address' },
+    { key: 'location', label: 'Location', value: 'United States. New York is not accepted.' },
+    { key: 'consent',  label: 'Consent',
+      value: 'TrustedForm or Jornaya certificate showing prior express written consent' }
+  ];
+
+  var STANDARD_CRITERIA = {
+    annuity: GENERAL_CRITERIA.concat([
+      { key: 'age',    label: 'Age',               value: '45 to 75' },
+      { key: 'assets', label: 'Investment amount', value: 'Above $25,000' }
+    ]),
+    life: GENERAL_CRITERIA.concat([
+      { key: 'age',      label: 'Age',              value: '25 to 73' },
+      { key: 'income',   label: 'Household income', value: '$40,000 or greater' },
+      { key: 'health',   label: 'Declared health',
+        value: 'Good, Average or Excellent. Poor is not accepted.' },
+      { key: 'coverage', label: 'Coverage amount',
+        value: 'Greater than $50,000. Final Expense policies are excluded.' }
+    ])
+  };
+
+  /* HARDCODED STAND-IN FOR AN ADMIN FIELD. Shape:
+       { '<affiliateId>': { annuity: { age: '45 to 79' }, life: { … } } }
+     Absent or empty means the affiliate is on standard criteria. */
+  var ADMIN_LEAD_CRITERIA = {};
+
+  /* Criteria for one product, overrides applied. `negotiated` is true only
+     where the affiliate's value actually differs from the standard, so the
+     card highlights a real exception and nothing else. */
+  function criteriaFor(partnerId, product) {
+    var pid = resolvePartnerId(partnerId);
+    var over = (ADMIN_LEAD_CRITERIA[pid] || {})[product] || {};
+    return (STANDARD_CRITERIA[product] || []).map(function (c) {
+      var o = over[c.key];
+      var negotiated = !!o && o !== c.value;
+      return {
+        key: c.key, label: c.label,
+        value: o || c.value,
+        standard: c.value,
+        negotiated: negotiated,
+        /* The card reads `highlight`; keeping the name means the render did
+           not have to change. */
+        highlight: negotiated
+      };
+    });
+  }
+
   function leadCriteria(partnerId) {
-    var p = partner(partnerId);
-    var exception = p.ageBand !== '45–75';
-    return {
-      annuity: [
-        { label: 'Age', value: p.ageBand + (exception ? ' — negotiated for your account (standard is 45–75)' : ''), highlight: exception },
-        { label: 'Investable assets', value: 'Greater than $25,000 — under $25K never pays, on any comp model' },
-        { label: 'Location', value: 'US only. New York is never accepted.' },
-        { label: 'Phone', value: 'Valid, working US number' },
-        { label: 'Email', value: 'Valid, working' },
-        { label: 'Consent', value: 'TrustedForm or Jornaya certificate — prior express written consent' },
-        { label: 'Transmission', value: 'Real time, via our landing page or authorized API' }
-      ],
-      life: [
-        { label: 'Age', value: '25 to 73' },
-        { label: 'Household income', value: '$40,000 or greater' },
-        { label: 'Declared health', value: 'Good, Average, or Excellent — Poor not accepted' },
-        { label: 'Coverage amount', value: 'Greater than $50,000. Final Expense excluded.' },
-        { label: 'Location', value: 'US only. New York is never accepted.' },
-        { label: 'Consent', value: 'TrustedForm or Jornaya certificate' }
-      ]
-    };
+    return { annuity: criteriaFor(partnerId, 'annuity'),
+             life: criteriaFor(partnerId, 'life') };
+  }
+
+  /* The age band this affiliate accepts, for a product. Used by the rejection
+     label, which must never state the standard band at an affiliate running a
+     negotiated one. */
+  function ageBandFor(partnerId, product) {
+    var row = criteriaFor(partnerId, product || 'annuity').filter(function (c) {
+      return c.key === 'age';
+    })[0];
+    return row ? row.value : null;
   }
 
   /* ---------------------------------------------------------------------- */
@@ -1443,12 +1517,10 @@
         rateCard: rev ? ('Revenue share — ' + Math.round(rev.revSharePct * 100) + '%')
                       : 'Cost per lead',
         revSharePct: rev ? rev.revSharePct : 0,
-        /* Not in the export. OptiLabX's negotiated 45–79 is carried from the
-           commercial record; everyone else falls back to standard. */
-        ageBand: /optilabx/i.test(p.name) ? '45–79' : '45–75',
-        ageBandNote: /optilabx/i.test(p.name)
-          ? 'Negotiated exception — wider than the standard 45–75.'
-          : 'Standard criteria.',
+        /* Criteria live in ADMIN_LEAD_CRITERIA, not on the partner record —
+           they are commercial terms per affiliate per product, and inferring
+           one from the affiliate's NAME (which this used to do) is the kind
+           of thing that quietly misreports the largest account. */
         products: (function () {
           var set = {};
           camps.forEach(function (c) { set[c.product] = 1; });
@@ -3381,6 +3453,10 @@
     datasetNotes: function () { return DATASET_NOTES; },
     fmtSince: fmtSince,
     leadCriteria: leadCriteria,
+    criteriaFor: criteriaFor,
+    ageBandFor: ageBandFor,
+    STANDARD_CRITERIA: STANDARD_CRITERIA,
+    ADMIN_LEAD_CRITERIA: ADMIN_LEAD_CRITERIA,
     campaignById: campaignById,
     compForCampaign: compForCampaign,
     compsFor: compsFor,

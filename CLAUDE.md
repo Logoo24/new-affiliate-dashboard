@@ -305,6 +305,22 @@ The logo lives in `assets/img/financialize-mark.png` — the real reverse-cut as
 **sized on height with `width:auto`**: setting both dimensions squashes it. The whole brand block
 is an `<a>` to the Partnership summary.
 
+### 5f. Lead criteria: standard values, per-affiliate overrides
+
+`STANDARD_CRITERIA` in `data.js` is transcribed from **Lead Criteria V5.22.26** — annuity 45–75 /
+above $25,000, life 25–73 / $40,000+ / declared health / coverage above $50,000, plus the general
+requirements both share. If that document changes, this changes with it; nothing here is invented.
+
+**Every criterion is overridable per affiliate per product** via `ADMIN_LEAD_CRITERIA` (B13), not
+just age — they are commercial terms. Precedence is **override → standard**, and a value is marked
+negotiated **only where it actually differs** from the standard. The old test was
+`ageBand !== '45–75'`, which flagged an exception the moment the field was null and printed a green
+star beside the word "null". Never infer a criterion from the affiliate's *name*, which the loader
+used to do for OptiLabX.
+
+`ageBandFor(partnerId, product)` is what the age rejection label reads, so a partner on a
+negotiated band is never told the standard one.
+
 ### 6. Rejection reasons are one vocabulary, ours and theirs
 
 `REJECT_REASONS` in `data.js` is the affiliate-facing catalogue **and** the proposed internal

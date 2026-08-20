@@ -104,7 +104,7 @@ nothing here can be derived. `admin-preview.html` is a visual preview of it.
 |---|---|---|---|
 | **B12** | **Per-affiliate agreement URL** | Whoever countersigns | **NEEDS BUILDING.** A Drive URL per affiliate, pasted on signature. Restricted sharing — the Drive share list is the access control, not the link. §7c |
 | **B15** | **Monthly lead-statement URL** per affiliate per month | Whoever generates statements | **NEEDS BUILDING.** Pasted after month close. A month with none reads "Not linked yet", never a dead button. §7e |
-| **B13** | **Lead criteria, per affiliate** | Logan / Michael | **NEEDS BUILDING.** OptiLabX's 45–79 band proves *any* criteria value can be negotiated, not just age. §1 |
+| **B13** | **Lead criteria, per affiliate per product** | Logan / Michael | **NEEDS BUILDING.** `ADMIN_LEAD_CRITERIA` is the stand-in. Standard values come from *Lead Criteria V5.22.26* and are in `STANDARD_CRITERIA`; an affiliate with no override gets the standard, and the card marks a value negotiated only where it actually differs. Every criterion is overridable, not just age — OptiLabX's 45–79 proves the case. §1 |
 | **B3** | **Billing period & basis** | Logan | Net 7/15/30, received vs sold date |
 | **B4** | **Spend & volume targets** — CPL only | Logan, weekly | **NEEDS BUILDING.** Rev share gets no target, ever. A null target must not render and must not count as missed. §4 |
 | **B1** | **`partner_since`** | Onboarding | Not derivable — the earliest lead is the export window, not the relationship. Backfill from the contract |
@@ -1115,8 +1115,73 @@ creative set that was approved and live on 3 August.
 | **Effective-dated history** per campaign | lead → creative attribution (internal) | **NEEDS BUILDING.** Keep superseded versions; do not overwrite |
 | **File preview / download** of an approved creative | the "View" link | **NEEDS BUILDING** — currently says preview opens once storage is connected |
 
-Accepted upload types in the prototype: images, PDF, HTML, ZIP. Confirm the real list, a size cap,
-and virus scanning before this ships — it is an authenticated file upload from an external party.
+### The storage it needs — schema
+
+Two tables, because a submission is a versioned event and the files hang off it. **Do not flatten
+this into a "latest creatives" column on the campaign**: the moment you overwrite, lead → creative
+attribution is gone and cannot be reconstructed.
+
+```
+creative_submissions
+  id                 pk
+  affiliate_id       fk        who uploaded
+  campaign_id        fk        approval is PER CAMPAIGN, not per affiliate
+  version            int       1, 2, 3… per campaign. Never reused
+  status             enum      pending | approved | changes_requested
+  submitted_at       timestamp
+  submitted_by       fk        the affiliate user
+  reviewed_at        timestamp null until reviewed
+  reviewed_by        fk        OUR user. Never an affiliate user
+  review_note        text      shown to the affiliate on changes_requested
+  effective_from     timestamp = reviewed_at on approval
+  effective_to       timestamp null while current; set when the next version
+                               for that campaign is approved
+
+creative_files
+  id                 pk
+  submission_id      fk
+  filename           text      as uploaded, for display
+  storage_key        text      object-store key, NOT a public URL
+  mime_type          text
+  size_bytes         int
+  checksum           text      dedupe + integrity
+```
+
+**Attribution query** — the internal capability the whole shape exists for. Which creative set
+produced a lead:
+
+```sql
+SELECT s.* FROM creative_submissions s
+WHERE s.campaign_id = :campaign_id
+  AND s.status = 'approved'
+  AND s.effective_from <= :lead_received_at
+  AND (s.effective_to IS NULL OR s.effective_to > :lead_received_at)
+```
+
+That is why `effective_from` / `effective_to` are closed off on approval rather than derived at
+read time — a lead from 3 August must resolve to the set that was live on 3 August, permanently,
+even after five later versions.
+
+### What the portal needs from the backend
+
+| | |
+|---|---|
+| `GET` current submission for (affiliate, campaign) | Drives the badge and the file list. This is `creativesFor()` |
+| `POST` upload → always creates a **new version at `pending`** | This is `submitCreatives()`. It must never write `approved`, whatever the client sends |
+| `GET` a file | Short-lived signed URL. **Never a public object URL** — creatives are the affiliate's property |
+| *(internal)* review action | Sets `approved` / `changes_requested`, stamps `reviewed_by`, closes the previous version's `effective_to` |
+
+### Before it ships
+
+- **Authenticated upload from an external party.** Confirm the accepted types (the prototype
+  allows images, PDF, HTML, ZIP), a size cap, and virus scanning.
+- **Authorisation on every read.** An affiliate may only ever see submissions for their own
+  campaigns; the campaign_id must be checked against the session's affiliate, not trusted from the
+  request.
+- **Retention.** Superseded versions are kept for attribution, so decide how long and say so in the
+  affiliate agreement. This is the one part of the feature with a contractual edge: we are storing
+  a partner's creative work indefinitely for our own analytics, and the partner-facing copy
+  deliberately does not mention it. **Confirm with legal before launch.**
 
 ### States
 

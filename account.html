@@ -106,7 +106,9 @@
   A.shell(state, {
     active: 'account.html',
     title: 'Account & users',
-    subtitle: 'Manage who can sign in for ' + state.partner.name + '.'
+    subtitle: state.partner.name
+      ? 'Manage who can sign in for ' + state.partner.name + '.'
+      : 'Manage who can sign in to this portal.'
   });
 
   var toastHost = document.getElementById('action-toast');

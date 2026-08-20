@@ -322,7 +322,7 @@
         var p = D.PARTNERS[pid];
         var url = agreementUrl(pid);
         return '<tr data-pid="' + A.esc(pid) + '">' +
-          '<td><strong>' + A.esc(p.shortName) + '</strong>' +
+          '<td><strong>' + A.esc(p.shortName || p.name || '—') + '</strong>' +
             '<div class="quota" style="font-size:11.5px">' + A.esc(p.name) + '</div></td>' +
           '<td><input type="url" data-agr-url placeholder="https://drive.google.com/…" ' +
             'value="' + A.esc(url) + '" style="width:100%;min-width:220px;font-size:12.5px;' +
@@ -442,7 +442,7 @@
       var p = D.PARTNERS[k];
 
       if (!D.isCplPartner(k)) {
-        return '<tr style="opacity:.65"><td>' + A.esc(p.shortName) + '</td>' +
+        return '<tr style="opacity:.65"><td>' + A.esc(p.shortName || p.name || '—') + '</td>' +
           '<td class="num" colspan="6" style="text-align:left;color:var(--ink-2)">' +
           'Revenue share — no target. Governed by the lead health score only.</td></tr>';
       }
