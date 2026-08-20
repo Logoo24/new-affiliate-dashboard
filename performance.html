@@ -864,8 +864,8 @@
     var toggle = document.getElementById('mom-toggle');
     toggle.innerHTML =
       '<div class="view-toggle">' +
-        '<button type="button" class="is-on" data-mv="chart">Chart</button>' +
-        '<button type="button" data-mv="table">Table</button>' +
+        '<button type="button" class="is-on" data-mv="chart" data-attr="view-mom-chart">Chart</button>' +
+        '<button type="button" data-mv="table" data-attr="view-mom-table">Table</button>' +
       '</div>';
     toggle.querySelectorAll('[data-mv]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -973,8 +973,8 @@
     var toggle = document.getElementById('reject-toggle');
     toggle.innerHTML =
       '<div class="view-toggle">' +
-        '<button type="button" class="is-on" data-rv="table">Table</button>' +
-        '<button type="button" data-rv="chart">View as chart</button>' +
+        '<button type="button" class="is-on" data-rv="table" data-attr="view-rejects-table">Table</button>' +
+        '<button type="button" data-rv="chart" data-attr="view-rejects-chart">View as chart</button>' +
       '</div>';
 
     toggle.querySelectorAll('[data-rv]').forEach(function (b) {

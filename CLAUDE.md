@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Do not delete this file at handoff.** Logan retains write access to this dashboard and makes his
+changes with an AI assistant; this file is the safety rail on that — it carries the rules a change
+must not break (the redaction firewall, the attribution windows, the per-row projection, no
+fabricated values). Removing it as "AI stuff" removes what makes that arrangement safe. See the
+write-access section at the top of HANDOFF.md.
+
 ## What this repo is
 
 A **prototype / spec artifact**, not production code. It is a mock-up of the Financialize

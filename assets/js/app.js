@@ -165,7 +165,8 @@
         /* The whole block is the home link — mark and wordmark together.
            A logo that is decoration while only the nav navigates is a dead
            target people click anyway. */
-        '<a class="brand" href="' + linkTo('partnership.html', state) + '">' +
+        '<a class="brand" href="' + linkTo('partnership.html', state) + '"' +
+          attr('nav-brand-home') + '>' +
           '<span class="brand-logo">' + BRAND_MARK + '</span>' +
           '<span>' +
             '<span class="brand-mark">Financialize</span>' +
@@ -176,19 +177,22 @@
           '<div class="nav-label">Reporting</div>' +
           NAV.map(function (n) {
             return '<a href="' + linkTo(n.href, state) + '"' +
-              (n.href === active ? ' class="is-active"' : '') + '>' +
+              (n.href === active ? ' class="is-active"' : '') +
+              attr('nav-' + n.href.replace('.html', '')) + '>' +
               '<span class="ico">' + n.ico + '</span>' + n.label + '</a>';
           }).join('') +
           '<div class="nav-label" style="margin-top:14px">Account</div>' +
           ACCOUNT_NAV.map(function (n) {
             return '<a href="' + linkTo(n.href, state) + '"' +
-              (n.href === active ? ' class="is-active"' : '') + '>' +
+              (n.href === active ? ' class="is-active"' : '') +
+              attr('nav-' + n.href.replace('.html', '')) + '>' +
               '<span class="ico">' + n.ico + '</span>' + n.label + '</a>';
           }).join('') +
           '<div class="nav-label" style="margin-top:14px">Internal — temporary</div>' +
           INTERNAL_NAV.map(function (n) {
             return '<a href="' + linkTo(n.href, state) + '"' +
-              (n.href === active ? ' class="is-active"' : '') + '>' +
+              (n.href === active ? ' class="is-active"' : '') +
+              attr('nav-' + n.href.replace('.html', '')) + '>' +
               '<span class="ico">' + n.ico + '</span>' + n.label + '</a>';
           }).join('') +
         '</nav>' +
@@ -265,6 +269,37 @@
     }
   }
 
+  /* ======================================================================
+     ANALYTICS HOOKS — `data-attr` on anything a partner can click
+     ----------------------------------------------------------------------
+     PostHog (and every other autocapture tool) identifies a control by its
+     DOM position unless you give it a name. Every control on this dashboard
+     is generated in JavaScript, so positions shift the moment a card gains a
+     row — and an event stream full of `button:nth-child(3)` is unreadable six
+     months later when someone asks which screens affiliates actually use.
+
+     So each interactive control carries a STABLE, READABLE name:
+
+         data-attr="<area>-<thing>"      e.g. nav-performance
+                                              filter-campaign
+                                              view-toggle-chart
+                                              creatives-upload
+
+     Rules that keep it useful:
+       · Name the CONTROL, not the value. `filter-campaign`, never
+         `filter-campaign-596` — the value belongs in a property, and a
+         per-value name explodes the event list.
+       · NEVER put an affiliate id, a lead id or a money figure in the name.
+         Attribute names travel to the analytics vendor verbatim.
+       · Keep the name when a control moves. It is the join key between
+         today's data and next quarter's.
+
+     The snippet itself is NOT in this repo — it belongs in the real site's
+     template, once, so it loads on every page including the ones this
+     prototype does not contain. See the PostHog section in HANDOFF.md.
+     ====================================================================== */
+  function attr(name) { return ' data-attr="' + name + '"'; }
+
   /* ---------------------------------------------------------------------- */
   /* Filter row                                                             */
   /* ---------------------------------------------------------------------- */
@@ -282,7 +317,7 @@
 
     if (fields.indexOf('range') !== -1) {
       html += '<div class="field"><label for="f-range">Date range</label>' +
-        '<select id="f-range" name="range">' +
+        '<select id="f-range" name="range"' + attr('filter-range') + '>' +
         Object.keys(D.RANGES).map(function (k) {
           return '<option value="' + k + '"' + (k === state.rangeKey ? ' selected' : '') + '>' +
             D.RANGES[k].label + '</option>';
@@ -302,7 +337,7 @@
 
     if (fields.indexOf('campaign') !== -1) {
       html += '<div class="field"><label for="f-campaign">Campaign</label>' +
-        '<select id="f-campaign" name="campaign">' +
+        '<select id="f-campaign" name="campaign"' + attr('filter-campaign') + '>' +
         '<option value="all"' + (state.campaignId === 'all' ? ' selected' : '') + '>All campaigns</option>' +
         myCampaigns.map(function (c) {
           return '<option value="' + c.id + '"' + (c.id === state.campaignId ? ' selected' : '') + '>' +
@@ -318,7 +353,7 @@
         c.subids.forEach(function (s) { subs.push(s); });
       });
       html += '<div class="field"><label for="f-subid">Sub-ID</label>' +
-        '<select id="f-subid" name="subid">' +
+        '<select id="f-subid" name="subid"' + attr('filter-subid') + '>' +
         '<option value="all"' + (state.subid === 'all' ? ' selected' : '') + '>All sub-IDs</option>' +
         subs.map(function (s) {
           return '<option value="' + s.id + '"' + (s.id === state.subid ? ' selected' : '') + '>' +
@@ -329,7 +364,7 @@
 
     if (fields.indexOf('status') !== -1) {
       html += '<div class="field"><label for="f-status">Status</label>' +
-        '<select id="f-status" name="status">' +
+        '<select id="f-status" name="status"' + attr('filter-status') + '>' +
         [['all', 'All leads'], ['paid', 'Accepted'], ['free', 'Rejected']].map(function (o) {
           return '<option value="' + o[0] + '"' + (state.status === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
         }).join('') +
@@ -342,7 +377,7 @@
        data.js appears here with no change to this file. */
     if (fields.indexOf('reason') !== -1) {
       html += '<div class="field"><label for="f-reason">Rejection reason</label>' +
-        '<select id="f-reason" name="reason">' +
+        '<select id="f-reason" name="reason"' + attr('filter-reason') + '>' +
         '<option value="all"' + (state.reason === 'all' ? ' selected' : '') + '>Any reason</option>' +
         D.REJECT_ORDER.map(function (k) {
           return '<option value="' + k + '"' + (state.reason === k ? ' selected' : '') + '>' +
@@ -353,7 +388,7 @@
 
     if (fields.indexOf('sold') !== -1) {
       html += '<div class="field"><label for="f-sold">Sold type</label>' +
-        '<select id="f-sold" name="sold">' +
+        '<select id="f-sold" name="sold"' + attr('filter-sold') + '>' +
         [['all', 'Any outcome'], ['ph', 'Priority or Hot'],
          ['livetransfer', 'Live transfer'], ['appointment', 'Appointment'],
          ['priority', 'Priority'], ['hot', 'Hot'],
@@ -368,7 +403,7 @@
        bottom edge of the button. */
     html += '<div class="spacer"></div>' +
       '<div class="filters-apply">' +
-      '<button type="submit" class="btn btn-primary">Apply</button>' +
+      '<button type="submit" class="btn btn-primary"' + attr('filter-apply') + '>Apply</button>' +
       /* Only advertise the window on pages that actually scope by it — the
          scorecard is fixed to a rolling 30 days and saying "7 days" there
          would be a lie in small type. */
@@ -816,7 +851,8 @@
 
       host.innerHTML =
         '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
-          '<button type="button" class="btn btn-primary" data-cre-upload>' +
+          '<button type="button" class="btn btn-primary" data-cre-upload' +
+            attr('creatives-upload') + '>' +
             (isNone ? 'Upload creatives for approval' : 'Upload a new version') +
           '</button>' +
           '<span class="badge ' + c.badge + '"><span class="dot"></span>' +
@@ -934,12 +970,12 @@
       '<div class="export">' +
         '<button type="button" class="btn btn-sm" data-export-toggle>Export ▾</button>' +
         '<div class="export-menu" data-export-menu>' +
-          '<button type="button" data-export="csv">' +
+          '<button type="button" data-export="csv"' + attr('export-csv') + '>' +
             '<span class="ico">↓</span>' +
             '<span><strong>Download CSV</strong>' +
             '<span class="sub">Opens in Excel or Sheets</span></span>' +
           '</button>' +
-          '<button type="button" data-export="drive">' +
+          '<button type="button" data-export="drive"' + attr('export-drive') + '>' +
             '<span class="ico">▲</span>' +
             '<span><strong>Send to Google Drive</strong>' +
             '<span class="sub">Saves to your shared reports folder</span></span>' +
@@ -986,11 +1022,14 @@
   /* Chart view toggle (plot ⇄ table twin)                                  */
   /* ---------------------------------------------------------------------- */
 
-  function viewToggle(host, chartHost) {
+  function viewToggle(host, chartHost, name) {
+    var n = name || (host.id || 'chart').replace(/^toggle-/, '');
     host.innerHTML =
       '<div class="view-toggle">' +
-        '<button type="button" class="is-on" data-mode="chart">Chart</button>' +
-        '<button type="button" data-mode="table">Table</button>' +
+        '<button type="button" class="is-on" data-mode="chart"' +
+          attr('view-' + n + '-chart') + '>Chart</button>' +
+        '<button type="button" data-mode="table"' +
+          attr('view-' + n + '-table') + '>Table</button>' +
       '</div>';
     host.querySelectorAll('button').forEach(function (b) {
       b.addEventListener('click', function () {

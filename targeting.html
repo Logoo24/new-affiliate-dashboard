@@ -334,8 +334,8 @@
     var toggle = document.getElementById('windows-toggle');
     toggle.innerHTML =
       '<div class="view-toggle">' +
-        '<button type="button" class="is-on" data-wv="summary">Summary</button>' +
-        '<button type="button" data-wv="detail">Detail</button>' +
+        '<button type="button" class="is-on" data-wv="summary" data-attr="view-windows-summary">Summary</button>' +
+        '<button type="button" data-wv="detail" data-attr="view-windows-detail">Detail</button>' +
       '</div>';
 
     toggle.querySelectorAll('[data-wv]').forEach(function (b) {
@@ -733,9 +733,9 @@
       var endN = Math.min(page * PER_PAGE, rows.length);
       host.innerHTML =
         '<span>Showing ' + startN + '\u2013' + endN + ' of ' + rows.length + ' states</span>' +
-        (page > 1 ? '<button class="btn btn-sm" data-sp="' + (page - 1) + '">\u2190 Prev</button>' : '') +
+        (page > 1 ? '<button class="btn btn-sm" data-attr="states-page-prev" data-sp="' + (page - 1) + '">\u2190 Prev</button>' : '') +
         '<span>Page ' + page + ' of ' + totalPages + '</span>' +
-        (page < totalPages ? '<button class="btn btn-sm" data-sp="' + (page + 1) + '">Next \u2192</button>' : '');
+        (page < totalPages ? '<button class="btn btn-sm" data-attr="states-page-next" data-sp="' + (page + 1) + '">Next \u2192</button>' : '');
 
       host.querySelectorAll('[data-sp]').forEach(function (b) {
         b.addEventListener('click', function () {

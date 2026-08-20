@@ -6,8 +6,8 @@ dashboard.
 
 ## Status
 
-Prototype complete — **nine affiliate-facing screens**, clickable, running on a real lead export
-with all money and outcome figures intact. Ready for review by Michael and Courtney, and for
+Prototype complete — **nine affiliate-facing screens**, clickable, shipping empty — all data was
+removed on Aug 20 and `assets/data/dataset.js` is the documented connection point. Ready for review by Michael and Courtney, and for
 handoff to Sagar and Zakira.
 
 ## Purpose
@@ -67,7 +67,7 @@ assets/js/charts.js        Dependency-free SVG charts
 assets/js/app.js           Shell, filter state, formatting, shared components
 assets/js/tables.js        Sortable / resizable / column-configurable tables
 assets/img/                The Financialize mark
-assets/data/dataset.js     The lead export the prototype runs on
+assets/data/dataset.js     THE CONNECTION POINT — ships null, contract documented inside
 ```
 
 ## Constraints this was built under
@@ -80,6 +80,10 @@ assets/data/dataset.js     The lead export the prototype runs on
   never on the object at all. Which columns are available is admin-configurable per comp model,
   but the registry is a hard constraint on what an admin may enable.
 - **No charting library.** Charts are hand-rolled SVG so there is nothing to vendor.
+- **No build step, and this one is load-bearing.** Logan owns iterations to this portal after
+  handoff and needs to edit it directly. Plain HTML/CSS/vanilla JS is what makes that possible; the
+  moment a change needs `npm install` and a compile, that access is theoretical. See the write-access
+  section at the top of HANDOFF.md.
 - **Nothing affiliate-facing names the lead export.** The dashboard is built against a backend;
   the export is a temporary source. An unconnected field renders blank with a "not connected yet"
   note, never a zero and never an explanation of our plumbing.
@@ -88,8 +92,8 @@ assets/data/dataset.js     The lead export the prototype runs on
 
 - Delete `admin-preview.html`, `data-source.html`, `assets/js/handoff.js`, and the `INTERNAL_NAV`
   entry in `app.js`.
-- Remove the **"Viewing as"** partner selector in the topbar. It is a review affordance; in
-  production the partner comes off the session and cannot be chosen.
+- The **"Viewing as"** partner selector is already removed. In production the affiliate comes off
+  the session and cannot be chosen — `?partner=` must be ignored, not honoured.
 - The **admin settings page does not exist** and is not in this repo. Section 2 of the connection
   list in ADMIN-MAPPING is its build spec.
 

@@ -29,14 +29,16 @@ it either way and must not be bypassed.
 the health dial is replaced by the reason it is empty rather than showing 0 next to *"Lead quality
 issue"*. Verified across all twelve pages: no errors, and no fabricated figure anywhere.
 
+The **"Viewing as" partner selector is already gone** — removed Aug 20 rather than left as a
+checklist item, because it is a data-isolation boundary rather than a convenience control. In
+production the affiliate comes off the session and cannot be chosen; `?partner=` must be ignored.
+
 ### Must be deleted
 
 | | |
 |---|---|
 | `admin-preview.html`, `data-source.html`, `assets/js/handoff.js` | The three internal surfaces, plus the **`INTERNAL_NAV`** entry in `app.js` that puts them in the sidebar |
-| **"Viewing as" partner selector** in the topbar | A review affordance. In production the affiliate comes off the session and **cannot be chosen** — this is a data-isolation boundary, not a convenience control |
 | `.mocknote` on `account.html` | "Changes here are not saved yet." Goes when the page actually writes |
-| — | **The "Viewing as" selector is already gone.** Removed Aug 20 rather than left as a checklist item, because it is a data-isolation boundary rather than a convenience control |
 | The `is-internal` card on `duplicate-check.html` | The open-questions block for Sagar |
 
 ### Must be connected before a partner sees it
@@ -68,6 +70,105 @@ matured leads average **59.3** against **53.2** for campaigns with real data, so
 of the score is "above average". The fix order is in the audit section below. It is left alone
 deliberately because it changes how partners are judged, and that is Michael's call rather than a
 silent change.
+
+---
+
+## ⚑ LOGAN KEEPS WRITE ACCESS TO THIS DASHBOARD — please design for it
+
+**This is a requirement from Michael, not a preference.** Logan built this portal and owns its
+iterations: copy, layout, thresholds, new cards, wording changes. After handoff he needs to be able
+to **make changes to the code directly**, not file a ticket and wait for a sprint.
+
+That is not a request for unrestricted production access, and the split below is what makes it
+safe to say yes to.
+
+### What Logan changes, and what he does not
+
+| Logan owns | Goes through your review |
+|---|---|
+| Copy, labels, card subtitles, tooltips, empty states | `queryLeads()` / `runQuery()` — the redaction firewall |
+| Layout, card order, which cards exist on which page | The column registry (`LEAD_COLUMNS`) and the forbidden-column list |
+| Thresholds and weights (health pillars, standout guards) | Anything touching auth, session, or which affiliate a request resolves to |
+| Registries: rejection reasons, criteria, contacts, documents | Database schema and the query layer |
+
+The right-hand column is the data-disclosure surface. Logan should not be pushing to it unreviewed,
+and he is not asking to.
+
+### What has to be true for this to work
+
+1. **He needs a repo he can actually reach** — write access, or fork-and-PR. If this code is lifted
+   into a repo he has no account on, the requirement is dead on arrival. Please confirm where it
+   lands and get him access on day one.
+2. **A staging environment that is not production.** He needs somewhere to see a change render
+   before it reaches a partner.
+3. **A deploy path he can trigger.** PR + review for the shared surface is fine. What does not work
+   is "email the change to a developer".
+4. **Keep the stack boring — this is the load-bearing one.** No build step, no bundler, no
+   framework. Plain HTML, CSS and vanilla JS is not an aesthetic choice here: it is what makes the
+   portal editable by the person who owns it. The moment a change requires `npm install` and a
+   compile, Logan's access is theoretical. If it must be templated into PHP, keep the templates
+   thin and the JS in files he can open and edit.
+5. **Keep `CLAUDE.md` in the repo.** It exists precisely so that Logan working with an AI assistant
+   can make changes without breaking the rules the build depends on — the firewall, the attribution
+   windows, the per-row projection, the "no fabricated values" rule. It is the safety rail on his
+   write access. Deleting it as "AI stuff" removes the thing that makes this arrangement safe.
+
+### The honest trade
+
+You get a partner-facing portal whose copy and layout stop being your backlog. Logan gets to fix a
+confusing label the day someone complains instead of next quarter. The firewall and the query layer
+stay yours. That is the deal worth writing into the working agreement.
+
+---
+
+## PostHog — analytics, not implementation
+
+Michael wants PostHog on this. **To be precise about scope: PostHog is instrumentation you add to
+the portal, not a platform you build the portal in.** It does not host pages, edit content or store
+settings — the admin settings page (connection list, section 2) is what does that. Both are wanted;
+they are not substitutes.
+
+### What is worth turning on, in order
+
+1. **Feature flags for the migration.** This portal replaces a live dashboard. A flag lets you put
+   the new one in front of two affiliates, watch, then widen — rather than a hard cutover. This is
+   the strongest fit and the reason to wire PostHog before launch rather than after.
+2. **Product analytics.** Nine screens were built on reasonable assumptions about what affiliates
+   want. Usage data replaces the assumptions: does anyone open Targeting, does the Detail view get
+   used, does the rejection drill-through get clicked.
+3. **Surveys.** `ADMIN_FEEDBACK.url` (§9) is a null connection point on the Account page — point it
+   at a PostHog survey and the feedback link goes live with no code change.
+4. **Session replay** — useful, but read the masking note below first.
+
+### What we already did so it drops in cleanly
+
+**Every interactive control carries a stable `data-attr` name** — `nav-performance`,
+`filter-campaign`, `view-rejects-chart`, `creatives-upload`, `export-csv`, and so on. Autocapture
+identifies controls by DOM position unless you name them, and every control here is generated in
+JavaScript, so positions move whenever a card gains a row. Without the names the event stream is
+full of `button:nth-child(3)` and unreadable six months later.
+
+Three rules for keeping that useful, also written at the top of `app.js`:
+
+- Name the **control**, not the value: `filter-campaign`, never `filter-campaign-596`.
+- **Never** put an affiliate id, lead id or money figure in an attribute name — they travel to the
+  vendor verbatim.
+- Keep a name stable when the control moves. It is the join key between this quarter's data and
+  next quarter's.
+
+### Four things for whoever wires it up
+
+1. **The snippet belongs in the site template, not this repo.** Once, so it covers every page
+   including ones this prototype does not contain.
+2. **Identify B2B-shaped:** the affiliate as the group, the portal user as the person. Do it where
+   the session resolves the affiliate — the same place that must ignore `?partner=`.
+3. **Session replay masking.** Good news first: the redaction firewall means **no consumer PII is
+   ever on screen** — the affiliate-visible columns are date, lead id, campaign, state, asset band,
+   status, reject reason, sold type and amounts. What replay *would* capture is each affiliate's
+   revenue, share amounts and health scores. That is commercially sensitive rather than a privacy
+   breach, but decide deliberately whether to mask the money selectors before enabling it.
+4. **Content-Security-Policy.** If the main site sends a CSP header, PostHog's domain has to be
+   allowed or the snippet fails silently.
 
 ---
 

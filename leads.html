@@ -200,9 +200,9 @@
       host.innerHTML =
         '<span>Showing ' + A.fmtInt(startN) + '–' + A.fmtInt(endN) + ' of ' + A.fmtInt(rows.length) + '</span>' +
         sizeSel +
-        (page > 1 ? '<button class="btn btn-sm" data-pg="' + (page - 1) + '">← Prev</button>' : '') +
+        (page > 1 ? '<button class="btn btn-sm" data-attr="leads-page-prev" data-pg="' + (page - 1) + '">← Prev</button>' : '') +
         '<span>Page ' + page + ' of ' + A.fmtInt(totalPages) + '</span>' +
-        (page < totalPages ? '<button class="btn btn-sm" data-pg="' + (page + 1) + '">Next →</button>' : '');
+        (page < totalPages ? '<button class="btn btn-sm" data-attr="leads-page-next" data-pg="' + (page + 1) + '">Next →</button>' : '');
     }
 
     var ps = host.querySelector('#page-size');
