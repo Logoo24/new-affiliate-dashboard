@@ -3698,44 +3698,7 @@
 
     addDays: addDays,
     daysBetween: daysBetween,
-    dayKey: dayKey,
-
-    /* Internal-only aggregate for the health engine. Deliberately NOT part of
-       queryLeads — see health.js for why it never reaches the UI. */
-    _internalAggregates: function (opts) {
-      var range = opts.range;
-      var pid = resolvePartnerId(opts.partnerId);
-      var fromMs = new Date(range.from.getFullYear(), range.from.getMonth(), range.from.getDate()).getTime();
-      var toMs = new Date(range.to.getFullYear(), range.to.getMonth(), range.to.getDate(), 23, 59, 59, 999).getTime();
-      var margin = 0, revenue = 0, unfires = 0, badContacts = 0, paid = 0;
-      for (var i = 0; i < ALL_LEADS.length; i++) {
-        var l = ALL_LEADS[i];
-        if (l.partnerId !== pid) continue;
-        var t = l.receivedAt.getTime();
-        if (t < fromMs || t > toMs) continue;
-        if (opts.campaignId && opts.campaignId !== 'all' && l.campaignId !== opts.campaignId) continue;
-        if (opts.subid && opts.subid !== 'all' && l.subid !== opts.subid) continue;
-        if (l.status !== 'paid') continue;
-        paid++;
-        margin += l._margin;
-        revenue += l.saleAmount;
-        if (l._unfired) unfires++;
-        if (l._badContact) badContacts++;
-      }
-      /* The *Usable flags tell the health engine whether an input is real.
-         With the live export neither margin nor bad-contact is: Lead Cost is
-         the $1 phantom COGS and there is no bad-contact signal in the file.
-         Those components are PARKED rather than scored, so a gap on our side
-         never costs the partner points. */
-      return {
-        paid: paid,
-        marginPct: revenue ? margin / revenue : 0,
-        marginUsable: !USING_REAL_DATA,
-        unfireRate: paid ? unfires / paid : 0,
-        badContactRate: paid ? badContacts / paid : 0,
-        badContactUsable: !USING_REAL_DATA
-      };
-    }
+    dayKey: dayKey
   };
 
 })(window);

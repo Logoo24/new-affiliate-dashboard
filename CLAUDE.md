@@ -428,9 +428,16 @@ work nobody wanted.
   the last third of the month, so the new Delivery timing components score our load schedule
   rather than their delivery. Fresh drip traffic reads normally, which is how we know the metric
   itself is sound.
-- **The admin side does not exist at all.** `ADMIN_COLUMN_CONFIG`, `TARGETS`, `STATE_DEMAND`,
-  `OPERATING_HOURS` and `IDEAL_DOW_SPLIT` are all hardcoded constants standing in for settings.
-  `ADMIN-MAPPING.md` specifies the storage each one needs.
+- **The admin side does not exist at all, and is not in this repo.** Every `ADMIN_*` constant in
+  `data.js` is a hardcoded stand-in for a setting someone must be able to change:
+  `ADMIN_COLUMN_CONFIG`, `TARGETS`, `ADMIN_STATE_DEMAND`, `OPERATING_HOURS`, `IDEAL_DOW_SPLIT`,
+  `ADMIN_CONVERSION_WINDOWS`, `ADMIN_SUPPRESSION_FILES`, `ADMIN_FEEDBACK`, `TEAM_CONTACTS`, and
+  the creative store behind `submitCreatives()`. **Section 2 of the ADMIN-MAPPING connection list
+  is the build spec for that screen** — everything in it is by definition the human half.
+- **Nothing persists.** Every write in the prototype goes to `sessionStorage` and dies with the
+  tab: pixel URLs, creative uploads, user edits, statement links, table preferences. That is
+  deliberate — see B10 for the one case (per-user table preferences) that must become a real
+  stored preference rather than just a server write.
 - **Open with Courtney:** Saturday closes at 8 PM ET (5 PM Pacific), so the 3–7p local window does
   not hold out west on Saturdays, and the Saturday 8% may want weighting toward Eastern and Central.
 

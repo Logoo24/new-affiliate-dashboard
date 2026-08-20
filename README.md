@@ -1,12 +1,14 @@
 # New Affiliate Dashboard
 
 A mock-up of a new affiliate-facing dashboard for **Financialize**, built to hand off to the
-dev team for implementation into the existing system.
+dev team for implementation into the existing system. It replaces the current affiliate
+dashboard.
 
 ## Status
 
-Prototype complete — six affiliate-facing screens, clickable, with fabricated data. Ready for
-review by Michael and Courtney, and for handoff to Sagar and Zakira.
+Prototype complete — **nine affiliate-facing screens**, clickable, running on a real lead export
+with all money and outcome figures intact. Ready for review by Michael and Courtney, and for
+handoff to Sagar and Zakira.
 
 ## Purpose
 
@@ -14,37 +16,58 @@ This repo is a **prototype / spec artifact**, not production code. Its job is to
 team exactly what the affiliate dashboard should look like and how it should behave, so
 implementation into the current system is unambiguous.
 
-**Read [HANDOFF.md](HANDOFF.md) first** — it covers the visibility rules, the data attribution
-model, and the field list the build is waiting on. **[ADMIN-MAPPING.md](ADMIN-MAPPING.md)** is the
-companion: every dashboard element mapped to the admin setting and data field behind it, with what
-exists today versus what needs building. Keep it current as fields are added.
-**[IMPROVEMENTS.md](IMPROVEMENTS.md)** is the forward plan — what would make the portal more
-valuable to the affiliate beyond what is built, phased by value per unit of effort.
+**Read in this order:**
+
+1. **[HANDOFF.md](HANDOFF.md)** — *why it is like this.* Visibility rules, the attribution model,
+   decisions and what was rejected. Start here.
+2. **[ADMIN-MAPPING.md](ADMIN-MAPPING.md)** — *what connects to what.* Every dashboard element
+   mapped to the field or setting behind it. **The connection list at the top is the work list**,
+   cut by who supplies each value: automatic, admin setting, or auto-with-override.
+3. **[IMPROVEMENTS.md](IMPROVEMENTS.md)** — the forward plan, phased by value per unit of effort.
+4. **[CLAUDE.md](CLAUDE.md)** — rules an AI agent editing this repo must not break. Also the
+   fastest summary of the non-obvious constraints.
 
 ## Running it
 
-Open `index.html` in any browser — it lands on the Partnership summary. No server, no build
-step, no dependencies.
+No build step, no dependencies, no server. Open `index.html` — it forwards to the Partnership
+summary.
+
+If you do serve it over HTTP, **use a server that does not rewrite URLs**. All state lives in the
+query string, and `npx serve` 301-redirects `/index.html` → `/index` while dropping the query
+string, which silently breaks every filter link. `.claude/launch.json` uses `http-server` for
+this reason.
 
 ## Repo layout
 
 ```
 index.html              Redirect stub — forwards / to partnership.html
-partnership.html        Partnership summary       (landing screen, default page)
-performance.html        Performance overview      (Module A)
-leads.html              Lead table + CSV export   (Module B)
-duplicate-check.html    365-day phone lookup      (Module C)
-health.html             Lead health scorecard     (Module D)
-setup.html              New-affiliate onboarding  (Module E)
 
-admin-preview.html      TEMPORARY internal preview of the admin settings.
-                        Not partner-facing. Delete before shipping.
+  Affiliate-facing
+partnership.html        Partnership summary          (landing screen, default page)
+performance.html        Performance overview         (Module A)
+leads.html              Lead table + CSV export      (Module B)
+health.html             Lead health scorecard        (Module D)
+targeting.html          Targeting — windows, assets, states, criteria, creatives
+duplicate-check.html    Duplicates & suppression     (Module C)
+compensation.html       Compensation, statements, pixel unfire report
+setup.html              Setup & docs hub             (Module E)
+campaign-setup.html     Per-campaign setup tracker   (Module E2)
+account.html            Account & users
+
+  INTERNAL — TEMPORARY. Delete all three, and the INTERNAL_NAV entry in
+  app.js, before anything ships.
+admin-preview.html      Preview of the admin settings page that still needs building
+data-source.html        Data connections — every value, and whether it is wired
+assets/js/handoff.js    The connection registry both internal pages read
 
 assets/css/dashboard.css   All styling; light and dark, validated colour tokens
-assets/js/data.js          Mock dataset, the redaction query layer, column registry
+assets/js/data.js          The dataset loader, the redaction query layer, all registries
 assets/js/health.js        Lead Health Score engine + coverage widgets
 assets/js/charts.js        Dependency-free SVG charts
-assets/js/app.js           Shell, filter state, formatting, lead-cell rendering
+assets/js/app.js           Shell, filter state, formatting, shared components
+assets/js/tables.js        Sortable / resizable / column-configurable tables
+assets/img/                The Financialize mark
+assets/data/dataset.js     The lead export the prototype runs on
 ```
 
 ## Constraints this was built under
@@ -57,6 +80,18 @@ assets/js/app.js           Shell, filter state, formatting, lead-cell rendering
   never on the object at all. Which columns are available is admin-configurable per comp model,
   but the registry is a hard constraint on what an admin may enable.
 - **No charting library.** Charts are hand-rolled SVG so there is nothing to vendor.
+- **Nothing affiliate-facing names the lead export.** The dashboard is built against a backend;
+  the export is a temporary source. An unconnected field renders blank with a "not connected yet"
+  note, never a zero and never an explanation of our plumbing.
+
+## Before this ships
+
+- Delete `admin-preview.html`, `data-source.html`, `assets/js/handoff.js`, and the `INTERNAL_NAV`
+  entry in `app.js`.
+- Remove the **"Viewing as"** partner selector in the topbar. It is a review affordance; in
+  production the partner comes off the session and cannot be chosen.
+- The **admin settings page does not exist** and is not in this repo. Section 2 of the connection
+  list in ADMIN-MAPPING is its build spec.
 
 ## Not yet built
 

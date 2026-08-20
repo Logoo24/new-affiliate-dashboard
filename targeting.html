@@ -481,7 +481,7 @@
            reads as "you sent nothing", which is the opposite of true. */
         document.getElementById('detail-hour').innerHTML =
           '<div class="tile-label" style="margin-bottom:6px">Hour of day</div>' +
-          '<div class="notice notice-mock"><span class="ico">\u270e</span><div>' +
+          '<div class="notice notice-info"><span class="ico">\u25c6</span><div>' +
           '<strong>Not connected yet.</strong> We record the date each lead arrives but not yet ' +
           'the time, so we cannot show which hours you send in or how each one converts. This ' +
           'fills in on its own once that is wired up \u2014 nothing changes on your side.' +
@@ -907,7 +907,7 @@
         var c = D.CREATIVE_LINKS.filter(function (x) { return x.key === b.dataset.creative; })[0];
         A.openModal({
           title: c.label,
-          html: '<div class="notice notice-mock"><span class="ico">✎</span><div>' +
+          html: '<div class="notice notice-info"><span class="ico">◆</span><div>' +
             '<strong>Not linked yet.</strong> This will open the ' +
             (c.key === 'guidelines' ? 'creative guidelines document'
                                     : 'example creatives folder') +

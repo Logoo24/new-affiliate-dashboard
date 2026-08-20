@@ -6,6 +6,53 @@
 
 ---
 
+## ⚑ BEFORE THIS SHIPS — the removal checklist
+
+Audited Aug 20. Everything below is deliberate scaffolding that must come out; nothing here is a
+bug. The code is clean otherwise — no TODOs, no `console.log`, no dead links, no `NaN`/`undefined`
+reaching the screen across 54 page-and-partner combinations.
+
+### Must be deleted
+
+| | |
+|---|---|
+| `admin-preview.html`, `data-source.html`, `assets/js/handoff.js` | The three internal surfaces, plus the **`INTERNAL_NAV`** entry in `app.js` that puts them in the sidebar |
+| **"Viewing as" partner selector** in the topbar | A review affordance. In production the affiliate comes off the session and **cannot be chosen** — this is a data-isolation boundary, not a convenience control |
+| `.mocknote` on `account.html` | "Changes here are not saved yet." Goes when the page actually writes |
+| The `is-internal` card on `duplicate-check.html` | The open-questions block for Sagar |
+
+### Must be connected before a partner sees it
+
+Nothing renders a fabricated value — an unwired field shows blank with a *"not connected yet"*
+note (§2b). But these are the ones a partner will actually notice:
+
+| | Currently |
+|---|---|
+| **Creative storage + review queue** | `submitCreatives()` writes to `sessionStorage`. The upload button works; nothing is stored |
+| **Suppression file per affiliate** | No file location on the affiliate record, so the card reads "not connected yet" |
+| **Statement URLs, agreement URLs, document URLs, creative links** | All null. Each renders "not linked yet" rather than a dead button |
+| **Feedback form URL** | Null. The link opens an explanation instead |
+| **Courtney's and Marc's email addresses** | Not on file; those contact cards route via the account manager |
+| **Google Drive export** | Mocked — shows a toast, nothing leaves the browser. **The CSV path is real** |
+
+### Nothing persists
+
+Every write in the prototype goes to `sessionStorage` and dies with the tab: pixel URLs, creative
+uploads, user edits, statement links, table preferences, setup progress. That is intentional for a
+review build. **One of them must become a real stored preference rather than just a server write** —
+per-user table settings (B10): a media buyer who hides six columns expects them to stay hidden next
+login.
+
+### Still unresolved, and it is a judgment call not a bug
+
+**The health score does not yet separate a good campaign from a bad one** — campaigns with no
+matured leads average **59.3** against **53.2** for campaigns with real data, so the resting state
+of the score is "above average". The fix order is in the audit section below. It is left alone
+deliberately because it changes how partners are judged, and that is Michael's call rather than a
+silent change.
+
+---
+
 ## What this is
 
 Six clickable screens showing what the partner portal dashboard should look like and how it
